@@ -1,0 +1,133 @@
+Project Overview
+
+Build an AI-powered writing companion agent that assists users in generating and editing content using their context, writings, and sources. The agent must be interactive, maintain full document context, adapt to the user’s style, and auto-generate text. It will leverage GPT-4.1 API, OpenAI tool/function calling, structured outputs, and prompt caching. The agent should perform file operations, access the web, and process diverse inputs (file uploads, URLs, PDFs, text).
+
+Key Objectives
+
+
+
+
+
+Create an innovative, intuitive, and unique writing tool.
+
+
+
+Maintain document context for relevant suggestions.
+
+
+
+Enable CRUD operations and text manipulation with grep and sed.
+
+
+
+Auto-generate sentences/paragraphs mimicking user style.
+
+
+
+Provide web search, scraping, and crawling capabilities.
+
+
+
+Support multiple input types and integrate them into context.
+
+Core Features
+
+
+
+
+
+Interactive Assistance: Conversational UI with real-time, context-aware suggestions.
+
+
+
+Style Adaptation: Analyze and mimic user style from samples or writings.
+
+
+
+Text Auto-Generation: Suggest completions using GPT-4.1 API based on context/style.
+
+
+
+File Operations: Implement CRUD and text edits with grep/sed.
+
+
+
+Web Access: Search, scrape, and crawl for info, integrating it into writing.
+
+
+
+Input Handling: Process file uploads, URLs, PDFs, and text with parsers.
+
+
+
+AI Integration: Use GPT-4.1 API, tool/function calling, structured outputs, and prompt caching.
+
+
+
+Intuitive Design: Build a clean, user-friendly UI.
+
+Technical Requirements
+
+
+
+
+
+Tech Stack: Python (backend), React (web UI), GPT-4.1 API.
+
+
+
+Context Management: Real-time document state tracking.
+
+
+
+Style Analysis: Extract style patterns from user input.
+
+
+
+File System: Secure CRUD and text manipulation integration.
+
+
+
+Web Tools: Use scraping libraries/APIs (e.g., BeautifulSoup, Requests).
+
+
+
+Input Parsers: Support PDFs (PyPDF2, PDFBox), text, URLs.
+
+
+
+Optimization: Apply prompt caching and efficient data handling.
+
+Development Steps
+
+
+
+
+
+Scope Definition: Define features, users, and platforms.
+
+
+
+Architecture: Design modular system (UI, AI, file ops, web).
+
+
+
+Core Build:
+
+
+
+
+
+Integrate GPT-4.1 API and OpenAI tools.
+
+
+
+Develop input processing and file operations.
+
+
+
+Create UI with real-time features.
+
+
+
+Advanced Features: Add web access, style adaptation, and auto-generation.
