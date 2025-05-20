@@ -56,13 +56,13 @@ export default function Sidebar({
 
   // Fetch documents for the active project
   const { data: documents = [] } = useQuery<Document[]>({
-    queryKey: activeProjectId ? [`/api/projects/${activeProjectId}/documents`] : null,
+    queryKey: activeProjectId ? [`/api/projects/${activeProjectId}/documents`] : ['no-documents'],
     enabled: !!activeProjectId
   });
 
   // Fetch sources for the active project
-  const { data: sources = [] } = useQuery({
-    queryKey: activeProjectId ? [`/api/projects/${activeProjectId}/sources`] : null,
+  const { data: sources = [] } = useQuery<Source[]>({
+    queryKey: activeProjectId ? [`/api/projects/${activeProjectId}/sources`] : ['no-sources'],
     enabled: !!activeProjectId
   });
   

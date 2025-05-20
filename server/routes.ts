@@ -220,9 +220,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { content } = analyzeSchema.parse(req.body);
       const styleAnalysis = await analyzeTextStyle(content);
-      res.json(styleAnalysis);
+      res.json({ metrics: styleAnalysis });
     } catch (error) {
-      res.status(400).json({ message: "Failed to analyze text style" });
+      console.error("Error in style analysis route:", error);
+      res.status(400).json({ 
+        message: "Failed to analyze text style",
+        metrics: {
+          formality: 50,
+          complexity: 50,
+          coherence: 50,
+          engagement: 50,
+          conciseness: 50,
+          commonPhrases: ["Error analyzing text"],
+          suggestions: ["Try again later"],
+          toneAnalysis: "Analysis unavailable due to error",
+          readability: {
+            score: 50,
+            grade: "Analysis unavailable"
+          },
+          wordDistribution: {
+            unique: 0,
+            repeated: 0,
+            rare: 0
+          }
+        }
+      });
     }
   });
   

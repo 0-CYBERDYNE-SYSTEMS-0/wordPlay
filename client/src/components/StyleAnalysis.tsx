@@ -95,6 +95,13 @@ export default function StyleAnalysis({
     analyzeStyleMutation.mutate();
   };
   
+  // Automatically analyze style when component loads if content is available
+  useState(() => {
+    if (content && content.trim().length > 20 && !styleMetrics && !analyzing) {
+      analyzeStyleMutation.mutate();
+    }
+  });
+  
   // Get text length details
   const wordCount = documentData?.wordCount || content.split(/\s+/).filter(Boolean).length;
   const charCount = content.length;
