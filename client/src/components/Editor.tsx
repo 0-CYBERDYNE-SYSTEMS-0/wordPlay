@@ -149,9 +149,8 @@ export default function Editor({
               onFocus={() => setHasFocus(true)}
               onBlur={() => setHasFocus(false)}
               suppressContentEditableWarning={true}
-            >
-              {fixReversedText(title)}
-            </h1>
+              dangerouslySetInnerHTML={{__html: title}}
+            ></h1>
           </div>
           
           {/* Editable Content */}
@@ -188,9 +187,8 @@ export default function Editor({
               }
             }}
             suppressContentEditableWarning={true}
-          >
-            {content}
-          </div>
+            dangerouslySetInnerHTML={{__html: content}}
+          ></div>
           
           {/* Slash Commands Popup */}
           <SlashCommandsPopup 
