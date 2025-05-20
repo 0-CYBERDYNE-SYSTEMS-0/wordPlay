@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Edit, Search, Code, X, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SlashCommands from "@/components/SlashCommands";
+import SlashCommandsPopup from "@/components/SlashCommandsPopup";
 
 interface EditorProps {
   title: string;
@@ -31,7 +31,9 @@ export default function Editor({
   const editorRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   
-  // The SlashCommands component will handle slash command detection and execution
+  // State for slash commands popup
+  const [slashCommandsOpen, setSlashCommandsOpen] = useState(false);
+  const [slashCommandPosition, setSlashCommandPosition] = useState({ x: 0, y: 0 });
   
   // Get AI suggestions based on content
   const {
@@ -156,13 +158,36 @@ export default function Editor({
             onInput={(e) => setContent(e.currentTarget.innerText)}
             onFocus={() => setHasFocus(true)}
             onBlur={() => setHasFocus(false)}
+            onKeyDown={(e) => {
+              // Detect slash key to open commands
+              if (e.key === '/' && !slashCommandsOpen) {
+                e.preventDefault(); // Prevent typing the slash
+                const selection = window.getSelection();
+                if (selection && selection.rangeCount > 0) {
+                  const range = selection.getRangeAt(0);
+                  const rect = range.getBoundingClientRect();
+                  setSlashCommandPosition({
+                    x: rect.left,
+                    y: rect.bottom + window.scrollY + 5
+                  });
+                  setSlashCommandsOpen(true);
+                }
+              }
+              // Close menu on escape
+              if (e.key === 'Escape' && slashCommandsOpen) {
+                setSlashCommandsOpen(false);
+              }
+            }}
             suppressContentEditableWarning={true}
             dangerouslySetInnerHTML={{__html: content}}
           >
           </div>
           
-          {/* Slash Commands Component */}
-          <SlashCommands 
+          {/* Slash Commands Popup */}
+          <SlashCommandsPopup 
+            isOpen={slashCommandsOpen}
+            onClose={() => setSlashCommandsOpen(false)}
+            position={slashCommandPosition}
             content={content}
             setContent={setContent}
             editorRef={editorRef}
