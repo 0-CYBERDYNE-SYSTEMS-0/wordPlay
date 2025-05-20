@@ -9,7 +9,7 @@ import WebSearch from "@/components/WebSearch";
 import CommandMode from "@/components/CommandMode";
 import StyleAnalysis from "@/components/StyleAnalysis";
 import { useDocument } from "@/hooks/use-document";
-import type { Project } from "@shared/schema";
+import type { Project, Document } from "@shared/schema";
 
 export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Edit, Search, Code, BarChart2, Sparkles, BookOpen, Zap } from "lucide-react";
@@ -96,11 +96,11 @@ export default function StyleAnalysis({
   };
   
   // Automatically analyze style when component loads if content is available
-  useState(() => {
+  useEffect(() => {
     if (content && content.trim().length > 20 && !styleMetrics && !analyzing) {
       analyzeStyleMutation.mutate();
     }
-  });
+  }, [content, styleMetrics, analyzing]);
   
   // Get text length details
   const wordCount = documentData?.wordCount || content.split(/\s+/).filter(Boolean).length;
