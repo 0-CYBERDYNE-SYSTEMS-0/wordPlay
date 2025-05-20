@@ -7,6 +7,7 @@ import ContextPanel from "@/components/ContextPanel";
 import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import CommandMode from "@/components/CommandMode";
+import StyleAnalysis from "@/components/StyleAnalysis";
 import { useDocument } from "@/hooks/use-document";
 import type { Project } from "@shared/schema";
 
@@ -14,7 +15,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [contextPanelOpen, setContextPanelOpen] = useState(true);
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"editor" | "search" | "command">("editor");
+  const [activeTab, setActiveTab] = useState<"editor" | "search" | "command" | "style">("editor");
   const [activeProjectId, setActiveProjectId] = useState<number | null>(1); // Default project
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(1); // Default document
 
