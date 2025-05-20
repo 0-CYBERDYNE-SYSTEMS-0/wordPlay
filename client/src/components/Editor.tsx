@@ -5,6 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Edit, Search, Code, X, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
+import { fixReversedText } from "@/lib/text-utils";
 
 interface EditorProps {
   title: string;
@@ -141,12 +142,15 @@ export default function Editor({
               ref={titleRef}
               contentEditable="true"
               className="text-3xl font-bold font-serif focus:outline-none border-b border-transparent focus:border-gray-300 dark:focus:border-gray-700 pb-1"
-              onInput={(e) => setTitle(e.currentTarget.textContent || "Untitled Document")}
+              onInput={(e) => {
+                const currentText = e.currentTarget.textContent || "Untitled Document";
+                setTitle(currentText);
+              }}
               onFocus={() => setHasFocus(true)}
               onBlur={() => setHasFocus(false)}
               suppressContentEditableWarning={true}
             >
-              {title}
+              {fixReversedText(title)}
             </h1>
           </div>
           
@@ -155,7 +159,12 @@ export default function Editor({
             ref={editorRef}
             contentEditable="true"
             className="prose prose-lg dark:prose-invert max-w-none font-serif focus:outline-none"
-            onInput={(e) => setContent(e.currentTarget.innerText)}
+            onInput={(e) => {
+              // Get the current content from the contentEditable div
+              const currentText = e.currentTarget.innerText;
+              // Set the content state with the current text
+              setContent(currentText);
+            }}
             onFocus={() => setHasFocus(true)}
             onBlur={() => setHasFocus(false)}
             onKeyDown={(e) => {
@@ -179,7 +188,7 @@ export default function Editor({
               }
             }}
             suppressContentEditableWarning={true}
-            dangerouslySetInnerHTML={{__html: content}}
+            dangerouslySetInnerHTML={{__html: fixReversedText(content)}}
           >
           </div>
           
