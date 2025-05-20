@@ -5,7 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Edit, Search, Code, X, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
-import { fixReversedText } from "@/lib/text-utils";
 
 interface EditorProps {
   title: string;
@@ -142,15 +141,13 @@ export default function Editor({
               ref={titleRef}
               contentEditable="true"
               className="text-3xl font-bold font-serif focus:outline-none border-b border-transparent focus:border-gray-300 dark:focus:border-gray-700 pb-1"
-              onInput={(e) => {
-                const currentText = e.currentTarget.textContent || "Untitled Document";
-                setTitle(currentText);
-              }}
+              onInput={(e) => setTitle(e.currentTarget.textContent || "Untitled Document")}
               onFocus={() => setHasFocus(true)}
               onBlur={() => setHasFocus(false)}
               suppressContentEditableWarning={true}
-              dangerouslySetInnerHTML={{__html: title}}
-            ></h1>
+            >
+              {title}
+            </h1>
           </div>
           
           {/* Editable Content */}
@@ -158,12 +155,7 @@ export default function Editor({
             ref={editorRef}
             contentEditable="true"
             className="prose prose-lg dark:prose-invert max-w-none font-serif focus:outline-none"
-            onInput={(e) => {
-              // Get the current content from the contentEditable div
-              const currentText = e.currentTarget.innerText;
-              // Set the content state with the current text
-              setContent(currentText);
-            }}
+            onInput={(e) => setContent(e.currentTarget.innerText)}
             onFocus={() => setHasFocus(true)}
             onBlur={() => setHasFocus(false)}
             onKeyDown={(e) => {
@@ -188,7 +180,8 @@ export default function Editor({
             }}
             suppressContentEditableWarning={true}
             dangerouslySetInnerHTML={{__html: content}}
-          ></div>
+          >
+          </div>
           
           {/* Slash Commands Popup */}
           <SlashCommandsPopup 

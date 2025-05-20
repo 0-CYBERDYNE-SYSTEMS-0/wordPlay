@@ -4,7 +4,6 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Document } from "@shared/schema";
-import { fixReversedText } from "@/lib/text-utils";
 
 interface UseDocumentProps {
   documentId?: number;
@@ -99,23 +98,19 @@ export function useDocument({
     setIsSaving(true);
     
     try {
-      // Always fix content before saving
-      const fixedContent = fixReversedText(content);
-      const fixedTitle = fixReversedText(title);
-      
       if (documentId) {
         // Update existing document
         await updateDocumentMutation.mutateAsync({
           id: documentId,
-          title: fixedTitle,
-          content: fixedContent
+          title,
+          content
         });
       } else if (projectId) {
         // Create new document
         await createDocumentMutation.mutateAsync({
           projectId,
-          title: fixedTitle,
-          content: fixedContent
+          title,
+          content
         });
       }
     } finally {

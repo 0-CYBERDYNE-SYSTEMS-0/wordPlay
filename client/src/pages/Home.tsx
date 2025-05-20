@@ -10,7 +10,6 @@ import CommandMode from "@/components/CommandMode";
 import StyleAnalysis from "@/components/StyleAnalysis";
 import { useDocument } from "@/hooks/use-document";
 import type { Project, Document } from "@shared/schema";
-import { fixReversedText } from "@/lib/text-utils";
 
 export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
