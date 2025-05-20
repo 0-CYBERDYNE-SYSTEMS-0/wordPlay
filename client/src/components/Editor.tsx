@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useAISuggestions } from "@/hooks/use-ai-suggestions";
-import { useSlashCommands } from "@/hooks/use-slash-commands";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Edit, Search, Code, X, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import SlashCommandMenu from "@/components/ui/command-menu";
+import SlashCommands from "@/components/SlashCommands";
 
 interface EditorProps {
   title: string;
@@ -32,20 +31,7 @@ export default function Editor({
   const editorRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   
-  // Set up slash commands for quick AI actions
-  const {
-    isSlashCommandOpen,
-    slashCommandFilter,
-    slashCommandPosition,
-    handleKeyDown,
-    handleCommandSelected,
-    setIsSlashCommandOpen,
-    isExecutingCommand
-  } = useSlashCommands({
-    content,
-    setContent,
-    style: null
-  });
+  // The SlashCommands component will handle slash command detection and execution
   
   // Get AI suggestions based on content
   const {
@@ -170,19 +156,16 @@ export default function Editor({
             onInput={(e) => setContent(e.currentTarget.innerText)}
             onFocus={() => setHasFocus(true)}
             onBlur={() => setHasFocus(false)}
-            onKeyDown={handleKeyDown}
             suppressContentEditableWarning={true}
             dangerouslySetInnerHTML={{__html: content}}
           >
           </div>
           
-          {/* Slash Command Menu */}
-          <SlashCommandMenu
-            isOpen={isSlashCommandOpen}
-            onClose={() => setIsSlashCommandOpen(false)}
-            onSelectCommand={handleCommandSelected}
-            filter={slashCommandFilter}
-            position={slashCommandPosition}
+          {/* Slash Commands Component */}
+          <SlashCommands 
+            content={content}
+            setContent={setContent}
+            editorRef={editorRef}
           />
           
           {/* Saving Indicator */}
