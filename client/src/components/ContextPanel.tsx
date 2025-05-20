@@ -31,22 +31,45 @@ export default function ContextPanel({
     message: string;
     suggestions: string[];
   }>({
-    message: "I notice you're writing about AI writing tools. How can I help?",
-    suggestions: [
-      "Research recent advancements in this field",
-      "Suggest a structure for the rest of your article",
-      "Generate examples of AI writing capabilities"
-    ]
+    message: "",
+    suggestions: []
+  });
+  
+  // Get contextual assistance from AI
+  const getContextualAssistanceMutation = useMutation({
+    mutationFn: async () => {
+      try {
+        const res = await apiRequest("POST", "/api/ai/contextual-help", {
+          content,
+          title
+        });
+        return res.json();
+      } catch (error) {
+        console.error("Error getting contextual assistance:", error);
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      if (data && data.message) {
+        setContextualHelp({
+          message: data.message,
+          suggestions: data.suggestions || []
+        });
+      }
+    }
   });
   const [aiPrompt, setAiPrompt] = useState("");
   
   // Get contextual help from AI
   const contextualHelpMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ai/contextual-help", {
-        content,
-        title
-      });
+    mutationFn: async (data?: { prompt?: string; content?: string }) => {
+      const payload = {
+        content: data?.content || content,
+        title,
+        prompt: data?.prompt
+      };
+      
+      const res = await apiRequest("POST", "/api/ai/contextual-help", payload);
       return res.json();
     }
   });
@@ -72,19 +95,54 @@ export default function ContextPanel({
   }, [contextualHelpMutation.isSuccess, contextualHelpMutation.data]);
   
   // Style metrics from document data or defaults
-  const styleMetrics = documentData?.styleMetrics || {
-    formality: 0.75,
-    complexity: 0.5,
-    engagement: 0.65,
-    tone: "Informative"
-  };
+  const [styleMetrics, setStyleMetrics] = useState({
+    formality: 50,
+    complexity: 50,
+    engagement: 50,
+    tone: "Analyzing..."
+  });
+  
+  // Get style metrics when content changes
+  const styleAnalysisMutation = useMutation({
+    mutationFn: async () => {
+      try {
+        const res = await apiRequest("POST", "/api/ai/analyze-style", {
+          content
+        });
+        return res.json();
+      } catch (error) {
+        console.error("Error analyzing style:", error);
+        throw error;
+      }
+    },
+    onSuccess: (data) => {
+      if (data && data.metrics) {
+        setStyleMetrics({
+          formality: data.metrics.formality || 50,
+          complexity: data.metrics.complexity || 50, 
+          engagement: data.metrics.engagement || 50,
+          tone: data.metrics.toneAnalysis?.split('.')[0] || "Neutral"
+        });
+      }
+    }
+  });
+  
+  // Run style analysis when content changes significantly
+  useEffect(() => {
+    if (content && content.length > 100) {
+      styleAnalysisMutation.mutate();
+    }
+  }, [content]);
   
   // Handle sending AI prompt
   const handleSendPrompt = () => {
     if (!aiPrompt.trim()) return;
     
-    // In a real app, this would send the prompt to the AI
-    // and get a response
+    // Send the prompt to the AI assistant
+    contextualHelpMutation.mutate({
+      prompt: aiPrompt,
+      content: content
+    });
     
     setAiPrompt("");
   };

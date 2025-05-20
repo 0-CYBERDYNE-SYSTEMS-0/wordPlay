@@ -102,6 +102,13 @@ export default function StyleAnalysis({
     }
   }, [content, styleMetrics, analyzing]);
   
+  // Also run analysis when the component mounts if we already have content
+  useEffect(() => {
+    if (content && content.trim().length > 20 && !styleMetrics && !analyzing) {
+      analyzeStyleMutation.mutate();
+    }
+  }, []);
+  
   // Get text length details
   const wordCount = documentData?.wordCount || content.split(/\s+/).filter(Boolean).length;
   const charCount = content.length;
