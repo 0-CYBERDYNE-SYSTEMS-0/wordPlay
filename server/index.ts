@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { runMigrations, seedInitialData } from "./db-migrate";
 
 const app = express();
 app.use(express.json());
@@ -37,6 +38,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  try {
+    // Initialize database
+    log("Initializing database...");
+    await runMigrations();
+    await seedInitialData();
+    log("Database initialized successfully");
+  } catch (error) {
+    log(`Database initialization failed: ${error}`);
+    // Continue with application startup even if database init fails
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

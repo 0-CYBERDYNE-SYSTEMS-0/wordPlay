@@ -1,5 +1,6 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { db } from "./db";
+import { users, projects, documents } from "@shared/schema";
 
 // Function to run migrations
 export async function runMigrations() {
@@ -24,13 +25,13 @@ export async function seedInitialData() {
   
   try {
     // Check if any users exist
-    const existingUsers = await db.query.users.findMany({ limit: 1 });
+    const existingUsers = await db.select().from(users).limit(1);
     
     if (existingUsers.length === 0) {
       console.log("No users found, creating default user and sample project...");
       
       // Create a default user
-      const [defaultUser] = await db.insert(db.schema.users)
+      const [defaultUser] = await db.insert(users)
         .values({
           username: "demo",
           password: "password"
@@ -38,7 +39,7 @@ export async function seedInitialData() {
         .returning();
       
       // Create a default project
-      const [defaultProject] = await db.insert(db.schema.projects)
+      const [defaultProject] = await db.insert(projects)
         .values({
           userId: defaultUser.id,
           name: "Novel Draft",
@@ -50,7 +51,7 @@ export async function seedInitialData() {
         .returning();
       
       // Create a default document
-      await db.insert(db.schema.documents)
+      await db.insert(documents)
         .values({
           projectId: defaultProject.id,
           title: "AI-Powered Writing: The Future of Content Creation",
