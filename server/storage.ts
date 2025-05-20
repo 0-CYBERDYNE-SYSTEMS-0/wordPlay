@@ -167,7 +167,15 @@ export class MemStorage implements IStorage {
       ...insertDocument,
       id,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      styleMetrics: insertDocument.styleMetrics || { 
+        formality: 0.5, 
+        complexity: 0.5, 
+        engagement: 0.5, 
+        tone: "Neutral",
+        averageSentenceLength: 15
+      },
+      wordCount: insertDocument.wordCount || 0
     };
     this.documents.set(id, document);
     return document;
@@ -206,7 +214,9 @@ export class MemStorage implements IStorage {
     const source: Source = {
       ...insertSource,
       id,
-      createdAt: new Date()
+      createdAt: new Date(),
+      content: insertSource.content || null,
+      url: insertSource.url || null
     };
     this.sources.set(id, source);
     return source;

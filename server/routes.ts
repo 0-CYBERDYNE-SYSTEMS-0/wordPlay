@@ -20,38 +20,12 @@ import {
   analyzeDocument 
 } from "./file-operations";
 import { z } from "zod";
-import { WebSocketServer } from "ws";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
   
-  // Set up WebSocket server for real-time suggestions
-  const wss = new WebSocketServer({ server: httpServer });
-  
-  wss.on("connection", (ws) => {
-    console.log("WebSocket client connected");
-    
-    ws.on("message", async (message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        
-        if (data.type === "content_update") {
-          // When content is updated, generate suggestions
-          const suggestions = await generateSuggestions(data.content, data.style);
-          ws.send(JSON.stringify({
-            type: "suggestions",
-            suggestions
-          }));
-        }
-      } catch (error) {
-        console.error("WebSocket error:", error);
-      }
-    });
-    
-    ws.on("close", () => {
-      console.log("WebSocket client disconnected");
-    });
-  });
+  // We've replaced WebSockets with direct API calls
+  // This simplifies the architecture and avoids connection issues
 
   // API Routes
   // Projects

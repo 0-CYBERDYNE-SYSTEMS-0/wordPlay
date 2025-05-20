@@ -66,19 +66,7 @@ export function useAISuggestions({
     }
   });
   
-  // Fetch suggestions if WebSocket fails
-  useEffect(() => {
-    if (!enabled || !debouncedContent || suggestions.length > 0 || isFetching) return;
-    
-    // Use API fallback if no WebSocket suggestions after a delay
-    const timer = setTimeout(() => {
-      if (suggestions.length === 0 && !isFetching) {
-        fetchSuggestionsMutation.mutate();
-      }
-    }, 2000);
-    
-    return () => clearTimeout(timer);
-  }, [debouncedContent, suggestions, enabled, isFetching]);
+  // No need for additional fallback since we're using direct API calls now
   
   const generateTextCompletion = useMutation({
     mutationFn: async (prompt?: string) => {
