@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useAISuggestions } from "@/hooks/use-ai-suggestions";
+import { useSlashCommands } from "@/hooks/use-slash-commands";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Edit, Search, Code, X, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import SlashCommandMenu from "@/components/ui/command-menu";
 
 interface EditorProps {
   title: string;
@@ -29,6 +31,21 @@ export default function Editor({
   const [hasFocus, setHasFocus] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  
+  // Set up slash commands for quick AI actions
+  const {
+    isSlashCommandOpen,
+    slashCommandFilter,
+    slashCommandPosition,
+    handleKeyDown,
+    handleCommandSelected,
+    setIsSlashCommandOpen,
+    isExecutingCommand
+  } = useSlashCommands({
+    content,
+    setContent,
+    style: null
+  });
   
   // Get AI suggestions based on content
   const {
@@ -58,7 +75,7 @@ export default function Editor({
   // Handle accepting a suggestion
   const acceptSuggestion = async () => {
     if (selectedSuggestion) {
-      setContent((prevContent) => prevContent + " " + selectedSuggestion);
+      setContent(content + " " + selectedSuggestion);
       setShowSuggestion(false);
       
       toast({
@@ -73,7 +90,7 @@ export default function Editor({
     try {
       const result = await generateTextCompletion("Continue this text with a new paragraph that follows logically.");
       if (result.generated) {
-        setContent((prevContent) => prevContent + "\n\n" + result.generated);
+        setContent(content + "\n\n" + result.generated);
         
         toast({
           title: "Paragraph generated",
@@ -153,10 +170,20 @@ export default function Editor({
             onInput={(e) => setContent(e.currentTarget.innerText)}
             onFocus={() => setHasFocus(true)}
             onBlur={() => setHasFocus(false)}
+            onKeyDown={handleKeyDown}
             suppressContentEditableWarning={true}
             dangerouslySetInnerHTML={{__html: content}}
           >
           </div>
+          
+          {/* Slash Command Menu */}
+          <SlashCommandMenu
+            isOpen={isSlashCommandOpen}
+            onClose={() => setIsSlashCommandOpen(false)}
+            onSelectCommand={handleCommandSelected}
+            filter={slashCommandFilter}
+            position={slashCommandPosition}
+          />
           
           {/* Saving Indicator */}
           {isSaving && (
