@@ -234,7 +234,7 @@ export default function CommandMode({
                 }`}
               >
                 <Sparkles className="h-4 w-4 mr-1" />
-                Natural Language
+                Writing Assistant
               </button>
               <button
                 onClick={() => setIsNaturalLanguageMode(false)}
@@ -245,7 +245,7 @@ export default function CommandMode({
                 }`}
               >
                 <Terminal className="h-4 w-4 mr-1" />
-                Command Mode
+                Text Commands
               </button>
             </div>
           </div>
@@ -253,9 +253,40 @@ export default function CommandMode({
           {isNaturalLanguageMode ? (
             <>
               <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Tell the AI assistant what you need help with. You can ask it to rewrite, edit, format, 
-                or generate content based on your document.
+                Tell the AI what you need help with. The assistant can rewrite, edit, format, 
+                or generate new content based on your document.
               </p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
+                <button 
+                  className="p-2 text-sm text-left rounded border dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => setNaturalLanguagePrompt("Rewrite this content to be more concise and professional.")}
+                >
+                  <span className="font-medium">Make it professional</span>
+                  <span className="block text-xs text-gray-500">Rewrite in a business-appropriate tone</span>
+                </button>
+                <button 
+                  className="p-2 text-sm text-left rounded border dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => setNaturalLanguagePrompt("Fix any grammar and spelling errors in this document.")}
+                >
+                  <span className="font-medium">Fix errors</span>
+                  <span className="block text-xs text-gray-500">Correct spelling and grammar issues</span>
+                </button>
+                <button 
+                  className="p-2 text-sm text-left rounded border dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => setNaturalLanguagePrompt("Summarize the main points of this content in 3-4 bullet points.")}
+                >
+                  <span className="font-medium">Create summary</span>
+                  <span className="block text-xs text-gray-500">Generate a concise summary</span>
+                </button>
+                <button 
+                  className="p-2 text-sm text-left rounded border dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  onClick={() => setNaturalLanguagePrompt("Generate a conclusion paragraph that ties together the main ideas.")}
+                >
+                  <span className="font-medium">Add conclusion</span>
+                  <span className="block text-xs text-gray-500">Create a closing paragraph</span>
+                </button>
+              </div>
               
               <form onSubmit={executeNaturalLanguagePrompt} className="mb-6">
                 <div className="border dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50">
@@ -283,7 +314,7 @@ export default function CommandMode({
                       ) : (
                         <div className="flex items-center">
                           <Sparkles className="h-4 w-4 mr-2" />
-                          Ask AI Assistant
+                          Generate Content
                         </div>
                       )}
                     </Button>
