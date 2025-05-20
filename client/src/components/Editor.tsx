@@ -154,8 +154,8 @@ export default function Editor({
             onFocus={() => setHasFocus(true)}
             onBlur={() => setHasFocus(false)}
             suppressContentEditableWarning={true}
+            dangerouslySetInnerHTML={{__html: content}}
           >
-            {content}
           </div>
           
           {/* Saving Indicator */}
