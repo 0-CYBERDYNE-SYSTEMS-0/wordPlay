@@ -323,6 +323,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Slash commands for AI assistance
+  app.post("/api/ai/slash-command", async (req: Request, res: Response) => {
+    const commandSchema = z.object({
+      command: z.string(),
+      content: z.string(),
+      selectionInfo: z.object({
+        selectedText: z.string(),
+        selectionStart: z.number(),
+        selectionEnd: z.number(),
+        beforeSelection: z.string(),
+        afterSelection: z.string()
+      }),
+      style: z.any().optional()
+    });
+    
+    try {
+      const validatedData = commandSchema.parse(req.body);
+      
+      // Import the executeSlashCommand function only when needed
+      const { executeSlashCommand } = await import("./slash-commands");
+      
+      const result = await executeSlashCommand(
+        validatedData.command, 
+        validatedData.content, 
+        validatedData.selectionInfo, 
+        validatedData.style
+      );
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error executing slash command:", error);
+      res.status(500).json({ 
+        message: "Failed to execute slash command",
+        error: error.message || "Unknown error"
+      });
+    }
+  });
+  
   // Text Operations
   app.post("/api/text/grep", async (req: Request, res: Response) => {
     const grepSchema = z.object({
