@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Edit, Search, Code, Plus } from "lucide-react";
+import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface WebSearchProps {
   activeTab: "editor" | "search" | "command";
@@ -28,6 +30,15 @@ export default function WebSearch({
   const [searchSource, setSearchSource] = useState("web");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [activeResearchTab, setActiveResearchTab] = useState("search");
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [researchNotes, setResearchNotes] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  
+  // For sources panel
+  const [sources, setSources] = useState<{id: number; name: string; url: string}[]>([]);
+  const [selectedSource, setSelectedSource] = useState<number | null>(null);
+  const [sourceContent, setSourceContent] = useState("");
   
   // Search mutation
   const searchMutation = useMutation({
@@ -42,6 +53,10 @@ export default function WebSearch({
       if (data.results && data.results.length > 0) {
         setResults(data.results);
         setShowResults(true);
+        toast({
+          title: "Research found",
+          description: `Found ${data.results.length} results that might help your writing.`
+        });
       } else {
         toast({
           title: "No results found",
@@ -73,15 +88,53 @@ export default function WebSearch({
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Update sources list with the new source
+      setSources(prev => [...prev, data]);
+      
       toast({
         title: "Source added",
-        description: "The source has been added to your project."
+        description: "Research source has been saved to help with your writing."
       });
     },
     onError: (error) => {
       toast({
         title: "Failed to add source",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Scrape webpage mutation
+  const scrapeMutation = useMutation({
+    mutationFn: async () => {
+      if (!scrapeUrl.trim()) {
+        throw new Error("Please enter a valid URL");
+      }
+      
+      const res = await apiRequest("POST", "/api/scrape", {
+        url: scrapeUrl
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Add scraped content to notes
+      setResearchNotes(prev => 
+        prev + `\n\nFrom ${scrapeUrl}:\n${data.content.substring(0, 500)}...\n`
+      );
+      
+      toast({
+        title: "Page content retrieved",
+        description: "The content has been added to your research notes."
+      });
+      
+      // Clear the URL input
+      setScrapeUrl("");
+    },
+    onError: (error) => {
+      toast({
+        title: "Couldn't retrieve page",
         description: error.message,
         variant: "destructive"
       });
@@ -109,6 +162,55 @@ export default function WebSearch({
     
     addSourceMutation.mutate(url);
   };
+  
+  // Handle scraping a webpage
+  const handleScrape = (e: React.FormEvent) => {
+    e.preventDefault();
+    scrapeMutation.mutate();
+  };
+  
+  // Save research notes
+  const saveNotesMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectId) {
+        throw new Error("No active project");
+      }
+      
+      const res = await apiRequest("POST", "/api/sources", {
+        projectId,
+        type: "notes",
+        name: "Research Notes",
+        content: researchNotes
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Research notes saved",
+        description: "Your notes have been saved to the project."
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to save notes",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Handle saving notes
+  const handleSaveNotes = () => {
+    if (!researchNotes.trim()) {
+      toast({
+        title: "Nothing to save",
+        description: "Please add some research notes first."
+      });
+      return;
+    }
+    
+    saveNotesMutation.mutate();
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -134,7 +236,7 @@ export default function WebSearch({
           onClick={() => onChangeTab("search")}
         >
           <Search className="h-4 w-4 mr-2" />
-          Search
+          Research
         </button>
         <button 
           className={`px-4 py-3 font-medium text-sm flex items-center ${
@@ -145,95 +247,243 @@ export default function WebSearch({
           onClick={() => onChangeTab("command")}
         >
           <Code className="h-4 w-4 mr-2" />
-          Commands
+          AI Assistant
         </button>
       </div>
       
-      {/* Search Content */}
+      {/* Research Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl mx-auto">
-          <h2 className="text-xl font-semibold mb-4">Web Search</h2>
-          
-          <form onSubmit={handleSearch} className="mb-6">
-            <div className="flex items-center border dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50">
-              <Input 
-                type="text" 
-                placeholder="Search for information..." 
-                className="flex-1 p-3 bg-white dark:bg-gray-800 focus:outline-none border-0"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <Button 
-                type="submit"
-                className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
-                disabled={searchMutation.isPending}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Research Assistant</h2>
+            
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setActiveResearchTab("search")}
+                className={`px-3 py-1 text-sm rounded-md flex items-center ${
+                  activeResearchTab === "search"
+                    ? "bg-primary text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                }`}
               >
-                {searchMutation.isPending ? (
-                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                ) : (
-                  <Search className="h-5 w-5" />
-                )}
-              </Button>
-            </div>
-            <div className="flex mt-2 space-x-2">
-              <span className="text-xs text-gray-500 dark:text-gray-400">Sources:</span>
-              <button 
-                type="button"
-                className={`text-xs ${searchSource === "web" ? "text-primary dark:text-primary-light" : "text-gray-600 dark:text-gray-400"} hover:underline`}
-                onClick={() => setSearchSource("web")}
-              >
-                Web
+                <Search className="h-4 w-4 mr-1" />
+                Web Search
               </button>
-              <button 
-                type="button"
-                className={`text-xs ${searchSource === "academic" ? "text-primary dark:text-primary-light" : "text-gray-600 dark:text-gray-400"} hover:underline`}
-                onClick={() => setSearchSource("academic")}
+              <button
+                onClick={() => setActiveResearchTab("url")}
+                className={`px-3 py-1 text-sm rounded-md flex items-center ${
+                  activeResearchTab === "url"
+                    ? "bg-primary text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                }`}
               >
-                Academic
+                <ExternalLink className="h-4 w-4 mr-1" />
+                Import URL
               </button>
-              <button 
-                type="button"
-                className={`text-xs ${searchSource === "news" ? "text-primary dark:text-primary-light" : "text-gray-600 dark:text-gray-400"} hover:underline`}
-                onClick={() => setSearchSource("news")}
+              <button
+                onClick={() => setActiveResearchTab("notes")}
+                className={`px-3 py-1 text-sm rounded-md flex items-center ${
+                  activeResearchTab === "notes"
+                    ? "bg-primary text-white"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                }`}
               >
-                News
+                <BookOpen className="h-4 w-4 mr-1" />
+                Notes
               </button>
             </div>
-          </form>
+          </div>
           
-          {showResults && (
-            <div className="space-y-4">
-              {results.map((result, index) => (
-                <div key={index} className="border dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
-                  <div className="flex justify-between items-start">
-                    <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
-                    <button 
-                      className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                      onClick={() => handleAddSource(result.url)}
-                      disabled={addSourceMutation.isPending}
-                    >
-                      <Plus className="h-4 w-4 text-gray-500" />
-                    </button>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {result.snippet}
-                  </p>
-                  <div className="flex items-center mt-2">
-                    <span className="text-xs text-gray-500">{new URL(result.url).hostname}</span>
-                    <span className="mx-2 text-gray-300">|</span>
-                    <button 
-                      className="text-xs text-primary dark:text-primary-light hover:underline"
-                      onClick={() => handleAddSource(result.url)}
-                      disabled={addSourceMutation.isPending}
-                    >
-                      Add to Sources
-                    </button>
-                  </div>
+          {activeResearchTab === "search" && (
+            <div>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Search the web for information to enhance your writing. Find facts, references, and inspiration.
+              </p>
+              
+              <form onSubmit={handleSearch} className="mb-6">
+                <div className="flex items-center border dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50">
+                  <Input 
+                    ref={searchInputRef}
+                    type="text" 
+                    placeholder="Search for facts, statistics, or inspiration..." 
+                    className="flex-1 p-3 bg-white dark:bg-gray-800 focus:outline-none border-0"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <Button 
+                    type="submit"
+                    className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
+                    disabled={searchMutation.isPending}
+                  >
+                    {searchMutation.isPending ? (
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <Search className="h-5 w-5" />
+                    )}
+                  </Button>
                 </div>
-              ))}
+                <div className="flex mt-2 space-x-2">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Sources:</span>
+                  <button 
+                    type="button"
+                    className={`text-xs ${searchSource === "web" ? "text-primary dark:text-primary-light font-medium" : "text-gray-600 dark:text-gray-400"} hover:underline`}
+                    onClick={() => setSearchSource("web")}
+                  >
+                    General Web
+                  </button>
+                  <button 
+                    type="button"
+                    className={`text-xs ${searchSource === "academic" ? "text-primary dark:text-primary-light font-medium" : "text-gray-600 dark:text-gray-400"} hover:underline`}
+                    onClick={() => setSearchSource("academic")}
+                  >
+                    Academic
+                  </button>
+                  <button 
+                    type="button"
+                    className={`text-xs ${searchSource === "news" ? "text-primary dark:text-primary-light font-medium" : "text-gray-600 dark:text-gray-400"} hover:underline`}
+                    onClick={() => setSearchSource("news")}
+                  >
+                    News
+                  </button>
+                </div>
+              </form>
+              
+              {showResults && (
+                <div className="space-y-4">
+                  {results.map((result, index) => (
+                    <div key={index} className="border dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start">
+                        <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
+                        <button 
+                          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                          onClick={() => handleAddSource(result.url)}
+                          disabled={addSourceMutation.isPending}
+                          title="Save to your sources"
+                        >
+                          <Save className="h-4 w-4 text-gray-500" />
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        {result.snippet}
+                      </p>
+                      <div className="flex items-center mt-2">
+                        <span className="text-xs text-gray-500">{new URL(result.url).hostname}</span>
+                        <span className="mx-2 text-gray-300">|</span>
+                        <a 
+                          href={result.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:underline flex items-center"
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          View Source
+                        </a>
+                        <span className="mx-2 text-gray-300">|</span>
+                        <button 
+                          className="text-xs text-primary dark:text-primary-light hover:underline"
+                          onClick={() => handleAddSource(result.url)}
+                          disabled={addSourceMutation.isPending}
+                        >
+                          Add to Sources
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          {activeResearchTab === "url" && (
+            <div>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Import content from a specific URL to reference in your writing.
+              </p>
+              
+              <form onSubmit={handleScrape} className="mb-6">
+                <div className="flex items-center border dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50">
+                  <div className="bg-gray-100 dark:bg-gray-700 p-3 text-gray-500 dark:text-gray-400">
+                    <Globe className="h-5 w-5" />
+                  </div>
+                  <Input 
+                    type="url" 
+                    placeholder="Enter a URL to import content (e.g., https://example.com/article)" 
+                    className="flex-1 p-3 bg-white dark:bg-gray-800 focus:outline-none border-0"
+                    value={scrapeUrl}
+                    onChange={(e) => setScrapeUrl(e.target.value)}
+                  />
+                  <Button 
+                    type="submit"
+                    className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
+                    disabled={scrapeMutation.isPending || !scrapeUrl.trim()}
+                  >
+                    {scrapeMutation.isPending ? (
+                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <Archive className="h-5 w-5" />
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  The content will be extracted and added to your research notes.
+                </p>
+              </form>
+            </div>
+          )}
+          
+          {activeResearchTab === "notes" && (
+            <div>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">
+                Keep track of your research notes and insights to reference while writing.
+              </p>
+              
+              <div className="border dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50 mb-4">
+                <Textarea
+                  placeholder="Add your research notes here. Content from web searches and URL imports will appear here."
+                  className="w-full p-3 min-h-[200px] bg-white dark:bg-gray-800 focus:outline-none border-0"
+                  value={researchNotes}
+                  onChange={(e) => setResearchNotes(e.target.value)}
+                />
+                <div className="flex justify-end bg-gray-50 dark:bg-gray-900 p-2">
+                  <Button
+                    onClick={handleSaveNotes}
+                    disabled={saveNotesMutation.isPending || !researchNotes.trim()}
+                    className="px-4 py-2"
+                    variant="outline"
+                  >
+                    {saveNotesMutation.isPending ? (
+                      <div className="flex items-center">
+                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Saving...
+                      </div>
+                    ) : (
+                      <div className="flex items-center">
+                        <Save className="h-4 w-4 mr-2" />
+                        Save Notes
+                      </div>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                <p>Tips:</p>
+                <ul className="list-disc pl-5 mt-1 space-y-1">
+                  <li>Paste quotes or excerpts that support your writing</li>
+                  <li>Add links to sources you want to reference later</li>
+                  <li>Organize information with bullet points or sections</li>
+                  <li>Make note of key statistics or facts for your document</li>
+                </ul>
+              </div>
             </div>
           )}
         </div>
