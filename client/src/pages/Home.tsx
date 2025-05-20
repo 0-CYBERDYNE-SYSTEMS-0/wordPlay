@@ -82,6 +82,7 @@ export default function Home() {
           activeProjectId={activeProjectId}
           onSelectProject={handleSelectProject}
           onSelectDocument={handleSelectDocument}
+          onChangeTab={setActiveTab}
         />
         
         {/* Main Content */}
@@ -112,6 +113,15 @@ export default function Home() {
               activeTab={activeTab}
               content={content}
               setContent={setContent}
+            />
+          )}
+          
+          {activeTab === "style" && (
+            <StyleAnalysis
+              onChangeTab={setActiveTab}
+              activeTab={activeTab}
+              content={content}
+              documentData={documentData}
             />
           )}
           
