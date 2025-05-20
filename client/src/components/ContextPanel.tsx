@@ -83,7 +83,7 @@ export default function ContextPanel({
     
     // Get contextual help when content changes significantly
     if (content.length > 50 && content.length % 100 < 10) {
-      contextualHelpMutation.mutate();
+      contextualHelpMutation.mutate({});
     }
   }, [content]);
   

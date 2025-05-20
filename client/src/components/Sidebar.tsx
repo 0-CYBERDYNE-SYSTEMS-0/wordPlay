@@ -503,7 +503,7 @@ export default function Sidebar({
           
           {expandedSections.sources && (
             <div className="space-y-1">
-              {sources.map((source: any) => (
+              {sources.map((source: Source) => (
                 <div 
                   key={source.id}
                   className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
@@ -517,7 +517,7 @@ export default function Sidebar({
                   ) : (
                     <FileText className="h-4 w-4 mr-2" />
                   )}
-                  <span className="text-sm truncate">{source.name || source.title || 'Unnamed Source'}</span>
+                  <span className="text-sm truncate">{source.name || 'Unnamed Source'}</span>
                 </div>
               ))}
             </div>
