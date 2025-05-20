@@ -4,7 +4,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Document } from "@shared/schema";
-import { fixReversedText, isTextReversed } from "@/lib/text-utils";
+import { fixReversedText } from "@/lib/text-utils";
 
 interface UseDocumentProps {
   documentId?: number;
@@ -99,9 +99,9 @@ export function useDocument({
     setIsSaving(true);
     
     try {
-      // Check if content needs to be fixed before saving
-      const fixedContent = isTextReversed(content) ? fixReversedText(content) : content;
-      const fixedTitle = isTextReversed(title) ? fixReversedText(title) : title;
+      // Always fix content before saving
+      const fixedContent = fixReversedText(content);
+      const fixedTitle = fixReversedText(title);
       
       if (documentId) {
         // Update existing document

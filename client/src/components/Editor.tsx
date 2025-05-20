@@ -188,8 +188,8 @@ export default function Editor({
               }
             }}
             suppressContentEditableWarning={true}
-            dangerouslySetInnerHTML={{__html: fixReversedText(content)}}
           >
+            {content}
           </div>
           
           {/* Slash Commands Popup */}
