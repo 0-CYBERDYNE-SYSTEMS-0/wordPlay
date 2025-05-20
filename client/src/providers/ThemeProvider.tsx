@@ -7,31 +7,36 @@ interface ThemeContextType {
   toggleTheme: () => void;
 }
 
-const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
+// Create a default value to avoid undefined errors
+const defaultThemeContext: ThemeContextType = {
+  theme: "light",
+  toggleTheme: () => {}
+};
+
+const ThemeContext = createContext<ThemeContextType>(defaultThemeContext);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(() => {
-    // Check for stored theme preference or use system preference
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark" || savedTheme === "light") {
-      return savedTheme;
-    }
-    // Check system preference
-    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      return "dark";
-    }
-    return "light";
-  });
+  const [theme, setTheme] = useState<Theme>("light");
 
   // Apply theme to document
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
+    try {
+      const root = document.documentElement;
+      if (theme === "dark") {
+        root.classList.add("dark");
+      } else {
+        root.classList.remove("dark");
+      }
+      
+      // Try to save to localStorage (with error handling)
+      try {
+        localStorage.setItem("theme", theme);
+      } catch (err) {
+        console.warn("Could not save theme to localStorage", err);
+      }
+    } catch (err) {
+      console.error("Error applying theme", err);
     }
-    localStorage.setItem("theme", theme);
   }, [theme]);
 
   // Toggle theme function
@@ -48,9 +53,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 // Hook to use the theme context
 export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider");
-  }
-  return context;
+  return useContext(ThemeContext);
 }
