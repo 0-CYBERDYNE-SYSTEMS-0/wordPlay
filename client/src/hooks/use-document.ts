@@ -31,8 +31,8 @@ export function useDocument({
   const debouncedTitle = useDebounce(title, 1000);
   
   // Fetch document if documentId is provided
-  const { data: documentData } = useQuery({
-    queryKey: documentId ? [`/api/documents/${documentId}`] : null,
+  const { data: documentData } = useQuery<Document>({
+    queryKey: documentId ? [`/api/documents/${documentId}`] : ['no-document'],
     enabled: !!documentId
   });
   

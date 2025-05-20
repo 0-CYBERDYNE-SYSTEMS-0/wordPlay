@@ -121,7 +121,7 @@ export default function Home() {
               onChangeTab={setActiveTab}
               activeTab={activeTab}
               content={content}
-              documentData={documentData}
+              documentData={documentData as Document | undefined}
             />
           )}
           
@@ -130,7 +130,7 @@ export default function Home() {
             <ContextPanel 
               title={title}
               content={content}
-              documentData={documentData}
+              documentData={documentData as Document | undefined}
               onClose={toggleContextPanel}
             />
           )}
