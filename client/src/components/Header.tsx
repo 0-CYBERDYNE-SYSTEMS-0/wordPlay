@@ -1,18 +1,32 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTheme } from "@/providers/ThemeProvider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Moon, Menu, Info, Plus } from "lucide-react";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 interface HeaderProps {
   toggleSidebar: () => void;
   toggleContextPanel: () => void;
   onNewProject: () => void;
+  llmProvider: 'openai' | 'ollama';
+  setLlmProvider: (provider: 'openai' | 'ollama') => void;
+  llmModel: string;
+  setLlmModel: (model: string) => void;
 }
 
-export default function Header({ toggleSidebar, toggleContextPanel, onNewProject }: HeaderProps) {
+export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
-  
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (llmProvider === 'ollama') {
+      fetch('http://localhost:11434/api/tags')
+        .then(res => res.json())
+        .then(data => setOllamaModels(data.models?.map((m: any) => m.name) || []));
+    }
+  }, [llmProvider]);
+
   return (
     <header className="border-b dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
@@ -68,6 +82,35 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          
+          <Select value={llmProvider} onValueChange={v => setLlmProvider(v as 'openai' | 'ollama')}>
+            <SelectTrigger className="w-28">
+              <SelectValue placeholder="Provider" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="ollama">Ollama</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={llmModel} onValueChange={setLlmModel}>
+            <SelectTrigger className="w-32">
+              <SelectValue placeholder="Model" />
+            </SelectTrigger>
+            <SelectContent>
+              {llmProvider === 'openai' ? (
+                <>
+                  <SelectItem value="gpt-4o">gpt-4o</SelectItem>
+                  <SelectItem value="o4-mini">o4-mini</SelectItem>
+                  <SelectItem value="gpt-4.1">gpt-4.1</SelectItem>
+                  <SelectItem value="gpt-4.1-mini">gpt-4.1-mini</SelectItem>
+                </>
+              ) : (
+                ollamaModels.map(model => (
+                  <SelectItem key={model} value={model}>{model}</SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
           
           <div className="flex items-center space-x-1 ml-2">
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white">

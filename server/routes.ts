@@ -200,12 +200,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const generateSchema = z.object({
       content: z.string(),
       style: z.any().optional(),
-      prompt: z.string().optional()
+      prompt: z.string().optional(),
+      llmProvider: z.enum(["openai", "ollama"]).optional(),
+      llmModel: z.string().optional()
     });
     
     try {
-      const { content, style, prompt } = generateSchema.parse(req.body);
-      const generatedText = await generateTextCompletion(content, style, prompt);
+      const { content, style, prompt, llmProvider, llmModel } = generateSchema.parse(req.body);
+      const generatedText = await generateTextCompletion(content, style, prompt, llmProvider, llmModel);
       res.json({ generated: generatedText });
     } catch (error) {
       res.status(400).json({ message: "Failed to generate text" });
@@ -251,12 +253,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/suggestions", async (req: Request, res: Response) => {
     const suggestSchema = z.object({
       content: z.string(),
-      style: z.any().optional()
+      style: z.any().optional(),
+      llmProvider: z.enum(["openai", "ollama"]).optional(),
+      llmModel: z.string().optional()
     });
     
     try {
-      const { content, style } = suggestSchema.parse(req.body);
-      const suggestions = await generateSuggestions(content, style);
+      const { content, style, llmProvider, llmModel } = suggestSchema.parse(req.body);
+      const suggestions = await generateSuggestions(content, style, llmProvider, llmModel);
       res.json({ suggestions });
     } catch (error) {
       res.status(400).json({ message: "Failed to generate suggestions" });

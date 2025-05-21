@@ -8,6 +8,8 @@ interface UseAISuggestionsProps {
   content: string;
   style?: any;
   enabled?: boolean;
+  llmProvider: 'openai' | 'ollama';
+  llmModel: string;
 }
 
 interface Suggestion {
@@ -18,7 +20,9 @@ interface Suggestion {
 export function useAISuggestions({
   content,
   style,
-  enabled = true
+  enabled = true,
+  llmProvider,
+  llmModel
 }: UseAISuggestionsProps) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -45,7 +49,9 @@ export function useAISuggestions({
       try {
         const res = await apiRequest("POST", "/api/ai/suggestions", {
           content: debouncedContent,
-          style
+          style,
+          llmProvider,
+          llmModel
         });
         const data = await res.json();
         return data.suggestions;
@@ -73,7 +79,9 @@ export function useAISuggestions({
       const res = await apiRequest("POST", "/api/ai/generate", {
         content,
         style,
-        prompt
+        prompt,
+        llmProvider,
+        llmModel
       });
       return res.json();
     },

@@ -18,6 +18,8 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"editor" | "search" | "command" | "style">("editor");
   const [activeProjectId, setActiveProjectId] = useState<number | null>(1); // Default project
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(1); // Default document
+  const [llmProvider, setLlmProvider] = useState<'openai' | 'ollama'>('openai');
+  const [llmModel, setLlmModel] = useState<string>('gpt-4o');
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -72,6 +74,10 @@ export default function Home() {
         toggleSidebar={toggleSidebar}
         toggleContextPanel={toggleContextPanel}
         onNewProject={handleNewProject}
+        llmProvider={llmProvider}
+        setLlmProvider={setLlmProvider}
+        llmModel={llmModel}
+        setLlmModel={setLlmModel}
       />
       
       <div className="flex flex-1 h-[calc(100vh-61px)]">
@@ -96,6 +102,8 @@ export default function Home() {
               isSaving={isSaving}
               onChangeTab={setActiveTab}
               activeTab={activeTab}
+              llmProvider={llmProvider}
+              llmModel={llmModel}
             />
           )}
           

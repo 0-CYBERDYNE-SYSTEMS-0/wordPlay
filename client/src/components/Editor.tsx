@@ -14,6 +14,8 @@ interface EditorProps {
   isSaving: boolean;
   activeTab: "editor" | "search" | "command";
   onChangeTab: (tab: "editor" | "search" | "command") => void;
+  llmProvider: 'openai' | 'ollama';
+  llmModel: string;
 }
 
 export default function Editor({
@@ -23,7 +25,9 @@ export default function Editor({
   setContent,
   isSaving,
   activeTab,
-  onChangeTab
+  onChangeTab,
+  llmProvider,
+  llmModel
 }: EditorProps) {
   const { toast } = useToast();
   const [showSuggestion, setShowSuggestion] = useState(false);
@@ -45,7 +49,9 @@ export default function Editor({
     isGenerating
   } = useAISuggestions({
     content,
-    enabled: true
+    enabled: true,
+    llmProvider,
+    llmModel
   });
   
   // Show suggestion after typing and when suggestions are available
@@ -93,6 +99,20 @@ export default function Editor({
       });
     }
   };
+
+  // Add this useEffect after your other hooks, inside the Editor component
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerText !== content) {
+      editorRef.current.innerText = content;
+    }
+  }, [content]);
+
+  // Add this useEffect after your other hooks, inside the Editor component
+  useEffect(() => {
+    if (titleRef.current && titleRef.current.innerText !== title) {
+      titleRef.current.innerText = title;
+    }
+  }, [title]);
 
   return (
     <div className="flex-1 flex flex-col bg-editor-light dark:bg-editor-dark">
@@ -146,7 +166,6 @@ export default function Editor({
               onBlur={() => setHasFocus(false)}
               suppressContentEditableWarning={true}
             >
-              {title}
             </h1>
           </div>
           
@@ -179,7 +198,6 @@ export default function Editor({
               }
             }}
             suppressContentEditableWarning={true}
-            dangerouslySetInnerHTML={{__html: content}}
           >
           </div>
           

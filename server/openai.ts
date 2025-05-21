@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+// import fetch from "node-fetch"; // Remove this line for Node 18+
 
 // the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
 export const DEFAULT_MODEL = "gpt-4o";
@@ -7,15 +8,39 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "default_key" 
 });
 
+async function callOllama(model: string, prompt: string): Promise<string> {
+  try {
+    const res = await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt, stream: false })
+    });
+    if (!res.ok) {
+      throw new Error(`Ollama server error: ${res.status} ${res.statusText}`);
+    }
+    const data = await res.json() as any;
+    return data.response || data.generated || "";
+  } catch (err: any) {
+    console.error("Ollama fetch error:", err);
+    return "[Ollama error: " + err.message + "]";
+  }
+}
+
 // Generate text based on the current content and user's writing style
 export async function generateTextCompletion(
   content: string,
   style: any,
-  prompt: string = "Continue this text in the same style."
+  prompt: string = "Continue this text in the same style.",
+  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmModel?: string
 ): Promise<string> {
+  if (llmProvider === 'ollama') {
+    const ollamaPrompt = `${content}\n\n${prompt}`;
+    return callOllama(llmModel || 'llama2', ollamaPrompt);
+  }
   try {
     const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
+      model: llmModel || DEFAULT_MODEL,
       messages: [
         {
           role: "system",
@@ -162,11 +187,24 @@ export async function analyzeTextStyle(text: string): Promise<any> {
 // Generate suggestions based on document context
 export async function generateSuggestions(
   content: string,
-  style: any
+  style: any,
+  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmModel?: string
 ): Promise<string[]> {
+  if (llmProvider === 'ollama') {
+    // For suggestions, just ask for 3 suggestions in a single response
+    const prompt = `${content}\n\nBased on the above, generate 3 possible continuations or sentence completions that match the writing style. Respond with a JSON array.`;
+    const raw = await callOllama(llmModel || 'llama2', prompt);
+    try {
+      const arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [raw];
+    } catch {
+      return [raw];
+    }
+  }
   try {
     const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
+      model: llmModel || DEFAULT_MODEL,
       messages: [
         {
           role: "system",
