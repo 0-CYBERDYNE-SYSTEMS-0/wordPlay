@@ -160,6 +160,8 @@ export default function Home() {
       <AIAgent
         currentProject={activeProject}
         currentDocument={documentData}
+        llmProvider={llmProvider}
+        llmModel={llmModel}
         onToolResult={(result) => {
           // Handle tool results that might update document content
           if (result.data && typeof result.data === 'string' && result.success) {

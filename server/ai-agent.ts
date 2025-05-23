@@ -35,6 +35,8 @@ interface AgentContext {
   projectDocuments: any[];
   projectSources: any[];
   researchNotes: string;
+  llmProvider?: 'openai' | 'ollama';
+  llmModel?: string;
 }
 
 // Tool execution result
@@ -218,7 +220,13 @@ export const agentTools: AgentTool[] = [
     description: "Generate text content using AI",
     parameters: { prompt: "string", context: "string?", style: "string?" },
     execute: async (params, context) => {
-      const result = await generateTextCompletion(params.context || "", params.style, params.prompt);
+      const result = await generateTextCompletion(
+        params.context || "", 
+        params.style, 
+        params.prompt,
+        context.llmProvider,
+        context.llmModel
+      );
       return { success: true, data: result, message: "Generated text content" };
     }
   },
@@ -238,7 +246,12 @@ export const agentTools: AgentTool[] = [
     description: "Get AI suggestions for improving text",
     parameters: { text: "string", type: "string?" },
     execute: async (params, context) => {
-      const suggestions = await generateSuggestions(params.text, params.type);
+      const suggestions = await generateSuggestions(
+        params.text, 
+        params.type,
+        context.llmProvider,
+        context.llmModel
+      );
       return { success: true, data: suggestions, message: "Generated writing suggestions" };
     }
   },
@@ -299,7 +312,9 @@ export class WordPlayAgent {
       allProjects: [],
       projectDocuments: [],
       projectSources: [],
-      researchNotes: ""
+      researchNotes: "",
+      llmProvider: undefined,
+      llmModel: undefined
     };
   }
 
@@ -390,7 +405,13 @@ If you don't need tools, respond with:
 
 User request: "${request}"`;
 
-      const result = await generateTextCompletion("", {}, systemPrompt);
+      const result = await generateTextCompletion(
+        "", 
+        {}, 
+        systemPrompt,
+        this.context.llmProvider,
+        this.context.llmModel
+      );
       
       try {
         const parsed = JSON.parse(result);

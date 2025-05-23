@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface AIAgentProps {
   currentProject?: any;
   currentDocument?: any;
+  llmProvider?: 'openai' | 'ollama';
+  llmModel?: string;
   onToolResult?: (result: any) => void;
 }
 
@@ -31,6 +33,8 @@ interface ToolCall {
 export default function AIAgent({ 
   currentProject, 
   currentDocument, 
+  llmProvider,
+  llmModel,
   onToolResult 
 }: AIAgentProps) {
   const { toast } = useToast();
@@ -48,6 +52,8 @@ export default function AIAgent({
   const agentContext = {
     currentProject,
     currentDocument,
+    llmProvider,
+    llmModel,
     userId: 1
   };
 
@@ -183,8 +189,8 @@ export default function AIAgent({
   }
 
   return (
-    <Card className="fixed bottom-4 right-4 w-96 h-[500px] z-50 flex flex-col shadow-lg">
-      <CardHeader className="pb-2">
+    <Card className="fixed bottom-4 right-4 w-96 h-[600px] z-50 flex flex-col shadow-lg">
+      <CardHeader className="pb-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center text-sm">
             <Bot className="h-4 w-4 mr-2" />
@@ -211,9 +217,9 @@ export default function AIAgent({
         )}
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col p-3">
+      <CardContent className="flex-1 flex flex-col p-3 min-h-0">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto space-y-3 mb-3">
+        <div className="flex-1 overflow-y-auto space-y-3 mb-3 min-h-0 max-h-[400px]">
           {messages.length === 0 && (
             <div className="text-center text-gray-500 text-sm py-8">
               <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -297,49 +303,51 @@ export default function AIAgent({
         </div>
 
         {/* Input */}
-        <form onSubmit={handleSubmit} className="flex space-x-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me anything about your writing..."
-            className="flex-1 text-sm"
-            disabled={agentMutation.isPending}
-          />
-          <Button
-            type="submit"
-            disabled={!input.trim() || agentMutation.isPending}
-            className="px-3"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
+        <div className="flex-shrink-0">
+          <form onSubmit={handleSubmit} className="flex space-x-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me anything about your writing..."
+              className="flex-1 text-sm"
+              disabled={agentMutation.isPending}
+            />
+            <Button
+              type="submit"
+              disabled={!input.trim() || agentMutation.isPending}
+              className="px-3"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
 
-        {/* Quick Actions */}
-        <div className="flex flex-wrap gap-1 mt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setInput("Help me research this topic")}
-            className="text-xs"
-          >
-            Research
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setInput("Analyze my writing style")}
-            className="text-xs"
-          >
-            Style Analysis
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setInput("Generate an outline")}
-            className="text-xs"
-          >
-            Outline
-          </Button>
+          {/* Quick Actions */}
+          <div className="flex flex-wrap gap-1 mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInput("Help me research this topic")}
+              className="text-xs"
+            >
+              Research
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInput("Analyze my writing style")}
+              className="text-xs"
+            >
+              Style Analysis
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setInput("Generate an outline")}
+              className="text-xs"
+            >
+              Outline
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
