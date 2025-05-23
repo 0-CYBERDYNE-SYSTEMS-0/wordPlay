@@ -26,6 +26,32 @@ interface SearchResponse {
   error?: string;
 }
 
+// Helper function to safely extract hostname from URL
+function safeGetHostname(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch (error) {
+    // If URL is malformed, try to extract domain from it
+    const cleanUrl = url.replace(/\]\(.*$/, ''); // Remove markdown syntax like ](...)
+    try {
+      return new URL(cleanUrl).hostname;
+    } catch (error2) {
+      // If still malformed, return a fallback
+      return url.replace(/^https?:\/\//, '').split('/')[0].split('?')[0];
+    }
+  }
+}
+
+// Helper function to clean URLs of malformed syntax
+function cleanUrl(url: string): string {
+  return url
+    .replace(/\]\(.*$/, '') // Remove markdown link endings like ](...)
+    .replace(/\)$/, '')     // Remove trailing parentheses
+    .replace(/,$/, '')      // Remove trailing commas
+    .replace(/\.$/, '')     // Remove trailing periods
+    .trim();
+}
+
 export default function WebSearch({
   activeTab,
   onChangeTab,
@@ -412,7 +438,7 @@ export default function WebSearch({
                             <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
                             <button 
                               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                              onClick={() => handleAddSource(result.url)}
+                              onClick={() => handleAddSource(cleanUrl(result.url))}
                               disabled={addSourceMutation.isPending}
                               title="Save to your sources"
                             >
@@ -423,10 +449,10 @@ export default function WebSearch({
                             {result.snippet}
                           </p>
                           <div className="flex items-center mt-2">
-                            <span className="text-xs text-gray-500">{new URL(result.url).hostname}</span>
+                            <span className="text-xs text-gray-500">{safeGetHostname(result.url)}</span>
                             <span className="mx-2 text-gray-300">|</span>
                             <a 
-                              href={result.url}
+                              href={cleanUrl(result.url)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs text-blue-500 hover:underline flex items-center"
@@ -437,7 +463,7 @@ export default function WebSearch({
                             <span className="mx-2 text-gray-300">|</span>
                             <button 
                               className="text-xs text-primary dark:text-primary-light hover:underline"
-                              onClick={() => handleAddSource(result.url)}
+                              onClick={() => handleAddSource(cleanUrl(result.url))}
                               disabled={addSourceMutation.isPending}
                             >
                               Add to Sources
@@ -446,7 +472,7 @@ export default function WebSearch({
                             <button 
                               className="text-xs text-green-600 dark:text-green-400 hover:underline"
                               onClick={() => {
-                                setScrapeUrl(result.url);
+                                setScrapeUrl(cleanUrl(result.url));
                                 setActiveResearchTab("url");
                               }}
                             >

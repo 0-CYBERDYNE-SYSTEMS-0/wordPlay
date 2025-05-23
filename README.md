@@ -1,6 +1,6 @@
-# PenP@l - AI-Powered Writing Companion
+# wordPlay - AI-Powered Writing Companion
 
-PenP@l is an advanced writing assistant that helps users generate, edit, and refine content with the help of AI. The application provides a modern interface for creating and managing writing projects with powerful AI-driven features.
+wordPlay is an advanced writing assistant that helps users generate, edit, and refine content with the help of AI. The application provides a modern interface for creating and managing writing projects with powerful AI-driven features.
 
 ## Features
 

@@ -130,8 +130,24 @@ function extractSourcesFromContent(content: string): Array<{
   const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 10);
   
   urls.forEach((url, index) => {
+    // Clean URL of markdown syntax and other malformed patterns
+    let cleanUrl = url
+      .replace(/\]\(.*$/, '') // Remove markdown link endings like ](...)
+      .replace(/\)$/, '')     // Remove trailing parentheses
+      .replace(/,$/, '')      // Remove trailing commas
+      .replace(/\.$/, '')     // Remove trailing periods
+      .trim();
+    
+    // Validate the cleaned URL
+    try {
+      new URL(cleanUrl);
+    } catch (e) {
+      console.warn(`Skipping invalid URL: ${cleanUrl}`);
+      return; // Skip this URL if it's still invalid
+    }
+    
     // Get domain for title
-    const domain = url.replace(/https?:\/\//, '').split('/')[0];
+    const domain = cleanUrl.replace(/https?:\/\//, '').split('/')[0];
     const title = domain.charAt(0).toUpperCase() + domain.slice(1).replace(/\./g, ' ');
     
     // Find related sentence for snippet
@@ -142,7 +158,7 @@ function extractSourcesFromContent(content: string): Array<{
     sources.push({
       title: title,
       snippet: relatedSentence.replace(/\[\d+\]/g, '').trim(),
-      url: url.split(/\s/)[0] // Clean URL
+      url: cleanUrl // Use the cleaned URL
     });
   });
   
