@@ -379,63 +379,135 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Text Operations
+  // Text analysis routes
   app.post("/api/text/grep", async (req: Request, res: Response) => {
-    const grepSchema = z.object({
-      content: z.string(),
-      pattern: z.string()
-    });
+    const { text, pattern } = req.body;
+    
+    if (!text || !pattern) {
+      return res.status(400).json({ message: "Text and pattern are required" });
+    }
     
     try {
-      const { content, pattern } = grepSchema.parse(req.body);
-      const results = grepText(content, pattern);
+      const results = grepText(text, pattern);
       res.json(results);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to perform grep operation" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error processing grep request", error: error.message });
     }
   });
   
   app.post("/api/text/replace", async (req: Request, res: Response) => {
-    const replaceSchema = z.object({
-      content: z.string(),
-      oldPattern: z.string(),
-      newPattern: z.string()
-    });
+    const { text, oldPattern, newPattern } = req.body;
+    
+    if (!text || !oldPattern || !newPattern) {
+      return res.status(400).json({ message: "Text, oldPattern, and newPattern are required" });
+    }
     
     try {
-      const { content, oldPattern, newPattern } = replaceSchema.parse(req.body);
-      const results = replaceText(content, oldPattern, newPattern);
-      res.json(results);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to perform replace operation" });
+      const result = replaceText(text, oldPattern, newPattern);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error processing replace request", error: error.message });
     }
   });
   
   app.post("/api/text/analyze", async (req: Request, res: Response) => {
-    const analyzeSchema = z.object({
-      content: z.string()
-    });
+    const { text } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ message: "Text is required" });
+    }
     
     try {
-      const { content } = analyzeSchema.parse(req.body);
-      const analysis = analyzeDocument(content);
+      const analysis = analyzeDocument(text);
       res.json(analysis);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to analyze document" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error analyzing text", error: error.message });
     }
   });
   
   app.post("/api/text/structure", async (req: Request, res: Response) => {
-    const structureSchema = z.object({
-      content: z.string()
-    });
+    const { text } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({ message: "Text is required" });
+    }
     
     try {
-      const { content } = structureSchema.parse(req.body);
-      const structure = extractStructure(content);
+      const structure = extractStructure(text);
       res.json(structure);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to extract document structure" });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error extracting structure", error: error.message });
+    }
+  });
+
+  // AI Agent routes
+  app.post("/api/agent/request", async (req: Request, res: Response) => {
+    const { createAgent } = await import("./ai-agent");
+    const { request, context } = req.body;
+    
+    if (!request) {
+      return res.status(400).json({ message: "Request is required" });
+    }
+    
+    try {
+      const agent = createAgent(1); // Default user ID
+      
+      // Update agent context if provided
+      if (context) {
+        await agent.updateContext(context);
+      }
+      
+      const result = await agent.processRequest(request);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error processing agent request", error: error.message });
+    }
+  });
+  
+  app.post("/api/agent/tool", async (req: Request, res: Response) => {
+    const { createAgent } = await import("./ai-agent");
+    const { toolName, parameters, context } = req.body;
+    
+    if (!toolName) {
+      return res.status(400).json({ message: "Tool name is required" });
+    }
+    
+    try {
+      const agent = createAgent(1); // Default user ID
+      
+      // Update agent context if provided
+      if (context) {
+        await agent.updateContext(context);
+      }
+      
+      const result = await agent.executeTool(toolName, parameters || {});
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: "Error executing tool", error: error.message });
+    }
+  });
+  
+  app.get("/api/agent/tools", async (req: Request, res: Response) => {
+    const { createAgent } = await import("./ai-agent");
+    
+    try {
+      const agent = createAgent(1);
+      const tools = agent.getAvailableTools();
+      res.json({ tools });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error getting tools", error: error.message });
+    }
+  });
+  
+  app.get("/api/agent/context", async (req: Request, res: Response) => {
+    const { createAgent } = await import("./ai-agent");
+    
+    try {
+      const agent = createAgent(1);
+      const summary = agent.getContextSummary();
+      res.json({ summary });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error getting context", error: error.message });
     }
   });
 

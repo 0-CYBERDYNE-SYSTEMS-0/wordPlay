@@ -13,7 +13,7 @@ export const config = {
     }
   },
   server: {
-    port: parseInt(process.env.PORT || '5000', 10),
+    port: parseInt(process.env.PORT || '5001', 10),
     host: process.env.HOST || 'localhost'
   }
 }; 

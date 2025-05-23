@@ -8,6 +8,7 @@ import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import CommandMode from "@/components/CommandMode";
 import StyleAnalysis from "@/components/StyleAnalysis";
+import AIAgent from "@/components/AIAgent";
 import { useDocument } from "@/hooks/use-document";
 import type { Project, Document } from "@shared/schema";
 
@@ -155,15 +156,20 @@ export default function Home() {
         }}
       />
       
-      {/* Floating Action Button */}
-      <div className="fixed right-6 bottom-6">
-        <button 
-          className="w-12 h-12 rounded-full bg-primary hover:bg-primary-dark text-white shadow-lg flex items-center justify-center transition-colors"
-          aria-label="AI Actions"
-        >
-          <i className="ri-ai-generate text-xl"></i>
-        </button>
-      </div>
+      {/* AI Agent */}
+      <AIAgent
+        currentProject={activeProject}
+        currentDocument={documentData}
+        onToolResult={(result) => {
+          // Handle tool results that might update document content
+          if (result.data && typeof result.data === 'string' && result.success) {
+            // If it's a text generation or editing result, update content
+            if (result.data.includes('\n') || result.data.length > 50) {
+              setContent(prev => prev + '\n\n' + result.data);
+            }
+          }
+        }}
+      />
     </div>
   );
 }
