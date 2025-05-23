@@ -222,7 +222,7 @@ export default function CommandMode({
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl mx-auto">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">AI Writing Assistant</h2>
+            <h2 className="text-xl font-semibold">PenP@l</h2>
             
             <div className="flex items-center space-x-2">
               <button

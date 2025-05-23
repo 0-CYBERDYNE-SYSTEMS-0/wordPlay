@@ -41,8 +41,8 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
               <path d="M13 7l4 -4" />
               <path d="M13 7h-6a2 2 0 0 0 -2 2v6" />
               <path d="M17 17v-6a2 2 0 0 0 -2 -2h-6" />
-            </svg>
-            <h1 className="text-xl font-semibold">WritingCompanion AI</h1>
+            </svg>AI
+            <h1 className="text-xl font-semibold">PenP@l </h1>
           </div>
         </div>
         

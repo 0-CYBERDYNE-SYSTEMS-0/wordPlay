@@ -13,16 +13,30 @@ async function callOllama(model: string, prompt: string): Promise<string> {
     const res = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, stream: false })
+      body: JSON.stringify({ 
+        model, 
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          top_p: 0.9
+        }
+      })
     });
+    
     if (!res.ok) {
       throw new Error(`Ollama server error: ${res.status} ${res.statusText}`);
     }
-    const data = await res.json() as any;
-    return data.response || data.generated || "";
+    
+    const data = await res.json();
+    if (!data.response) {
+      throw new Error('No response from Ollama server');
+    }
+    
+    return data.response;
   } catch (err: any) {
     console.error("Ollama fetch error:", err);
-    return "[Ollama error: " + err.message + "]";
+    throw new Error(`Ollama error: ${err.message}`);
   }
 }
 
@@ -35,8 +49,16 @@ export async function generateTextCompletion(
   llmModel?: string
 ): Promise<string> {
   if (llmProvider === 'ollama') {
-    const ollamaPrompt = `${content}\n\n${prompt}`;
-    return callOllama(llmModel || 'llama2', ollamaPrompt);
+    try {
+      const systemPrompt = `You are an AI writing assistant. Continue or modify the given text based on the provided prompt. Maintain the same style and tone.`;
+      const fullPrompt = `${systemPrompt}\n\nText: ${content}\n\nPrompt: ${prompt}\n\nContinuation:`;
+      
+      const response = await callOllama(llmModel || 'llama2', fullPrompt);
+      return response.trim();
+    } catch (error: any) {
+      console.error("Error generating text with Ollama:", error);
+      throw new Error(`Failed to generate text: ${error.message}`);
+    }
   }
   try {
     const response = await openai.chat.completions.create({
@@ -192,14 +214,36 @@ export async function generateSuggestions(
   llmModel?: string
 ): Promise<string[]> {
   if (llmProvider === 'ollama') {
-    // For suggestions, just ask for 3 suggestions in a single response
-    const prompt = `${content}\n\nBased on the above, generate 3 possible continuations or sentence completions that match the writing style. Respond with a JSON array.`;
-    const raw = await callOllama(llmModel || 'llama2', prompt);
     try {
-      const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? arr : [raw];
-    } catch {
+      const systemPrompt = `You are an AI writing assistant. Based on the given text, generate 3 possible continuations or sentence completions that match the writing style. Format your response as a JSON array of strings.`;
+      const prompt = `${systemPrompt}\n\nText: ${content}\n\nResponse format example: ["suggestion 1", "suggestion 2", "suggestion 3"]\n\nGenerate suggestions:`;
+      
+      const raw = await callOllama(llmModel || 'llama2', prompt);
+      
+      try {
+        // Try to parse as JSON first
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.slice(0, 3);
+        }
+      } catch (e) {
+        // If JSON parsing fails, try to split by newlines and clean up
+        const suggestions = raw
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line && !line.startsWith('[') && !line.startsWith(']'))
+          .slice(0, 3);
+          
+        if (suggestions.length > 0) {
+          return suggestions;
+        }
+      }
+      
+      // If all else fails, return the raw response as a single suggestion
       return [raw];
+    } catch (error: any) {
+      console.error("Error generating suggestions with Ollama:", error);
+      return ["[Unable to generate suggestions. Please try again.]"];
     }
   }
   try {

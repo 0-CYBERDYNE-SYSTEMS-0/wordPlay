@@ -52,11 +52,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
     
     try {
+      console.log("Received project data:", req.body); // Debug log
       const validatedData = projectSchema.parse(req.body);
+      console.log("Validated project data:", validatedData); // Debug log
+      
       const project = await storage.createProject(validatedData);
       res.status(201).json(project);
-    } catch (error) {
-      res.status(400).json({ message: "Invalid project data" });
+    } catch (error: any) {
+      console.error("Project creation error:", error); // Debug log
+      
+      if (error.name === 'ZodError') {
+        // Return specific validation errors
+        res.status(400).json({ 
+          message: "Invalid project data", 
+          errors: error.errors,
+          details: error.errors.map((e: any) => `${e.path.join('.')}: ${e.message}`).join(', ')
+        });
+      } else {
+        res.status(400).json({ message: "Invalid project data" });
+      }
     }
   });
   

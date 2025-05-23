@@ -59,12 +59,16 @@ export default function NewProjectModal({
   // Create project mutation
   const createProjectMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/projects", {
+      const projectData = {
         userId: 1, // Default user
-        name: projectName,
+        name: projectName.trim(), // Ensure trimmed name
         type: projectType,
         style: writingStyle
-      });
+      };
+      
+      console.log("Sending project data:", projectData); // Debug log
+      
+      const res = await apiRequest("POST", "/api/projects", projectData);
       return res.json();
     },
     onSuccess: (data) => {
@@ -79,9 +83,11 @@ export default function NewProjectModal({
       createDocumentMutation.mutate(data.id);
     },
     onError: (error) => {
+      console.error("Project creation error:", error); // Debug log
+      
       toast({
         title: "Failed to create project",
-        description: error.message,
+        description: error.message || "Please check your input and try again.",
         variant: "destructive"
       });
     }
@@ -118,7 +124,9 @@ export default function NewProjectModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!projectName.trim()) {
+    const trimmedName = projectName.trim();
+    
+    if (!trimmedName) {
       toast({
         title: "Missing project name",
         description: "Please enter a name for your project.",
@@ -126,6 +134,12 @@ export default function NewProjectModal({
       });
       return;
     }
+    
+    console.log("Form validation passed:", { 
+      name: trimmedName, 
+      type: projectType, 
+      style: writingStyle 
+    }); // Debug log
     
     createProjectMutation.mutate();
   };

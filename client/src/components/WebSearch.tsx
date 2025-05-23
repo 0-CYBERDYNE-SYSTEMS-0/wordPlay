@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save } from "lucide-react";
+import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface WebSearchProps {
-  activeTab: "editor" | "search" | "command";
-  onChangeTab: (tab: "editor" | "search" | "command") => void;
+  activeTab: "editor" | "search" | "command" | "style";
+  onChangeTab: (tab: "editor" | "search" | "command" | "style") => void;
   projectId?: number;
 }
 
@@ -18,6 +18,12 @@ interface SearchResult {
   title: string;
   snippet: string;
   url: string;
+}
+
+interface SearchResponse {
+  results: SearchResult[];
+  summary?: string;
+  error?: string;
 }
 
 export default function WebSearch({
@@ -29,6 +35,7 @@ export default function WebSearch({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSource, setSearchSource] = useState("web");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [aiSummary, setAiSummary] = useState<string>("");
   const [showResults, setShowResults] = useState(false);
   const [activeResearchTab, setActiveResearchTab] = useState("search");
   const [scrapeUrl, setScrapeUrl] = useState("");
@@ -47,20 +54,30 @@ export default function WebSearch({
         query: searchQuery,
         source: searchSource
       });
-      return res.json();
+      return res.json() as Promise<SearchResponse>;
     },
     onSuccess: (data) => {
       if (data.results && data.results.length > 0) {
         setResults(data.results);
+        setAiSummary(data.summary || "");
         setShowResults(true);
+        
         toast({
-          title: "Research found",
-          description: `Found ${data.results.length} results that might help your writing.`
+          title: "Research completed",
+          description: `Found ${data.results.length} sources${data.summary ? " with AI analysis" : ""}.`
         });
       } else {
         toast({
           title: "No results found",
           description: "Try a different search query or source."
+        });
+      }
+      
+      if (data.error) {
+        toast({
+          title: "Search notice",
+          description: data.error,
+          variant: "default"
         });
       }
     },
@@ -119,14 +136,17 @@ export default function WebSearch({
       return res.json();
     },
     onSuccess: (data) => {
-      // Add scraped content to notes
+      // Add scraped content to notes with better formatting
+      const wordCount = data.wordCount ? ` (${data.wordCount} words)` : "";
+      const domain = data.domain ? ` from ${data.domain}` : "";
+      
       setResearchNotes(prev => 
-        prev + `\n\nFrom ${scrapeUrl}:\n${data.content.substring(0, 500)}...\n`
+        prev + `\n\n## ${data.title}${domain}${wordCount}\n\n${data.content.substring(0, 1000)}${data.content.length > 1000 ? "..." : ""}\n\nSource: ${scrapeUrl}\n`
       );
       
       toast({
-        title: "Page content retrieved",
-        description: "The content has been added to your research notes."
+        title: "Content extracted",
+        description: `${data.wordCount || 0} words extracted and added to research notes.`
       });
       
       // Clear the URL input
@@ -134,7 +154,7 @@ export default function WebSearch({
     },
     onError: (error) => {
       toast({
-        title: "Couldn't retrieve page",
+        title: "Couldn't extract content",
         description: error.message,
         variant: "destructive"
       });
@@ -352,46 +372,91 @@ export default function WebSearch({
               </form>
               
               {showResults && (
-                <div className="space-y-4">
-                  {results.map((result, index) => (
-                    <div key={index} className="border dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start">
-                        <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
-                        <button 
-                          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                          onClick={() => handleAddSource(result.url)}
-                          disabled={addSourceMutation.isPending}
-                          title="Save to your sources"
-                        >
-                          <Save className="h-4 w-4 text-gray-500" />
-                        </button>
+                <div className="space-y-6">
+                  {/* AI Summary Section */}
+                  {aiSummary && (
+                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                      <div className="flex items-center mb-3">
+                        <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" />
+                        <h3 className="font-medium text-blue-900 dark:text-blue-100">AI Research Summary</h3>
                       </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                        {result.snippet}
-                      </p>
-                      <div className="flex items-center mt-2">
-                        <span className="text-xs text-gray-500">{new URL(result.url).hostname}</span>
-                        <span className="mx-2 text-gray-300">|</span>
-                        <a 
-                          href={result.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-500 hover:underline flex items-center"
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <p className="text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                          {aiSummary}
+                        </p>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                        <button
+                          onClick={() => setResearchNotes(prev => 
+                            prev + `\n\n## Research Summary for "${searchQuery}"\n\n${aiSummary}\n\n---\n`
+                          )}
+                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center"
                         >
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          View Source
-                        </a>
-                        <span className="mx-2 text-gray-300">|</span>
-                        <button 
-                          className="text-xs text-primary dark:text-primary-light hover:underline"
-                          onClick={() => handleAddSource(result.url)}
-                          disabled={addSourceMutation.isPending}
-                        >
-                          Add to Sources
+                          <Save className="h-4 w-4 mr-1" />
+                          Add summary to notes
                         </button>
                       </div>
                     </div>
-                  ))}
+                  )}
+                  
+                  {/* Search Results */}
+                  <div>
+                    <h3 className="text-lg font-medium mb-4 flex items-center">
+                      <Search className="h-5 w-5 mr-2" />
+                      Sources ({results.length})
+                    </h3>
+                    <div className="space-y-4">
+                      {results.map((result, index) => (
+                        <div key={index} className="border dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start">
+                            <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
+                            <button 
+                              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                              onClick={() => handleAddSource(result.url)}
+                              disabled={addSourceMutation.isPending}
+                              title="Save to your sources"
+                            >
+                              <Save className="h-4 w-4 text-gray-500" />
+                            </button>
+                          </div>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                            {result.snippet}
+                          </p>
+                          <div className="flex items-center mt-2">
+                            <span className="text-xs text-gray-500">{new URL(result.url).hostname}</span>
+                            <span className="mx-2 text-gray-300">|</span>
+                            <a 
+                              href={result.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-500 hover:underline flex items-center"
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />
+                              View Source
+                            </a>
+                            <span className="mx-2 text-gray-300">|</span>
+                            <button 
+                              className="text-xs text-primary dark:text-primary-light hover:underline"
+                              onClick={() => handleAddSource(result.url)}
+                              disabled={addSourceMutation.isPending}
+                            >
+                              Add to Sources
+                            </button>
+                            <span className="mx-2 text-gray-300">|</span>
+                            <button 
+                              className="text-xs text-green-600 dark:text-green-400 hover:underline"
+                              onClick={() => {
+                                setScrapeUrl(result.url);
+                                setActiveResearchTab("url");
+                              }}
+                            >
+                              Extract Content
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
