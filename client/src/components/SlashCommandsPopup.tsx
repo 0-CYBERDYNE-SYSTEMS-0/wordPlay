@@ -20,7 +20,7 @@ interface SlashCommandsPopupProps {
   position: { x: number, y: number };
   content: string;
   setContent: (content: string) => void;
-  editorRef: React.RefObject<HTMLDivElement>;
+  editorRef: React.RefObject<HTMLTextAreaElement>;
   llmProvider: 'openai' | 'ollama';
   llmModel: string;
 }
@@ -123,25 +123,13 @@ export default function SlashCommandsPopup({
       afterSelection: ''
     };
     
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return {
-      selectedText: '',
-      selectionStart: 0,
-      selectionEnd: 0,
-      beforeSelection: content,
-      afterSelection: ''
-    };
-    
-    const range = selection.getRangeAt(0);
-    const preSelectionRange = range.cloneRange();
-    preSelectionRange.selectNodeContents(editorRef.current);
-    preSelectionRange.setEnd(range.startContainer, range.startOffset);
-    
-    const selectionStart = preSelectionRange.toString().length;
-    const selectionEnd = selectionStart + range.toString().length;
+    const textarea = editorRef.current;
+    const selectionStart = textarea.selectionStart;
+    const selectionEnd = textarea.selectionEnd;
+    const selectedText = content.substring(selectionStart, selectionEnd);
     
     return {
-      selectedText: range.toString(),
+      selectedText,
       selectionStart,
       selectionEnd,
       beforeSelection: content.substring(0, selectionStart),

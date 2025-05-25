@@ -42,7 +42,7 @@ export default function Editor({
 }: EditorProps) {
   const { toast } = useToast();
   const [hasFocus, setHasFocus] = useState(false);
-  const editorRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   
   // State for slash commands popup
@@ -59,6 +59,43 @@ export default function Editor({
     llmProvider,
     llmModel
   });
+  
+  // Handle keyboard events for slash commands
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Detect slash key press
+    if (e.key === '/' && !slashCommandsOpen) {
+      e.preventDefault(); // Prevent slash from being typed
+      
+      // Get cursor position for menu placement
+      const textarea = e.currentTarget;
+      const rect = textarea.getBoundingClientRect();
+      const scrollTop = textarea.scrollTop;
+      
+      // Calculate approximate cursor position
+      const cursorPosition = textarea.selectionStart;
+      const textBeforeCursor = content.substring(0, cursorPosition);
+      const lines = textBeforeCursor.split('\n');
+      const currentLine = lines.length - 1;
+      const charInLine = lines[lines.length - 1].length;
+      
+      // Rough estimation of cursor position (this could be improved)
+      const lineHeight = 24; // Approximate line height
+      const charWidth = 10; // Approximate character width
+      
+      setSlashCommandPosition({
+        x: rect.left + (charInLine * charWidth),
+        y: rect.top + (currentLine * lineHeight) + lineHeight - scrollTop
+      });
+      
+      // Show slash commands popup
+      setSlashCommandsOpen(true);
+    }
+    
+    // Close menu with escape
+    if (e.key === 'Escape' && slashCommandsOpen) {
+      setSlashCommandsOpen(false);
+    }
+  };
   
   // Handle manual save
   const handleManualSave = async () => {
@@ -270,6 +307,7 @@ export default function Editor({
         {/* Content Editor - Full height and width with larger text in full screen */}
         <div className={isFullScreen ? "flex-1 px-24 pb-16 overflow-hidden" : "flex-1 px-12 pb-8 overflow-hidden"}>
           <textarea
+            ref={editorRef}
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Start writing..."
@@ -281,9 +319,22 @@ export default function Editor({
               fontSize: isFullScreen ? '20px' : '18px',
               lineHeight: isFullScreen ? '1.9' : '1.8'
             }}
+            onKeyDown={handleKeyDown}
           />
         </div>
       </div>
+      
+      {/* Slash Commands Popup */}
+      <SlashCommandsPopup
+        isOpen={slashCommandsOpen}
+        onClose={() => setSlashCommandsOpen(false)}
+        position={slashCommandPosition}
+        content={content}
+        setContent={setContent}
+        editorRef={editorRef}
+        llmProvider={llmProvider}
+        llmModel={llmModel}
+      />
     </div>
   );
 }
