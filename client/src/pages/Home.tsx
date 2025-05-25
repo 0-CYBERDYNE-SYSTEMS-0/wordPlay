@@ -10,17 +10,24 @@ import CommandMode from "@/components/CommandMode";
 import StyleAnalysis from "@/components/StyleAnalysis";
 import AIAgent from "@/components/AIAgent";
 import { useDocument } from "@/hooks/use-document";
+import { useSettings } from "@/providers/SettingsProvider";
 import type { Project, Document } from "@shared/schema";
 
 export default function Home() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [contextPanelOpen, setContextPanelOpen] = useState(true);
+  const { settings, updateSettings } = useSettings();
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open to use left space
+  const [contextPanelOpen, setContextPanelOpen] = useState(true); // Default to open to use right space
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"editor" | "search" | "command" | "style">("editor");
   const [activeProjectId, setActiveProjectId] = useState<number | null>(1); // Default project
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(1); // Default document
-  const [llmProvider, setLlmProvider] = useState<'openai' | 'ollama'>('openai');
-  const [llmModel, setLlmModel] = useState<string>('gpt-4o');
+  
+  // Full screen state management
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [preFullScreenState, setPreFullScreenState] = useState({
+    sidebarOpen: true,
+    contextPanelOpen: true
+  });
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -37,10 +44,15 @@ export default function Home() {
     content,
     setContent,
     isSaving,
+    isDirty,
+    saveError,
+    autoSaveEnabled,
+    saveDocument,
     documentData
   } = useDocument({
     documentId: activeDocumentId || undefined,
-    projectId: activeProjectId || undefined
+    projectId: activeProjectId || undefined,
+    autosaveInterval: settings.autosaveInterval
   });
 
   // Handle toggling sidebar
@@ -50,6 +62,7 @@ export default function Home() {
 
   // Handle toggling context panel
   const toggleContextPanel = () => {
+    console.log("Toggling context panel. Current state:", contextPanelOpen);
     setContextPanelOpen(!contextPanelOpen);
   };
 
@@ -69,31 +82,105 @@ export default function Home() {
     setActiveDocumentId(documentId);
   };
 
+  // Handle full screen toggle
+  const toggleFullScreen = () => {
+    if (isFullScreen) {
+      // Exiting full screen - restore previous sidebar states
+      setSidebarOpen(preFullScreenState.sidebarOpen);
+      setContextPanelOpen(preFullScreenState.contextPanelOpen);
+      setIsFullScreen(false);
+    } else {
+      // Entering full screen - save current states and hide sidebars
+      setPreFullScreenState({
+        sidebarOpen,
+        contextPanelOpen
+      });
+      setSidebarOpen(false);
+      setContextPanelOpen(false);
+      setIsFullScreen(true);
+    }
+  };
+
+  // Handle escape key to exit full screen
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullScreen) {
+        toggleFullScreen();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isFullScreen]);
+
+  // Auto-open context panel when switching to style analysis
+  useEffect(() => {
+    if (activeTab === "style" && !contextPanelOpen) {
+      setContextPanelOpen(true);
+    }
+  }, [activeTab]);
+
+  // Debug logging
+  useEffect(() => {
+    console.log("Home component state:", { 
+      contextPanelOpen, 
+      title: title || "empty", 
+      contentLength: content?.length || 0,
+      settingsContextDefault: settings.contextPanelDefaultOpen 
+    });
+  }, [contextPanelOpen, title, content, settings.contextPanelDefaultOpen]);
+
+  // If in full screen mode, render only the editor
+  if (isFullScreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
+        <Editor
+          title={title}
+          setTitle={setTitle}
+          content={content}
+          setContent={setContent}
+          isSaving={isSaving}
+          isDirty={isDirty}
+          saveError={saveError}
+          autoSaveEnabled={autoSaveEnabled}
+          saveDocument={saveDocument}
+          llmProvider={settings.llmProvider}
+          llmModel={settings.llmModel}
+          contextPanelOpen={false}
+          onToggleContextPanel={() => {}}
+          isFullScreen={isFullScreen}
+          onToggleFullScreen={toggleFullScreen}
+        />
+        
+        {/* Floating exit button */}
+        <button
+          onClick={toggleFullScreen}
+          className="fixed top-4 right-4 z-50 p-2 bg-black bg-opacity-20 hover:bg-opacity-30 text-white rounded-full transition-opacity"
+          title="Exit full screen (ESC)"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="font-sans bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200 min-h-screen flex flex-col">
       <Header
         toggleSidebar={toggleSidebar}
         toggleContextPanel={toggleContextPanel}
         onNewProject={handleNewProject}
-        llmProvider={llmProvider}
-        setLlmProvider={setLlmProvider}
-        llmModel={llmModel}
-        setLlmModel={setLlmModel}
+        llmProvider={settings.llmProvider}
+        setLlmProvider={(provider) => updateSettings({ llmProvider: provider })}
+        llmModel={settings.llmModel}
+        setLlmModel={(model) => updateSettings({ llmModel: model })}
+        contextPanelOpen={contextPanelOpen}
       />
-      
-      <div className="flex flex-1 h-[calc(100vh-61px)]">
-        {/* Sidebar */}
-        <Sidebar
-          isOpen={sidebarOpen}
-          projects={projects || []}
-          activeProjectId={activeProjectId}
-          onSelectProject={handleSelectProject}
-          onSelectDocument={handleSelectDocument}
-          onChangeTab={setActiveTab}
-        />
-        
-        {/* Main Content */}
-        <main className="flex-1 overflow-hidden flex">
+      <div className="flex flex-1 h-[calc(100vh-61px)] min-w-0 bg-white dark:bg-gray-900 relative">
+        {/* Editor - always full width */}
+        <main className="w-full h-full flex flex-col">
           {activeTab === "editor" && (
             <Editor
               title={title}
@@ -101,51 +188,72 @@ export default function Home() {
               content={content}
               setContent={setContent}
               isSaving={isSaving}
-              onChangeTab={setActiveTab}
-              activeTab={activeTab}
-              llmProvider={llmProvider}
-              llmModel={llmModel}
+              isDirty={isDirty}
+              saveError={saveError}
+              autoSaveEnabled={autoSaveEnabled}
+              saveDocument={saveDocument}
+              llmProvider={settings.llmProvider}
+              llmModel={settings.llmModel}
+              contextPanelOpen={contextPanelOpen}
+              onToggleContextPanel={toggleContextPanel}
+              isFullScreen={isFullScreen}
+              onToggleFullScreen={toggleFullScreen}
             />
           )}
-          
           {activeTab === "search" && (
             <WebSearch 
-              onChangeTab={setActiveTab}
-              activeTab={activeTab}
               projectId={activeProjectId || undefined}
+              contextPanelOpen={contextPanelOpen}
+              onToggleContextPanel={toggleContextPanel}
             />
           )}
-          
           {activeTab === "command" && (
             <CommandMode
-              onChangeTab={setActiveTab}
-              activeTab={activeTab}
               content={content}
               setContent={setContent}
+              contextPanelOpen={contextPanelOpen}
+              onToggleContextPanel={toggleContextPanel}
             />
           )}
-          
           {activeTab === "style" && (
             <StyleAnalysis
-              onChangeTab={setActiveTab}
-              activeTab={activeTab}
               content={content}
               documentData={documentData as Document | undefined}
-            />
-          )}
-          
-          {/* Context Panel */}
-          {contextPanelOpen && (
-            <ContextPanel 
-              title={title}
-              content={content}
-              documentData={documentData as Document | undefined}
-              onClose={toggleContextPanel}
+              contextPanelOpen={contextPanelOpen}
+              onToggleContextPanel={toggleContextPanel}
             />
           )}
         </main>
+
+        {/* Left Sidebar - floating over left margin */}
+        {sidebarOpen && (
+          <div className="fixed left-0 top-[61px] h-[calc(100vh-61px)] w-80 z-40 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-lg">
+            <Sidebar
+              isOpen={sidebarOpen}
+              projects={projects || []}
+              activeProjectId={activeProjectId}
+              activeTab={activeTab}
+              onSelectProject={handleSelectProject}
+              onSelectDocument={handleSelectDocument}
+              onChangeTab={setActiveTab}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        )}
+
+        {/* Right Context Panel - floating over right margin */}
+        {contextPanelOpen && (
+          <div className="fixed right-0 top-[61px] h-[calc(100vh-61px)] w-96 z-40 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-lg">
+            <ContextPanel 
+              title={title || ""}
+              content={content || ""}
+              documentData={documentData as Document | undefined}
+              activeTab={activeTab}
+              onClose={toggleContextPanel}
+            />
+          </div>
+        )}
       </div>
-      
       {/* Modals */}
       <NewProjectModal
         isOpen={newProjectModalOpen}
@@ -155,23 +263,22 @@ export default function Home() {
           setNewProjectModalOpen(false);
         }}
       />
-      
-      {/* AI Agent */}
-      <AIAgent
-        currentProject={activeProject}
-        currentDocument={documentData}
-        llmProvider={llmProvider}
-        llmModel={llmModel}
-        onToolResult={(result) => {
-          // Handle tool results that might update document content
-          if (result.data && typeof result.data === 'string' && result.success) {
-            // If it's a text generation or editing result, update content
-            if (result.data.includes('\n') || result.data.length > 50) {
-              setContent(prev => prev + '\n\n' + result.data);
+      {/* AI Agent - floating, minimized by default */}
+      {activeTab !== "command" && (
+        <AIAgent
+          currentProject={activeProject}
+          currentDocument={documentData}
+          llmProvider={settings.llmProvider}
+          llmModel={settings.llmModel}
+          onToolResult={(result) => {
+            if (result.data && typeof result.data === 'string' && result.success) {
+              if (result.data.includes('\n') || result.data.length > 50) {
+                setContent(prev => prev + '\n\n' + result.data);
+              }
             }
-          }
-        }}
-      />
+          }}
+        />
+      )}
     </div>
   );
 }

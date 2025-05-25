@@ -12,16 +12,23 @@ export async function executeSlashCommand(
     beforeSelection: string;
     afterSelection: string;
   },
-  style: any = {}
+  style: any = {},
+  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmModel: string = DEFAULT_MODEL
 ): Promise<{
   result: string;
   message: string;
   replaceSelection?: boolean;
   replaceEntireContent?: boolean;
 }> {
+  // Use the provided LLM provider and model, or default to OpenAI
   const openai = new OpenAI({ 
     apiKey: process.env.OPENAI_API_KEY || "default_key" 
   });
+  
+  // For now, we'll continue using OpenAI regardless of provider
+  // TODO: Implement Ollama support for slash commands
+  const modelToUse = llmProvider === 'openai' ? llmModel : DEFAULT_MODEL;
   
   // The context is either the selected text (if any) or the entire content
   const context = selectionInfo.selectedText || content;
@@ -114,7 +121,7 @@ export async function executeSlashCommand(
     
     // Make the API call
     const response = await openai.chat.completions.create({
-      model: DEFAULT_MODEL,
+      model: modelToUse,
       messages: [
         {
           role: "system",

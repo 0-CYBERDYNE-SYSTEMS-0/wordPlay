@@ -32,6 +32,9 @@ export function useAISuggestions({
   // Debounce content to avoid excessive API calls
   const debouncedContent = useDebounce(content, 1500);
   
+  // DISABLED: Auto-generation removed per user request
+  // Users will use agent or slash commands instead
+  /*
   // Automatically fetch suggestions when content changes
   useEffect(() => {
     if (!enabled || !debouncedContent || isFetching) return;
@@ -41,8 +44,9 @@ export function useAISuggestions({
       fetchSuggestionsMutation.mutate();
     }
   }, [debouncedContent, enabled, isFetching]);
+  */
   
-  // API-based suggestions
+  // API-based suggestions (now only manual via agent/slash commands)
   const fetchSuggestionsMutation = useMutation({
     mutationFn: async () => {
       setIsFetching(true);
@@ -100,6 +104,8 @@ export function useAISuggestions({
     setSelectedSuggestion,
     isFetching: isFetching || fetchSuggestionsMutation.isPending,
     generateTextCompletion: (prompt?: string) => generateTextCompletion.mutateAsync(prompt),
-    isGenerating: generateTextCompletion.isPending
+    isGenerating: generateTextCompletion.isPending,
+    // Add manual method for when agent/slash commands want suggestions
+    fetchSuggestions: () => fetchSuggestionsMutation.mutate()
   };
 }

@@ -66,7 +66,7 @@ export async function generateTextCompletion(
       messages: [
         {
           role: "system",
-          content: `You are an AI writing assistant that helps users create high-quality content. 
+          content: `You are an  that helps users create high-quality content. 
           You should adapt to their writing style and preferences.
           Style analysis: ${JSON.stringify(style)}
           Your task is to generate text that continues or expands the provided content while maintaining the same style, tone, and complexity.`

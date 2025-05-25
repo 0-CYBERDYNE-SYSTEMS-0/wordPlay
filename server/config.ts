@@ -8,8 +8,10 @@ export const config = {
   database: {
     url: process.env.DATABASE_URL || `postgres://${process.env.USER}@localhost:5432/wordplay`,
     options: {
-      host: '/tmp',  // Use the Unix socket directory
-      connectionTimeoutMillis: 5000,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+      max: 10, // Maximum number of connections in the pool
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     }
   },
   server: {

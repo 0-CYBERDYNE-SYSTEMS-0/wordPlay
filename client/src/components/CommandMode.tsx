@@ -1,17 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Edit, Search, Code, Terminal, Sparkles } from "lucide-react";
+import { Edit, Search, Code, Terminal, Sparkles, BarChart2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 interface CommandModeProps {
-  activeTab: "editor" | "search" | "command";
-  onChangeTab: (tab: "editor" | "search" | "command") => void;
   content: string;
   setContent: (content: string) => void;
+  contextPanelOpen: boolean;
+  onToggleContextPanel: () => void;
 }
 
 interface CommandResult {
@@ -22,10 +22,10 @@ interface CommandResult {
 }
 
 export default function CommandMode({
-  activeTab,
-  onChangeTab,
   content,
-  setContent
+  setContent,
+  contextPanelOpen,
+  onToggleContextPanel
 }: CommandModeProps) {
   const { toast } = useToast();
   const [command, setCommand] = useState("");
@@ -38,14 +38,12 @@ export default function CommandMode({
   
   // Focus the appropriate input when tab is selected
   useEffect(() => {
-    if (activeTab === "command") {
       if (isNaturalLanguageMode && promptInputRef.current) {
         promptInputRef.current.focus();
       } else if (commandInputRef.current) {
         commandInputRef.current.focus();
       }
-    }
-  }, [activeTab, isNaturalLanguageMode]);
+  }, [isNaturalLanguageMode]);
   
   // Process command mutation (for technical command mode)
   const processCommandMutation = useMutation({
@@ -181,56 +179,21 @@ export default function CommandMode({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Tab Navigation */}
-      <div className="flex border-b dark:border-gray-800">
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "editor" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("editor")}
-        >
-          <Edit className="h-4 w-4 mr-2" />
-          Editor
-        </button>
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "search" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("search")}
-        >
-          <Search className="h-4 w-4 mr-2" />
-          Search
-        </button>
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "command" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("command")}
-        >
-          <Code className="h-4 w-4 mr-2" />
-          AI Assistant
-        </button>
+      {/* AI Assistant Header */}
+      <div className="flex items-center justify-between border-b dark:border-gray-800 px-6 py-3">
+        <div className="flex items-center space-x-3">
+          <h2 className="text-lg font-medium text-gray-700 dark:text-gray-300">AI Assistant</h2>
       </div>
       
-      {/* Command Content */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">wordPlay</h2>
-            
-            <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
+          {/* Mode Switcher */}
+          <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-lg">
               <button
                 onClick={() => setIsNaturalLanguageMode(true)}
-                className={`px-3 py-1 text-sm rounded-md flex items-center ${
+              className={`px-3 py-1 text-sm rounded-md flex items-center transition-colors ${
                   isNaturalLanguageMode
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  ? "bg-white dark:bg-gray-700 text-primary shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                 }`}
               >
                 <Sparkles className="h-4 w-4 mr-1" />
@@ -238,24 +201,43 @@ export default function CommandMode({
               </button>
               <button
                 onClick={() => setIsNaturalLanguageMode(false)}
-                className={`px-3 py-1 text-sm rounded-md flex items-center ${
+              className={`px-3 py-1 text-sm rounded-md flex items-center transition-colors ${
                   !isNaturalLanguageMode
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                  ? "bg-white dark:bg-gray-700 text-primary shadow-sm"
+                  : "text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
                 }`}
               >
                 <Terminal className="h-4 w-4 mr-1" />
-                Text Commands
+              Commands
               </button>
-            </div>
           </div>
           
+          {/* Context Panel Toggle */}
+          <Button
+            onClick={onToggleContextPanel}
+            variant="ghost"
+            size="sm"
+            className={`flex items-center ${contextPanelOpen ? 'bg-primary/10 text-primary' : ''}`}
+            title="Toggle document insights"
+          >
+            <Info className="h-4 w-4 mr-1" />
+            Insights
+          </Button>
+        </div>
+      </div>
+      
+      {/* Command Content */}
+      <div className="flex-1 overflow-auto p-6">
+        <div className="w-full">
           {isNaturalLanguageMode ? (
             <>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold mb-2">Writing Assistant</h3>
+                <p className="text-gray-600 dark:text-gray-400">
                 Tell the AI what you need help with. The assistant can rewrite, edit, format, 
                 or generate new content based on your document.
               </p>
+              </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">
                 <button 
@@ -354,9 +336,12 @@ export default function CommandMode({
             </>
           ) : (
             <>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
+              <div className="mb-6">
+                <h3 className="text-xl font-semibold mb-2">Text Commands</h3>
+                <p className="text-gray-600 dark:text-gray-400">
                 Use grep and sed-like commands to manipulate your document directly.
               </p>
+              </div>
               
               <form onSubmit={executeCommand} className="mb-6">
                 <div className="flex items-center border dark:border-gray-700 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:ring-opacity-50">

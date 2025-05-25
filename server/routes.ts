@@ -48,7 +48,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       userId: z.number().default(1), // Default user ID
       name: z.string().min(1),
       type: z.string().min(1),
-      style: z.string().min(1)
+      style: z.string().min(1).default("Professional") // Default style
     });
     
     try {
@@ -353,7 +353,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         beforeSelection: z.string(),
         afterSelection: z.string()
       }),
-      style: z.any().optional()
+      style: z.any().optional(),
+      llmProvider: z.enum(['openai', 'ollama']).optional(),
+      llmModel: z.string().optional()
     });
     
     try {
@@ -366,7 +368,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.command, 
         validatedData.content, 
         validatedData.selectionInfo, 
-        validatedData.style
+        validatedData.style,
+        validatedData.llmProvider,
+        validatedData.llmModel
       );
       
       res.json(result);
@@ -508,6 +512,153 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ summary });
     } catch (error: any) {
       res.status(500).json({ message: "Error getting context", error: error.message });
+    }
+  });
+
+  // NEW: Intelligent agent workflow with tool execution and result synthesis
+  app.post("/api/agent/intelligent-request", async (req: Request, res: Response) => {
+    const { createAgent } = await import("./ai-agent");
+    const { request, context } = req.body;
+    
+    if (!request) {
+      return res.status(400).json({ message: "Request is required" });
+    }
+    
+    try {
+      const agent = createAgent(1); // Default user ID
+      
+      // Update agent context if provided
+      if (context) {
+        await agent.updateContext(context);
+      }
+      
+      // Step 1: Plan the approach and determine tools needed
+      const plan = await agent.processRequest(request);
+      
+      // Step 2: Execute tools if any are planned
+      const toolExecutions: Array<{ toolName: string; parameters: any; result: any }> = [];
+      
+      if (plan.toolCalls && plan.toolCalls.length > 0) {
+        for (const toolCall of plan.toolCalls) {
+          try {
+            const toolResult = await agent.executeTool(toolCall.tool, toolCall.params);
+            toolExecutions.push({
+              toolName: toolCall.tool,
+              parameters: toolCall.params,
+              result: toolResult
+            });
+            
+            // If this is a research tool with good results, consider chaining additional tools
+            if (toolCall.tool === 'web_search' && toolResult.success && toolResult.data?.results?.length > 0) {
+              // Automatically scrape the most promising result
+              const topResult = toolResult.data.results[0];
+              if (topResult.url) {
+                try {
+                  const scrapeResult = await agent.executeTool('scrape_webpage', { url: topResult.url });
+                  if (scrapeResult.success) {
+                    toolExecutions.push({
+                      toolName: 'scrape_webpage',
+                      parameters: { url: topResult.url },
+                      result: scrapeResult
+                    });
+                    
+                    // Auto-save the source if we have a current project
+                    if (context?.currentProject) {
+                      const saveResult = await agent.executeTool('save_source', {
+                        projectId: context.currentProject.id,
+                        type: 'url',
+                        name: topResult.title || 'Web Source',
+                        url: topResult.url,
+                        content: scrapeResult.data?.content || ''
+                      });
+                      if (saveResult.success) {
+                        toolExecutions.push({
+                          toolName: 'save_source',
+                          parameters: {
+                            projectId: context.currentProject.id,
+                            type: 'url',
+                            name: topResult.title || 'Web Source',
+                            url: topResult.url,
+                            content: scrapeResult.data?.content || ''
+                          },
+                          result: saveResult
+                        });
+                      }
+                    }
+                  }
+                } catch (scrapeError) {
+                  console.log("Auto-scraping failed, continuing with search results");
+                }
+              }
+            }
+            
+            // If this is document analysis, consider generating suggestions
+            if (toolCall.tool === 'analyze_writing_style' && toolResult.success && context?.currentDocument?.content) {
+              try {
+                const suggestionsResult = await agent.executeTool('get_writing_suggestions', {
+                  text: context.currentDocument.content,
+                  type: 'improvement'
+                });
+                if (suggestionsResult.success) {
+                  toolExecutions.push({
+                    toolName: 'get_writing_suggestions',
+                    parameters: { text: context.currentDocument.content, type: 'improvement' },
+                    result: suggestionsResult
+                  });
+                }
+              } catch (suggestError) {
+                console.log("Auto-suggestions failed, continuing with analysis");
+              }
+            }
+            
+          } catch (toolError: any) {
+            toolExecutions.push({
+              toolName: toolCall.tool,
+              parameters: toolCall.params,
+              result: { success: false, error: toolError.message }
+            });
+          }
+        }
+      }
+      
+      // Step 3: Process results intelligently if we executed any tools
+      let finalResponse = plan.response;
+      let suggestedActions: string[] = [];
+      let additionalToolCalls: any[] = [];
+      
+      if (toolExecutions.length > 0) {
+        const synthesis = await agent.processToolResults(request, toolExecutions);
+        finalResponse = synthesis.synthesizedResponse;
+        suggestedActions = synthesis.suggestedActions;
+        additionalToolCalls = synthesis.additionalToolCalls || [];
+      }
+      
+      // Step 4: Return comprehensive result
+      res.json({
+        plan: plan.plan,
+        toolsExecuted: toolExecutions.map(exec => ({
+          tool: exec.toolName,
+          success: exec.result.success,
+          message: exec.result.message || (exec.result.success ? 'Executed successfully' : exec.result.error)
+        })),
+        response: finalResponse,
+        suggestedActions: suggestedActions,
+        additionalToolCalls: additionalToolCalls,
+        executionDetails: {
+          toolsPlanned: plan.toolCalls?.length || 0,
+          toolsExecuted: toolExecutions.length,
+          successfulTools: toolExecutions.filter(exec => exec.result.success).length,
+          failedTools: toolExecutions.filter(exec => !exec.result.success).length
+        }
+      });
+      
+    } catch (error: any) {
+      console.error("Error in intelligent agent workflow:", error);
+      res.status(500).json({ 
+        message: "Error processing intelligent agent request", 
+        error: error.message,
+        fallbackResponse: "I encountered an issue while processing your request. Let me try a simpler approach - could you be more specific about what you'd like me to help you with?"
+      });
     }
   });
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useTheme } from "@/providers/ThemeProvider";
+import { useSettings } from "@/providers/SettingsProvider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Moon, Menu, Info, Plus } from "lucide-react";
@@ -13,10 +13,11 @@ interface HeaderProps {
   setLlmProvider: (provider: 'openai' | 'ollama') => void;
   llmModel: string;
   setLlmModel: (model: string) => void;
+  contextPanelOpen: boolean;
 }
 
-export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel }: HeaderProps) {
-  const { theme, toggleTheme } = useTheme();
+export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel, contextPanelOpen }: HeaderProps) {
+  const { settings, updateSettings } = useSettings();
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
   useEffect(() => {
@@ -26,6 +27,19 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
         .then(data => setOllamaModels(data.models?.map((m: any) => m.name) || []));
     }
   }, [llmProvider]);
+
+  const toggleTheme = () => {
+    const nextTheme = settings.theme === 'light' ? 'dark' : settings.theme === 'dark' ? 'system' : 'light';
+    updateSettings({ theme: nextTheme });
+  };
+
+  const getThemeIcon = () => {
+    if (settings.theme === 'light') return <Moon className="h-5 w-5" />;
+    if (settings.theme === 'dark') return <Sun className="h-5 w-5" />;
+    // System theme - show based on current system preference
+    const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    return isDarkSystem ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />;
+  };
 
   return (
     <header className="border-b dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-50">
@@ -41,7 +55,7 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
               <path d="M13 7l4 -4" />
               <path d="M13 7h-6a2 2 0 0 0 -2 2v6" />
               <path d="M17 17v-6a2 2 0 0 0 -2 -2h-6" />
-            </svg>AI
+            </svg>FFT
             <h1 className="text-xl font-semibold">wordPlay </h1>
           </div>
         </div>
@@ -74,11 +88,11 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
-                  {theme === "light" ? <Moon className="h-5 w-5" /> : <Sun className="h-5 w-5" />}
+                  {getThemeIcon()}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Toggle {theme === "light" ? "Dark" : "Light"} Mode</p>
+                <p>Toggle {settings.theme === "light" ? "Dark" : "Light"} Mode</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,13 +10,15 @@ interface UseDocumentProps {
   projectId?: number;
   initialTitle?: string;
   initialContent?: string;
+  autosaveInterval?: number;
 }
 
 export function useDocument({
   documentId,
   projectId,
   initialTitle = "Untitled Document",
-  initialContent = ""
+  initialContent = "",
+  autosaveInterval = 1000
 }: UseDocumentProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -25,10 +27,20 @@ export function useDocument({
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSavedTitle, setLastSavedTitle] = useState(initialTitle);
+  const [lastSavedContent, setLastSavedContent] = useState(initialContent);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   
-  // Debounce content changes to avoid excessive API calls
-  const debouncedContent = useDebounce(content, 1000);
-  const debouncedTitle = useDebounce(title, 1000);
+  // Track if we've initialized from server data
+  const hasInitialized = useRef(false);
+  const saveRetryCount = useRef(0);
+  const maxRetries = 3;
+  
+  // Debounce content changes using settings interval
+  const debouncedContent = useDebounce(content, autosaveInterval);
+  const debouncedTitle = useDebounce(title, autosaveInterval);
   
   // Fetch document if documentId is provided
   const { data: documentData } = useQuery<Document>({
@@ -38,11 +50,32 @@ export function useDocument({
   
   // Update local state when document data is fetched
   useEffect(() => {
-    if (documentData) {
+    if (documentData && !hasInitialized.current) {
       setTitle(documentData.title);
       setContent(documentData.content);
+      setLastSavedTitle(documentData.title);
+      setLastSavedContent(documentData.content);
+      setIsDirty(false);
+      setSaveError(null);
+      hasInitialized.current = true;
     }
   }, [documentData]);
+  
+  // Track dirty state when content or title changes
+  useEffect(() => {
+    if (hasInitialized.current) {
+      const titleChanged = title !== lastSavedTitle;
+      const contentChanged = content !== lastSavedContent;
+      setIsDirty(titleChanged || contentChanged);
+      
+      // Clear save error when user makes changes (give autosave another chance)
+      if ((titleChanged || contentChanged) && saveError) {
+        setSaveError(null);
+        setAutoSaveEnabled(true);
+        saveRetryCount.current = 0;
+      }
+    }
+  }, [title, content, lastSavedTitle, lastSavedContent, saveError]);
   
   // Create new document mutation
   const createDocumentMutation = useMutation({
@@ -52,6 +85,12 @@ export function useDocument({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/documents`] });
+      setLastSavedTitle(data.title);
+      setLastSavedContent(data.content);
+      setIsDirty(false);
+      setSaveError(null);
+      saveRetryCount.current = 0;
+      setAutoSaveEnabled(true);
       toast({
         title: "Document created",
         description: "Your document has been created successfully.",
@@ -59,6 +98,7 @@ export function useDocument({
       return data;
     },
     onError: (error) => {
+      setSaveError(error.message);
       toast({
         title: "Error creating document",
         description: error.message,
@@ -78,24 +118,53 @@ export function useDocument({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/documents/${data.id}`] });
+      setLastSavedTitle(data.title);
+      setLastSavedContent(data.content);
+      setIsDirty(false);
+      setSaveError(null);
+      saveRetryCount.current = 0;
+      setAutoSaveEnabled(true);
       return data;
     },
     onError: (error) => {
-      toast({
-        title: "Error saving document",
-        description: error.message,
-        variant: "destructive",
-      });
+      setSaveError(error.message);
+      saveRetryCount.current++;
+      
+      // Disable autosave after max retries to prevent spam
+      if (saveRetryCount.current >= maxRetries) {
+        setAutoSaveEnabled(false);
+        toast({
+          title: "Autosave disabled",
+          description: "Multiple save attempts failed. Please use the manual save button.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error saving document",
+          description: `${error.message} (${saveRetryCount.current}/${maxRetries} attempts)`,
+          variant: "destructive",
+        });
+      }
     }
   });
   
   // Save document (create or update)
-  const saveDocument = async () => {
+  const saveDocument = async (isManualSave: boolean = false) => {
     if (!projectId && !documentId) {
       return;
     }
     
+    if (!isDirty) {
+      return; // Nothing to save
+    }
+    
+    // For manual saves, always attempt even if autosave is disabled
+    if (!isManualSave && !autoSaveEnabled) {
+      return;
+    }
+    
     setIsSaving(true);
+    setSaveError(null);
     
     try {
       if (documentId) {
@@ -118,12 +187,12 @@ export function useDocument({
     }
   };
   
-  // Auto-save when content or title changes
+  // Auto-save when content or title changes (only if document exists and is dirty)
   useEffect(() => {
-    if (documentId && (debouncedContent !== documentData?.content || debouncedTitle !== documentData?.title)) {
-      saveDocument();
+    if (documentId && isDirty && hasInitialized.current && autoSaveEnabled) {
+      saveDocument(false); // false = not manual save
     }
-  }, [debouncedContent, debouncedTitle, documentId]);
+  }, [debouncedContent, debouncedTitle, documentId, isDirty, autoSaveEnabled]);
   
   return {
     title,
@@ -131,7 +200,10 @@ export function useDocument({
     content,
     setContent,
     isSaving,
-    saveDocument,
+    isDirty,
+    saveError,
+    autoSaveEnabled,
+    saveDocument: (isManual = true) => saveDocument(isManual),
     documentData
   };
 }

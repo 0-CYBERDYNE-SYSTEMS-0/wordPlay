@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { runMigrations, seedInitialData } from "./db-migrate";
+import { initializeDatabase } from "./db-migrate";
 import { config } from "./config";
 
 const app = express();
@@ -42,11 +42,14 @@ app.use((req, res, next) => {
   try {
     // Initialize database
     log("Initializing database...");
-    await runMigrations();
-    await seedInitialData();
-    log("Database initialized successfully");
+    const dbInitialized = await initializeDatabase();
+    if (dbInitialized) {
+      log("Database initialized successfully");
+    } else {
+      log("Database initialization failed, but continuing with server startup");
+    }
   } catch (error) {
-    log(`Database initialization failed: ${error}`);
+    log(`Database initialization error: ${error}`);
     // Continue with application startup even if database init fails
   }
 

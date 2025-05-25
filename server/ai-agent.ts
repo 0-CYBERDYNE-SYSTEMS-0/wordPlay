@@ -349,6 +349,180 @@ export class WordPlayAgent {
     }
   }
 
+  // NEW: Process tool results intelligently and potentially chain more tools
+  async processToolResults(
+    originalRequest: string,
+    toolExecutions: Array<{ toolName: string; parameters: any; result: ToolResult }>
+  ): Promise<{
+    synthesizedResponse: string;
+    suggestedActions: string[];
+    additionalToolCalls?: Array<{ tool: string; params: any; reasoning: string }>;
+  }> {
+    // Create summary of tool executions for analysis
+    const executionSummary = toolExecutions.map(exec => ({
+      tool: exec.toolName,
+      success: exec.result.success,
+      data: exec.result.data,
+      message: exec.result.message,
+      error: exec.result.error
+    }));
+
+    const contextSummary = {
+      currentProject: this.context.currentProject ? {
+        id: this.context.currentProject.id,
+        name: this.context.currentProject.name,
+        type: this.context.currentProject.type
+      } : null,
+      currentDocument: this.context.currentDocument ? {
+        id: this.context.currentDocument.id,
+        title: this.context.currentDocument.title,
+        wordCount: this.context.currentDocument.wordCount
+      } : null,
+      documentCount: this.context.projectDocuments.length,
+      sourceCount: this.context.projectSources.length
+    };
+
+    const analysisPrompt = `You are an intelligent AI assistant analyzing the results of tool executions. Your job is to:
+
+1. **SYNTHESIZE RESULTS**: Process tool outputs into meaningful insights
+2. **PROVIDE VALUE**: Explain what the results mean for the user's writing project
+3. **SUGGEST NEXT STEPS**: Recommend follow-up actions based on the results
+4. **CHAIN TOOLS**: Identify if additional tools would add value
+
+ORIGINAL USER REQUEST: "${originalRequest}"
+
+CURRENT CONTEXT:
+${JSON.stringify(contextSummary, null, 2)}
+
+TOOL EXECUTION RESULTS:
+${JSON.stringify(executionSummary, null, 2)}
+
+ANALYSIS GUIDELINES:
+- **For Web Search Results**: Summarize key findings, identify most relevant sources, explain how they relate to the user's needs
+- **For Document Analysis**: Provide concrete insights about writing quality, structure, and specific improvement areas
+- **For Text Generation**: Explain the approach taken and how it fits the user's style/goals
+- **For Project Operations**: Confirm actions taken and suggest logical next steps
+- **For Research Sources**: Explain what was found and how it can be used
+
+RESPONSE INSTRUCTIONS:
+Respond with a JSON object containing:
+{
+  "synthesizedResponse": "Comprehensive, intelligent summary of what was accomplished and what it means",
+  "suggestedActions": ["Specific actionable next steps for the user"],
+  "additionalToolCalls": [
+    {
+      "tool": "tool_name",
+      "params": { "param": "value" },
+      "reasoning": "Why this additional tool would add value"
+    }
+  ]
+}
+
+EXAMPLES OF GOOD SYNTHESIZED RESPONSES:
+
+For Web Search:
+❌ "Found 5 search results"
+✅ "I found several valuable sources about sustainable writing practices. The Stanford study shows a 40% improvement in productivity with structured breaks. I've identified three actionable techniques you can apply immediately to your current project. The research particularly supports the approach you're taking in your second chapter."
+
+For Document Analysis:
+❌ "Document has 1,247 words"
+✅ "Your document shows strong argumentative structure with clear thesis development. The readability score of 8.2 indicates professional-level writing. However, I noticed the transition between paragraphs 3-4 could be smoother, and your conclusion would benefit from a stronger call-to-action. Your technical vocabulary usage is excellent for your target audience."
+
+For Text Processing:
+❌ "Replaced 3 instances"
+✅ "I've updated your document to use more inclusive language, replacing 3 instances of gendered terms with neutral alternatives. This maintains your professional tone while broadening your audience appeal. The changes flow naturally and preserve your original meaning while making the content more accessible."
+
+Provide your analysis now:`;
+
+    try {
+      const { generateTextCompletion } = await import("./openai");
+      
+      const result = await generateTextCompletion(
+        "", 
+        {}, 
+        analysisPrompt,
+        this.context.llmProvider,
+        this.context.llmModel
+      );
+      
+      try {
+        const parsed = JSON.parse(result);
+        return {
+          synthesizedResponse: parsed.synthesizedResponse || this.generateBasicSynthesis(toolExecutions, originalRequest),
+          suggestedActions: parsed.suggestedActions || [],
+          additionalToolCalls: parsed.additionalToolCalls || []
+        };
+      } catch (parseError) {
+        // Fallback to basic synthesis
+        return {
+          synthesizedResponse: this.generateBasicSynthesis(toolExecutions, originalRequest),
+          suggestedActions: this.generateBasicSuggestions(toolExecutions),
+          additionalToolCalls: []
+        };
+      }
+    } catch (error) {
+      console.error("Error in tool result analysis:", error);
+      return {
+        synthesizedResponse: this.generateBasicSynthesis(toolExecutions, originalRequest),
+        suggestedActions: this.generateBasicSuggestions(toolExecutions),
+        additionalToolCalls: []
+      };
+    }
+  }
+
+  // Generate basic synthesis when AI analysis fails
+  private generateBasicSynthesis(toolExecutions: Array<{ toolName: string; parameters: any; result: ToolResult }>, originalRequest: string): string {
+    const successfulTools = toolExecutions.filter(exec => exec.result.success);
+    const failedTools = toolExecutions.filter(exec => !exec.result.success);
+
+    if (successfulTools.length === 0) {
+      return `I attempted to help with your request "${originalRequest}" but encountered issues with the tools. Let me try a different approach.`;
+    }
+
+    const toolSummary = successfulTools.map(exec => {
+      if (exec.toolName === 'web_search' && exec.result.data?.results) {
+        return `Found ${exec.result.data.results.length} search results for your research`;
+      }
+      if (exec.toolName === 'get_document' && exec.result.data) {
+        return `Retrieved your document "${exec.result.data.title}" (${exec.result.data.wordCount} words)`;
+      }
+      if (exec.toolName === 'analyze_writing_style' && exec.result.data) {
+        return `Analyzed your writing style - found ${Object.keys(exec.result.data).length} key metrics`;
+      }
+      if (exec.toolName === 'update_document' && exec.result.data) {
+        return `Updated your document with new content`;
+      }
+      return exec.result.message || `Executed ${exec.toolName} successfully`;
+    }).join(', ');
+
+    return `I've completed your request "${originalRequest}". ${toolSummary}. ${failedTools.length > 0 ? `Note: ${failedTools.length} operations had issues but the main task was completed.` : ''}`;
+  }
+
+  // Generate basic suggestions when AI analysis fails
+  private generateBasicSuggestions(toolExecutions: Array<{ toolName: string; parameters: any; result: ToolResult }>): string[] {
+    const suggestions: string[] = [];
+    
+    toolExecutions.forEach(exec => {
+      if (exec.result.success) {
+        if (exec.toolName === 'web_search') {
+          suggestions.push("Review the search results and save relevant sources to your project");
+        }
+        if (exec.toolName === 'analyze_writing_style') {
+          suggestions.push("Consider the style analysis recommendations for improving your writing");
+        }
+        if (exec.toolName === 'get_document') {
+          suggestions.push("Use the document content for further analysis or editing");
+        }
+      }
+    });
+
+    if (suggestions.length === 0) {
+      suggestions.push("Let me know if you'd like me to try a different approach");
+    }
+
+    return suggestions;
+  }
+
   // Process natural language request and determine which tools to use
   async processRequest(request: string): Promise<{
     plan: string;
@@ -365,46 +539,82 @@ export class WordPlayAgent {
       currentDocument: this.context.currentDocument ? {
         id: this.context.currentDocument.id,
         title: this.context.currentDocument.title,
-        wordCount: this.context.currentDocument.wordCount
+        wordCount: this.context.currentDocument.wordCount,
+        content: this.context.currentDocument.content?.substring(0, 500) + "..." // First 500 chars for context
       } : null,
       documentCount: this.context.projectDocuments.length,
       sourceCount: this.context.projectSources.length,
       availableTools: this.getAvailableTools()
     };
 
-    // Use OpenAI to plan tool usage
-    try {
-      const { generateTextCompletion } = await import("./openai");
-      
-      const systemPrompt = `You are an AI writing assistant agent. Based on the user's request and the current context, determine if you need to use any tools and respond appropriately.
+    // Enhanced system prompt for intelligent tool usage and result processing
+    const systemPrompt = `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically and processing their results to provide valuable, synthesized responses.
 
-Available tools: ${this.getAvailableTools().join(', ')}
+CORE PRINCIPLES:
+1. **Chain Tools Intelligently**: Use multiple tools in sequence when beneficial
+2. **Process Results**: Always analyze and synthesize tool outputs into meaningful insights
+3. **Provide Value**: Don't just show raw data - interpret and explain what it means
+4. **Be Proactive**: Suggest follow-up actions based on tool results
+5. **Context Awareness**: Use current project/document context to make better decisions
 
-Current context: ${JSON.stringify(contextSummary, null, 2)}
+AVAILABLE TOOLS AND THEIR STRATEGIC USES:
+${this.getAvailableTools().map(tool => {
+  const toolDef = this.tools.get(tool);
+  return `- ${tool}: ${toolDef?.description}`;
+}).join('\n')}
 
-If you need to use tools, respond with a JSON object containing:
+CURRENT CONTEXT:
+${JSON.stringify(contextSummary, null, 2)}
+
+INTELLIGENT TOOL USAGE PATTERNS:
+- **Research Workflows**: web_search → scrape_webpage → save_source → analyze results → provide insights
+- **Document Analysis**: get_document → analyze_document_structure → get_writing_suggestions → synthesize feedback
+- **Content Creation**: analyze current content → generate_text → update_document → provide explanation
+- **Text Processing**: search_in_text → replace_in_text → update_document → explain changes
+- **Project Management**: list_projects → get_project → list_documents → provide overview
+
+RESPONSE INSTRUCTIONS:
+When tools are needed, respond with JSON containing:
 {
   "needsTools": true,
-  "plan": "Brief description of what you'll do",
+  "plan": "Multi-step plan explaining tool chain and reasoning",
   "toolCalls": [
     {
       "tool": "tool_name",
       "params": { "param1": "value1" },
-      "reasoning": "Why this tool is needed"
+      "reasoning": "Specific reason for this tool in the context"
     }
   ],
-  "response": "What you'll tell the user"
+  "response": "What you'll tell the user about your plan"
 }
 
-If you don't need tools, respond with:
+When no tools needed, respond with:
 {
   "needsTools": false,
-  "plan": "How you'll respond",
-  "response": "Your direct response to the user"
+  "plan": "Direct response strategy",
+  "response": "Helpful, contextual response"
 }
 
-User request: "${request}"`;
+EXAMPLES OF INTELLIGENT RESPONSES:
+❌ BAD: "I found 5 search results" (raw data)
+✅ GOOD: "I found several relevant sources about X. The most promising is Y because Z. I've saved this to your project sources and here's what it means for your writing..."
 
+❌ BAD: "Document updated" (basic confirmation)
+✅ GOOD: "I've enhanced your document by improving the flow in paragraph 2 and strengthening the conclusion. The changes maintain your voice while making the argument 23% more compelling..."
+
+USER REQUEST: "${request}"
+
+Analyze this request carefully. Consider:
+1. What is the user really trying to accomplish?
+2. What tools would provide the most value?
+3. How can I chain tools to deliver a complete solution?
+4. What insights can I provide beyond just executing tools?
+
+Respond with your strategic plan and tool usage.`;
+
+    try {
+      const { generateTextCompletion } = await import("./openai");
+      
       const result = await generateTextCompletion(
         "", 
         {}, 
@@ -417,28 +627,53 @@ User request: "${request}"`;
         const parsed = JSON.parse(result);
         
         return {
-          plan: parsed.plan || `Analyzing request: "${request}"`,
+          plan: parsed.plan || `Developing strategic approach for: "${request}"`,
           toolCalls: parsed.toolCalls || [],
-          response: parsed.response || "I can help you with that. Let me think about the best approach."
+          response: parsed.response || "I'm analyzing your request and determining the best approach to help you. Let me think about this strategically..."
         };
       } catch (parseError) {
-        // Fallback if JSON parsing fails
+        // Fallback if JSON parsing fails - but make it more intelligent
         return {
-          plan: `Analyzing request: "${request}"`,
+          plan: `Analyzing request contextually: "${request}"`,
           toolCalls: [],
-          response: result || "I can help you with that. What specific aspect would you like me to focus on?"
+          response: this.generateContextualFallbackResponse(request, contextSummary)
         };
       }
     } catch (error) {
       console.error("Error in agent request processing:", error);
       
-      // Fallback response
+      // Intelligent fallback response
       return {
-        plan: `Processing request: "${request}"`,
+        plan: `Developing approach for: "${request}"`,
         toolCalls: [],
-        response: "I'm here to help with your writing project. Could you be more specific about what you'd like me to do?"
+        response: this.generateContextualFallbackResponse(request, contextSummary)
       };
     }
+  }
+
+  // Generate contextual fallback responses when LLM fails
+  private generateContextualFallbackResponse(request: string, context: any): string {
+    const lowerRequest = request.toLowerCase();
+    
+    // Contextual responses based on current state and request type
+    if (lowerRequest.includes('search') || lowerRequest.includes('research')) {
+      return `I can help you research this topic. I have access to web search, webpage scraping, and source management tools. ${context.currentProject ? `This will be added to your "${context.currentProject.name}" project.` : 'I can also help you organize the results into a new or existing project.'}`;
+    }
+    
+    if (lowerRequest.includes('analyze') || lowerRequest.includes('style')) {
+      return `I can analyze your writing in detail. ${context.currentDocument ? `I see you're working on "${context.currentDocument.title}" (${context.currentDocument.wordCount} words). I can examine its structure, style, and suggest improvements.` : 'If you select a document, I can provide comprehensive analysis of its structure, readability, and style.'}`;
+    }
+    
+    if (lowerRequest.includes('write') || lowerRequest.includes('generate')) {
+      return `I can help generate content for your project. ${context.currentProject ? `For your "${context.currentProject.name}" project, I can create content that matches your existing style and goals.` : 'I can also help you start a new project with the right structure and approach.'}`;
+    }
+    
+    if (lowerRequest.includes('project') || lowerRequest.includes('organize')) {
+      return `I can help manage your projects and documents. ${context.currentProject ? `You're currently working on "${context.currentProject.name}" with ${context.documentCount} documents and ${context.sourceCount} research sources.` : 'I can help you create a new project or organize existing content.'} What specific aspect would you like help with?`;
+    }
+    
+    // Generic but contextual fallback
+    return `I'm here to help with your writing project using my 19 specialized tools. ${context.currentProject ? `I can see you're working on "${context.currentProject.name}" - ` : ''}What specific assistance do you need? I can research topics, analyze your writing, generate content, manage projects, or process text in sophisticated ways.`;
   }
 
   // Get current context summary

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Document } from "@shared/schema";
-import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload } from "lucide-react";
+import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { countWords, calculateReadingTime, extractStructure } from "@/lib/document-processor";
@@ -11,6 +11,7 @@ interface ContextPanelProps {
   title: string;
   content: string;
   documentData?: Document;
+  activeTab: "editor" | "search" | "command" | "style";
   onClose: () => void;
 }
 
@@ -18,6 +19,7 @@ export default function ContextPanel({
   title,
   content,
   documentData,
+  activeTab,
   onClose
 }: ContextPanelProps) {
   const [wordCount, setWordCount] = useState(0);
@@ -31,22 +33,31 @@ export default function ContextPanel({
     message: string;
     suggestions: string[];
   }>({
-    message: "",
+    message: "Start writing to get contextual suggestions...",
     suggestions: []
   });
   
-  // Get contextual assistance from AI
-  const getContextualAssistanceMutation = useMutation({
-    mutationFn: async () => {
+  const [aiPrompt, setAiPrompt] = useState("");
+  
+  // Get contextual help from AI
+  const contextualHelpMutation = useMutation({
+    mutationFn: async (data?: { prompt?: string; content?: string }) => {
       try {
-        const res = await apiRequest("POST", "/api/ai/contextual-help", {
-          content,
-          title
-        });
+        const payload = {
+          content: data?.content || content,
+          title,
+          prompt: data?.prompt
+        };
+        
+        const res = await apiRequest("POST", "/api/ai/contextual-help", payload);
         return res.json();
       } catch (error) {
-        console.error("Error getting contextual assistance:", error);
-        throw error;
+        console.error("Error getting contextual help:", error);
+        // Return fallback data on error
+        return {
+          message: "AI assistant temporarily unavailable",
+          suggestions: []
+        };
       }
     },
     onSuccess: (data) => {
@@ -56,50 +67,22 @@ export default function ContextPanel({
           suggestions: data.suggestions || []
         });
       }
+    },
+    onError: (error) => {
+      console.error("Contextual help mutation error:", error);
+      setContextualHelp({
+        message: "AI assistant temporarily unavailable",
+        suggestions: []
+      });
     }
   });
-  const [aiPrompt, setAiPrompt] = useState("");
-  
-  // Get contextual help from AI
-  const contextualHelpMutation = useMutation({
-    mutationFn: async (data?: { prompt?: string; content?: string }) => {
-      const payload = {
-        content: data?.content || content,
-        title,
-        prompt: data?.prompt
-      };
-      
-      const res = await apiRequest("POST", "/api/ai/contextual-help", payload);
-      return res.json();
-    }
-  });
-  
-  // Update document stats when content changes
-  useEffect(() => {
-    setWordCount(countWords(content));
-    setReadingTime(calculateReadingTime(content));
-    setParagraphCount(content.split(/\n\s*\n/).filter(p => p.trim().length > 0).length);
-    setDocumentStructure(extractStructure(content));
-    
-    // Get contextual help when content changes significantly
-    if (content.length > 50 && content.length % 100 < 10) {
-      contextualHelpMutation.mutate({});
-    }
-  }, [content]);
-  
-  // Update contextual help when mutation completes
-  useEffect(() => {
-    if (contextualHelpMutation.isSuccess && contextualHelpMutation.data) {
-      setContextualHelp(contextualHelpMutation.data);
-    }
-  }, [contextualHelpMutation.isSuccess, contextualHelpMutation.data]);
   
   // Style metrics from document data or defaults
   const [styleMetrics, setStyleMetrics] = useState({
     formality: 50,
-    complexity: 50,
-    engagement: 50,
-    tone: "Analyzing..."
+    complexity: 45,
+    engagement: 60,
+    tone: "Neutral"
   });
   
   // Get style metrics when content changes
@@ -112,25 +95,57 @@ export default function ContextPanel({
         return res.json();
       } catch (error) {
         console.error("Error analyzing style:", error);
-        throw error;
+        // Return fallback data on error
+        return {
+          metrics: {
+            formality: 50,
+            complexity: 45,
+            engagement: 60,
+            toneAnalysis: "Neutral"
+          }
+        };
       }
     },
     onSuccess: (data) => {
       if (data && data.metrics) {
         setStyleMetrics({
           formality: data.metrics.formality || 50,
-          complexity: data.metrics.complexity || 50, 
-          engagement: data.metrics.engagement || 50,
+          complexity: data.metrics.complexity || 45, 
+          engagement: data.metrics.engagement || 60,
           tone: data.metrics.toneAnalysis?.split('.')[0] || "Neutral"
         });
       }
+    },
+    onError: (error) => {
+      console.error("Style analysis mutation error:", error);
     }
   });
   
-  // Run style analysis when content changes significantly
+  // Update document stats when content changes
+  useEffect(() => {
+    try {
+      setWordCount(countWords(content || ""));
+      setReadingTime(calculateReadingTime(content || ""));
+      setParagraphCount((content || "").split(/\n\s*\n/).filter(p => p.trim().length > 0).length);
+      setDocumentStructure(extractStructure(content || ""));
+    } catch (error) {
+      console.error("Error updating document stats:", error);
+      // Set fallback values
+      setWordCount(0);
+      setReadingTime(0);
+      setParagraphCount(0);
+      setDocumentStructure({ title: title || "Untitled Document", paragraphs: [] });
+    }
+  }, [content, title]);
+  
+  // Run style analysis when content changes significantly (but not on every keystroke)
   useEffect(() => {
     if (content && content.length > 100) {
-      styleAnalysisMutation.mutate();
+      const timeoutId = setTimeout(() => {
+        styleAnalysisMutation.mutate();
+      }, 2000); // Debounce for 2 seconds
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [content]);
   
@@ -138,7 +153,6 @@ export default function ContextPanel({
   const handleSendPrompt = () => {
     if (!aiPrompt.trim()) return;
     
-    // Send the prompt to the AI assistant
     contextualHelpMutation.mutate({
       prompt: aiPrompt,
       content: content
@@ -147,159 +161,202 @@ export default function ContextPanel({
     setAiPrompt("");
   };
 
+  // Debug logging
+  useEffect(() => {
+    console.log("ContextPanel rendered with:", { 
+      title: title || "no title", 
+      contentLength: content?.length || 0, 
+      wordCount, 
+      readingTime,
+      contextPanelVisible: true
+    });
+  }, [title, content, wordCount, readingTime]);
+
+  // Get context-aware header based on active tab
+  const getContextHeader = () => {
+    switch (activeTab) {
+      case "editor":
+        return "Document Insights";
+      case "search":
+        return "Research Context";
+      case "command":
+        return "AI Assistant Context";
+      case "style":
+        return "Style Analysis";
+      default:
+        return "Document Context";
+    }
+  };
+
   return (
-    <div className="w-80 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col h-full">
-      <div className="p-4 border-b dark:border-gray-700 flex justify-between items-center">
-        <h2 className="font-medium">Document Context</h2>
+    <div className="w-full h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col shadow-lg">
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
+        <h2 className="font-medium text-lg text-gray-900 dark:text-gray-100">{getContextHeader()}</h2>
         <button 
           onClick={onClose}
-          className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+          title="Close context panel"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
       
-      {/* Document Stats */}
-      <div className="p-4 border-b dark:border-gray-700">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Document Stats</h3>
-        <div className="grid grid-cols-2 gap-2 text-sm">
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Words:</span>
-            <span className="ml-1">{wordCount}</span>
-          </div>
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Reading time:</span>
-            <span className="ml-1">~{readingTime} min</span>
-          </div>
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Paragraphs:</span>
-            <span className="ml-1">{paragraphCount}</span>
-          </div>
-          <div>
-            <span className="text-gray-500 dark:text-gray-400">Tone:</span>
-            <span className="ml-1">{styleMetrics.tone}</span>
+      <div className="flex-1 overflow-auto p-3 space-y-3">
+        {/* Context-specific content */}
+        {activeTab === "editor" && (
+          <>
+        {/* Document Stats */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center">
+                <FileText className="h-3 w-3 mr-1" />
+                Document Stats
+              </h3>
+              <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                <div className="flex justify-between">
+                  <span>Words:</span>
+                  <span className="font-medium">{content.trim().split(/\s+/).filter(word => word.length > 0).length}</span>
+            </div>
+                <div className="flex justify-between">
+                  <span>Characters:</span>
+                  <span className="font-medium">{content.length}</span>
+            </div>
+                <div className="flex justify-between">
+                  <span>Paragraphs:</span>
+                  <span className="font-medium">{content.split('\n\n').filter(p => p.trim().length > 0).length}</span>
           </div>
         </div>
-      </div>
-      
-      {/* Document Structure */}
-      <div className="p-4 border-b dark:border-gray-700">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Structure</h3>
-        <div className="space-y-2">
-          <div className="p-2 bg-primary bg-opacity-10 rounded text-primary dark:text-primary-light text-sm flex items-center">
-            <FileText className="h-4 w-4 mr-1" />
-            <span className="truncate">{title || "Untitled Document"}</span>
+            </div>
+            
+            {/* Quick Actions */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center">
+                <Zap className="h-3 w-3 mr-1" />
+                Quick Actions
+              </h3>
+              <div className="space-y-1">
+                <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  Improve writing
+                </button>
+                <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
+                  <BookOpen className="h-3 w-3 mr-1" />
+                  Generate outline
+                </button>
+                <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
+                  <BarChart2 className="h-3 w-3 mr-1" />
+                  Analyze style
+                </button>
+              </div>
           </div>
-          
-          {documentStructure.paragraphs.map((paragraph) => (
-            <div 
-              key={paragraph.id}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded text-sm cursor-pointer flex items-center"
-            >
-              <Pilcrow className="h-4 w-4 mr-1 flex-shrink-0" />
-              <span className="truncate">{paragraph.text.substring(0, 30)}...</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      
-      {/* AI Assistant */}
-      <div className="p-4 border-b dark:border-gray-700">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">AI Assistant</h3>
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-          <div className="flex space-x-2 items-start mb-2">
-            <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white flex-shrink-0">
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <div className="text-sm text-gray-800 dark:text-gray-200">
-              <p>{contextualHelp.message}</p>
-              <div className="mt-2 space-y-1">
-                {contextualHelp.suggestions.map((suggestion, index) => (
-                  <button 
-                    key={index}
-                    className="w-full text-left p-1.5 text-xs bg-white dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 rounded border border-gray-200 dark:border-gray-700"
-                  >
-                    {suggestion}
-                  </button>
-                ))}
+          </>
+        )}
+        
+        {activeTab === "search" && (
+          <>
+            {/* Research Tips */}
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center text-green-800 dark:text-green-200">
+                <Search className="h-3 w-3 mr-1" />
+                Research Tips
+              </h3>
+              <ul className="text-xs text-green-700 dark:text-green-300 space-y-0.5">
+                <li>• Use specific keywords</li>
+                <li>• Try academic sources</li>
+                <li>• Save important sources</li>
+                <li>• Extract content</li>
+              </ul>
+              </div>
+            
+            {/* Search History */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center">
+                <Clock className="h-3 w-3 mr-1" />
+                Recent Searches
+              </h3>
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                <p>No recent searches</p>
               </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
         
-        <div className="mt-3">
-          <div className="flex border dark:border-gray-700 rounded overflow-hidden">
-            <input 
-              type="text" 
-              placeholder="Ask the AI assistant..." 
-              className="flex-1 p-2 text-sm bg-white dark:bg-gray-800 focus:outline-none"
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleSendPrompt();
-                }
-              }}
-            />
-            <button 
-              className="p-2 bg-primary hover:bg-primary-dark text-white transition-colors"
-              onClick={handleSendPrompt}
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Sources */}
-      <div className="p-4 border-b dark:border-gray-700">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Active Sources</h3>
-        <div className="space-y-2">
-          <div className="p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm flex items-center">
-            <FileIcon className="h-4 w-4 mr-2 text-gray-500" />
-            <span className="truncate">AI Writing Tools Survey.pdf</span>
-          </div>
-          <div className="p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm flex items-center">
-            <Link className="h-4 w-4 mr-2 text-gray-500" />
-            <span className="truncate">blog.example.com/future-of-ai</span>
-          </div>
-        </div>
+        {activeTab === "command" && (
+          <>
+            {/* AI Assistant Help */}
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center text-purple-800 dark:text-purple-200">
+                <Sparkles className="h-3 w-3 mr-1" />
+                AI Assistant
+              </h3>
+              <div className="text-xs text-purple-700 dark:text-purple-300 space-y-1">
+                <p>Tell the AI what you need:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-xs">
+                  <li>Rewrite paragraph</li>
+                  <li>Make it formal</li>
+                  <li>Add examples</li>
+                  <li>Fix grammar</li>
+                </ul>
+              </div>
+            </div>
+            
+            {/* Command Examples */}
+            <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center">
+                <Code className="h-3 w-3 mr-1" />
+                Text Commands
+              </h3>
+              <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+                <div><code className="bg-gray-200 dark:bg-gray-600 px-1 rounded text-xs">s/old/new/g</code> - Replace</div>
+                <div><code className="bg-gray-200 dark:bg-gray-600 px-1 rounded text-xs">/pattern/</code> - Search</div>
+                <div><code className="bg-gray-200 dark:bg-gray-600 px-1 rounded text-xs">d</code> - Delete line</div>
+              </div>
+            </div>
+          </>
+        )}
         
-        <button className="mt-2 w-full p-2 text-xs border border-dashed border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 flex items-center justify-center">
-          <Upload className="h-3 w-3 mr-1" /> Add Source
-        </button>
-      </div>
-      
-      {/* Style Analysis */}
-      <div className="p-4">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Style Analysis</h3>
-        <div className="space-y-3">
-          <div>
-            <div className="flex justify-between items-center text-xs mb-1">
-              <span className="text-gray-500 dark:text-gray-400">Formality</span>
-              <span>Professional</span>
+        {activeTab === "style" && (
+          <>
+            {/* Style Tips */}
+            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2">
+              <h3 className="font-medium text-xs mb-2 flex items-center text-orange-800 dark:text-orange-200">
+                <BarChart2 className="h-3 w-3 mr-1" />
+                Style Analysis
+              </h3>
+              <div className="text-xs text-orange-700 dark:text-orange-300 space-y-1">
+                <p>Analyzing for:</p>
+                <ul className="list-disc list-inside space-y-0.5 text-xs">
+                  <li>Readability score</li>
+                  <li>Sentence complexity</li>
+                  <li>Vocabulary variety</li>
+                  <li>Tone and formality</li>
+                </ul>
+              </div>
             </div>
-            <Progress value={styleMetrics.formality * 100} className="h-1.5" />
+            
+            {/* Document Analysis */}
+            {documentData && (
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+                <h3 className="font-medium text-xs mb-1">Document Analysis</h3>
+                <div className="text-xs text-gray-600 dark:text-gray-400">
+                  <p>Project ID: {documentData.projectId}</p>
+                  <p>Word Count: {documentData.wordCount || 0}</p>
           </div>
-          
-          <div>
-            <div className="flex justify-between items-center text-xs mb-1">
-              <span className="text-gray-500 dark:text-gray-400">Complexity</span>
-              <span>Medium</span>
             </div>
-            <Progress value={styleMetrics.complexity * 100} className="h-1.5" />
-          </div>
-          
-          <div>
-            <div className="flex justify-between items-center text-xs mb-1">
-              <span className="text-gray-500 dark:text-gray-400">Engagement</span>
-              <span>Informative</span>
+          )}
+          </>
+        )}
+        
+        {/* Global Document Info */}
+        <div className="border-t pt-2 mt-2">
+          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
+            <h3 className="font-medium text-xs mb-1 flex items-center text-blue-800 dark:text-blue-200">
+              <FileText className="h-3 w-3 mr-1" />
+              {title || "Untitled Document"}
+            </h3>
+            <div className="text-xs text-blue-600 dark:text-blue-400">
+              <p>Modified: {new Date().toLocaleDateString()}</p>
+              {content && <p>~{Math.ceil(content.trim().split(/\s+/).length / 200)} min read</p>}
             </div>
-            <Progress value={styleMetrics.engagement * 100} className="h-1.5" />
           </div>
         </div>
       </div>

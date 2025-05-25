@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock } from "lucide-react";
+import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock, BarChart2, Sparkles, PanelRightOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface WebSearchProps {
-  activeTab: "editor" | "search" | "command" | "style";
-  onChangeTab: (tab: "editor" | "search" | "command" | "style") => void;
   projectId?: number;
+  contextPanelOpen: boolean;
+  onToggleContextPanel: () => void;
 }
 
 interface SearchResult {
@@ -53,9 +53,9 @@ function cleanUrl(url: string): string {
 }
 
 export default function WebSearch({
-  activeTab,
-  onChangeTab,
-  projectId
+  projectId,
+  contextPanelOpen,
+  onToggleContextPanel
 }: WebSearchProps) {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -260,46 +260,31 @@ export default function WebSearch({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Tab Navigation */}
-      <div className="flex border-b dark:border-gray-800">
+      {/* Web Search Header */}
+      <div className="flex items-center justify-between border-b dark:border-gray-800 px-6 py-3">
+        <div className="flex items-center space-x-3">
+          <h2 className="text-lg font-medium text-gray-700 dark:text-gray-300">Web Research</h2>
+        </div>
+        
+        <div className="flex items-center space-x-3">
+          {/* Context Panel Toggle */}
         <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "editor" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            onClick={onToggleContextPanel}
+            className={`p-2 rounded-lg transition-colors ${
+              contextPanelOpen
+                ? 'bg-primary bg-opacity-10 text-primary'
+                : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
-          onClick={() => onChangeTab("editor")}
+            title={contextPanelOpen ? 'Hide Context Panel' : 'Show Context Panel'}
         >
-          <Edit className="h-4 w-4 mr-2" />
-          Editor
+            <PanelRightOpen className="h-5 w-5" />
         </button>
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "search" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("search")}
-        >
-          <Search className="h-4 w-4 mr-2" />
-          Research
-        </button>
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "command" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("command")}
-        >
-          <Code className="h-4 w-4 mr-2" />
-          AI Assistant
-        </button>
+        </div>
       </div>
       
-      {/* Research Content */}
+      {/* Search Content - Full width */}
       <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-3xl mx-auto">
+        <div className="w-full">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Research Assistant</h2>
             

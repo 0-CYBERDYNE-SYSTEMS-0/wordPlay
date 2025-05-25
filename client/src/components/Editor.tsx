@@ -1,9 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { useAISuggestions } from "@/hooks/use-ai-suggestions";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Edit, Search, Code, X, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, WifiOff, Info, Maximize, Minimize } from "lucide-react";
+import { useAISuggestions } from "@/hooks/use-ai-suggestions";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
 
 interface EditorProps {
@@ -12,10 +11,16 @@ interface EditorProps {
   content: string;
   setContent: (content: string) => void;
   isSaving: boolean;
-  activeTab: "editor" | "search" | "command";
-  onChangeTab: (tab: "editor" | "search" | "command") => void;
+  isDirty: boolean;
+  saveError: string | null;
+  autoSaveEnabled: boolean;
+  saveDocument: (isManual?: boolean) => Promise<void>;
   llmProvider: 'openai' | 'ollama';
   llmModel: string;
+  contextPanelOpen: boolean;
+  onToggleContextPanel: () => void;
+  isFullScreen: boolean;
+  onToggleFullScreen: () => void;
 }
 
 export default function Editor({
@@ -24,13 +29,18 @@ export default function Editor({
   content,
   setContent,
   isSaving,
-  activeTab,
-  onChangeTab,
+  isDirty,
+  saveError,
+  autoSaveEnabled,
+  saveDocument,
   llmProvider,
-  llmModel
+  llmModel,
+  contextPanelOpen,
+  onToggleContextPanel,
+  isFullScreen,
+  onToggleFullScreen
 }: EditorProps) {
   const { toast } = useToast();
-  const [showSuggestion, setShowSuggestion] = useState(false);
   const [hasFocus, setHasFocus] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -39,21 +49,83 @@ export default function Editor({
   const [slashCommandsOpen, setSlashCommandsOpen] = useState(false);
   const [slashCommandPosition, setSlashCommandPosition] = useState({ x: 0, y: 0 });
   
-  // Get AI suggestions based on content
+  // Get AI suggestions based on content (disabled auto-generation)
   const {
-    suggestions,
-    selectedSuggestion,
-    setSelectedSuggestion,
-    isFetching,
     generateTextCompletion,
     isGenerating
   } = useAISuggestions({
     content,
-    enabled: true,
+    enabled: false, // Disabled auto-generation
     llmProvider,
     llmModel
   });
   
+  // Handle manual save
+  const handleManualSave = async () => {
+    if (!isDirty) {
+      toast({
+        title: "Nothing to save",
+        description: "Your document is already up to date.",
+      });
+      return;
+    }
+    
+    try {
+      await saveDocument(true); // true = manual save
+      if (!saveError) {
+        toast({
+          title: "Document saved",
+          description: "Your changes have been saved successfully.",
+        });
+      }
+    } catch (error) {
+      // Error is already handled in the hook, but we can add additional feedback here if needed
+    }
+  };
+  
+  // Render save status with appropriate icon and message
+  const renderSaveStatus = () => {
+    if (isSaving) {
+      return (
+        <div className="flex items-center text-yellow-600 dark:text-yellow-400">
+          <svg className="animate-spin h-4 w-4 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          Saving...
+        </div>
+      );
+    }
+    
+    if (saveError) {
+      return (
+        <div className="flex items-center text-red-600 dark:text-red-400" title={`Save error: ${saveError}`}>
+          <AlertTriangle className="h-4 w-4 mr-1" />
+          Save failed
+        </div>
+      );
+    }
+    
+    if (isDirty) {
+      return (
+        <div className="flex items-center text-orange-600 dark:text-orange-400">
+          <div className="h-2 w-2 bg-orange-500 rounded-full mr-2"></div>
+          {autoSaveEnabled ? "Unsaved changes" : "Autosave disabled"}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="flex items-center text-green-600 dark:text-green-400">
+        <CheckCircle className="h-4 w-4 mr-1" />
+        Saved
+      </div>
+    );
+  };
+  
+  // DISABLED: Auto-suggestion display removed per user request
+  // Users will use agent or slash commands instead
+  /*
   // Show suggestion after typing and when suggestions are available
   useEffect(() => {
     if (hasFocus && suggestions.length > 0 && !showSuggestion) {
@@ -65,19 +137,7 @@ export default function Editor({
       return () => clearTimeout(timer);
     }
   }, [suggestions, hasFocus, showSuggestion]);
-  
-  // Handle accepting a suggestion
-  const acceptSuggestion = async () => {
-    if (selectedSuggestion) {
-      setContent(content + " " + selectedSuggestion);
-      setShowSuggestion(false);
-      
-      toast({
-        title: "Suggestion accepted",
-        description: "The AI suggestion has been added to your document."
-      });
-    }
-  };
+  */
   
   // Handle generating a paragraph
   const generateParagraph = async () => {
@@ -104,6 +164,16 @@ export default function Editor({
   useEffect(() => {
     if (editorRef.current && editorRef.current.innerText !== content) {
       editorRef.current.innerText = content;
+      
+      // Move cursor to end after updating content
+      if (content) {
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(editorRef.current);
+        range.collapse(false);
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
     }
   }, [content]);
 
@@ -115,179 +185,103 @@ export default function Editor({
   }, [title]);
 
   return (
-    <div className="flex-1 flex flex-col bg-editor-light dark:bg-editor-dark">
-      {/* Tab Navigation */}
-      <div className="flex border-b dark:border-gray-800">
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "editor" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("editor")}
-        >
-          <Edit className="h-4 w-4 mr-2" />
-          Editor
-        </button>
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "search" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("search")}
-        >
-          <Search className="h-4 w-4 mr-2" />
-          Search
-        </button>
-        <button 
-          className={`px-4 py-3 font-medium text-sm flex items-center ${
-            activeTab === "command" 
-              ? "bg-primary text-white" 
-              : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-          }`}
-          onClick={() => onChangeTab("command")}
-        >
-          <Code className="h-4 w-4 mr-2" />
-          Commands
-        </button>
-      </div>
-      
-      {/* Editor Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-3xl mx-auto px-8 py-12">
-          <div className="mb-4">
-            <h1 
-              ref={titleRef}
-              contentEditable="true"
-              className="text-3xl font-bold font-serif focus:outline-none border-b border-transparent focus:border-gray-300 dark:focus:border-gray-700 pb-1"
-              onInput={(e) => setTitle(e.currentTarget.textContent || "Untitled Document")}
-              onFocus={() => setHasFocus(true)}
-              onBlur={() => setHasFocus(false)}
-              suppressContentEditableWarning={true}
-            >
-            </h1>
+    <div className="w-full h-full flex flex-col">
+      {/* Editor Header - hide in full screen */}
+      {!isFullScreen && (
+        <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 px-6 py-3 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
+          <div className="flex items-center space-x-3">
+            <h2 className="text-lg font-medium text-gray-700 dark:text-gray-300">Editor</h2>
           </div>
           
-          {/* Editable Content */}
-          <div 
-            ref={editorRef}
-            contentEditable="true"
-            className="prose prose-lg dark:prose-invert max-w-none font-serif focus:outline-none"
-            onInput={(e) => setContent(e.currentTarget.innerText)}
-            onFocus={() => setHasFocus(true)}
-            onBlur={() => setHasFocus(false)}
-            onKeyDown={(e) => {
-              // Detect slash key to open commands
-              if (e.key === '/' && !slashCommandsOpen) {
-                e.preventDefault(); // Prevent typing the slash
-                const selection = window.getSelection();
-                if (selection && selection.rangeCount > 0) {
-                  const range = selection.getRangeAt(0);
-                  const rect = range.getBoundingClientRect();
-                  setSlashCommandPosition({
-                    x: rect.left,
-                    y: rect.bottom + window.scrollY + 5
-                  });
-                  setSlashCommandsOpen(true);
-                }
-              }
-              // Close menu on escape
-              if (e.key === 'Escape' && slashCommandsOpen) {
-                setSlashCommandsOpen(false);
-              }
-            }}
-            suppressContentEditableWarning={true}
-          >
-          </div>
-          
-          {/* Slash Commands Popup */}
-          <SlashCommandsPopup 
-            isOpen={slashCommandsOpen}
-            onClose={() => setSlashCommandsOpen(false)}
-            position={slashCommandPosition}
-            content={content}
-            setContent={setContent}
-            editorRef={editorRef}
-          />
-          
-          {/* Saving Indicator */}
-          {isSaving && (
-            <div className="mt-4 text-sm text-gray-500 flex items-center">
-              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Saving...
-            </div>
-          )}
-          
-          {/* Suggestion Bubble */}
-          {showSuggestion && selectedSuggestion && (
-            <div className="mt-4 p-3 rounded-lg bg-primary bg-opacity-10 border border-primary-light">
-              <div className="flex justify-between items-start mb-2">
-                <div className="flex items-center">
-                  <svg className="h-5 w-5 text-primary mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  <span className="text-sm font-medium text-primary dark:text-primary-light">AI Suggestion</span>
-                </div>
-                <button 
-                  onClick={() => setShowSuggestion(false)}
-                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="text-gray-800 dark:text-gray-200 text-sm font-serif">
-                <span className="text-gray-500">...</span> {selectedSuggestion}
-              </p>
-              <div className="flex space-x-2 mt-2">
-                <Button 
-                  variant="default" 
-                  size="sm"
-                  onClick={acceptSuggestion}
-                  className="bg-primary hover:bg-primary-dark text-white"
-                >
-                  Accept
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setShowSuggestion(false)}
-                >
-                  Dismiss
-                </Button>
-              </div>
-            </div>
-          )}
-          
-          {/* Generate button */}
-          <div className="mt-6">
-            <Button 
-              variant="outline"
-              onClick={generateParagraph}
-              disabled={isGenerating}
-              className="flex items-center"
-            >
-              {isGenerating ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Generating...
-                </>
+          {/* Save Status and Controls */}
+          <div className="flex items-center space-x-3">
+            {/* Autosave Status Indicator */}
+            <div className="flex items-center text-xs text-gray-500 dark:text-gray-400" title={autoSaveEnabled ? "Autosave is enabled" : "Autosave is disabled due to errors"}>
+              {autoSaveEnabled ? (
+                <Wifi className="h-3 w-3 mr-1" />
               ) : (
-                <>
-                  <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Generate Paragraph
-                </>
+                <WifiOff className="h-3 w-3 mr-1" />
               )}
+              Auto
+            </div>
+            
+            {/* Save Status Indicator */}
+            <div className="flex items-center text-sm">
+              {renderSaveStatus()}
+            </div>
+            
+            {/* Context Panel Toggle */}
+            <Button
+              onClick={onToggleContextPanel}
+              variant="ghost"
+              size="sm"
+              className={`flex items-center ${contextPanelOpen ? 'bg-primary/10 text-primary' : ''}`}
+              title="Toggle document insights"
+            >
+              <Info className="h-4 w-4 mr-1" />
+              Insights
+            </Button>
+            
+            {/* Full Screen Toggle */}
+            <Button
+              onClick={onToggleFullScreen}
+              variant="ghost"
+              size="sm"
+              className={`flex items-center ${isFullScreen ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : ''}`}
+              title={isFullScreen ? "Exit full screen" : "Enter full screen"}
+            >
+              {isFullScreen ? <Minimize className="h-4 w-4 mr-1" /> : <Maximize className="h-4 w-4 mr-1" />}
+              {isFullScreen ? "Exit Full Screen" : "Full Screen"}
+            </Button>
+            
+            {/* Manual Save Button */}
+            <Button
+              onClick={handleManualSave}
+              disabled={isSaving || (!isDirty && !saveError)}
+              variant="outline"
+              size="sm"
+              className="flex items-center"
+              title="Save your changes manually (Ctrl+S)"
+            >
+              <Save className="h-4 w-4 mr-1" />
+              Save
             </Button>
           </div>
+        </div>
+      )}
+      
+      {/* Main Editor Area - Full viewport in full screen mode */}
+      <div className={`flex-1 flex flex-col bg-white dark:bg-gray-900 overflow-hidden ${
+        isFullScreen ? 'h-screen' : ''
+      }`}>
+        {/* Title Input - Adjust padding for full screen */}
+        <div className={isFullScreen ? "px-24 pt-16 pb-8" : "px-12 pt-8 pb-4"}>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Document Title"
+            className={`w-full bg-transparent border-none outline-none placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-gray-100 font-bold ${
+              isFullScreen ? 'text-4xl' : 'text-3xl'
+            }`}
+          />
+        </div>
+        
+        {/* Content Editor - Full height and width with larger text in full screen */}
+        <div className={isFullScreen ? "flex-1 px-24 pb-16 overflow-hidden" : "flex-1 px-12 pb-8 overflow-hidden"}>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Start writing..."
+            className={`w-full h-full border-none resize-none outline-none text-gray-700 dark:text-gray-300 bg-transparent transition-colors leading-relaxed placeholder-gray-400 dark:placeholder-gray-500 ${
+              isFullScreen ? 'text-xl' : 'text-lg'
+            }`}
+            style={{ 
+              fontFamily: 'Georgia, "Times New Roman", serif',
+              fontSize: isFullScreen ? '20px' : '18px',
+              lineHeight: isFullScreen ? '1.9' : '1.8'
+            }}
+          />
         </div>
       </div>
     </div>

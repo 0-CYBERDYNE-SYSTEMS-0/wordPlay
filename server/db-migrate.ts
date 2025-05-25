@@ -1,27 +1,45 @@
-import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { db } from "./db";
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import { Pool } from 'pg';
+import { config } from './config';
 import { users, projects, documents } from "@shared/schema";
 
 // Function to run migrations
 export async function runMigrations() {
-  console.log("Running database migrations...");
-  
+  const pool = new Pool({
+    connectionString: config.database.url,
+    ...config.database.options
+  });
+
+  const db = drizzle(pool, { logger: false });
+
   try {
-    // This will automatically create tables based on your schema
-    // if they don't exist yet
-    await migrate(db, { migrationsFolder: "./migrations" });
-    console.log("Database migrations completed successfully");
-    
-    return true;
-  } catch (error) {
-    console.error("Error running database migrations:", error);
-    return false;
+    console.log('Running database migrations...');
+    await migrate(db, { migrationsFolder: './migrations' });
+    console.log('Database migrations completed successfully');
+  } catch (error: any) {
+    // Check if the error is because tables already exist
+    if (error.code === '42P07' || error.message.includes('already exists')) {
+      console.log('Database tables already exist, skipping migration');
+    } else {
+      console.error('Error running database migrations:', error);
+      // Don't throw the error - continue with server startup
+    }
+  } finally {
+    await pool.end();
   }
 }
 
 // Add a function to create a default user and project if none exist
 export async function seedInitialData() {
   console.log("Checking for existing data...");
+  
+  const pool = new Pool({
+    connectionString: config.database.url,
+    ...config.database.options
+  });
+
+  const db = drizzle(pool, { logger: false });
   
   try {
     // Check if any users exist
@@ -76,6 +94,55 @@ export async function seedInitialData() {
     return true;
   } catch (error) {
     console.error("Error seeding initial data:", error);
+    return false;
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function checkDatabase() {
+  const pool = new Pool({
+    connectionString: config.database.url,
+    ...config.database.options
+  });
+
+  try {
+    const client = await pool.connect();
+    
+    // Test basic connectivity
+    const result = await client.query('SELECT NOW()');
+    console.log('Database connection successful');
+    
+    // Check if tables exist
+    const tableCheck = await client.query(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name IN ('users', 'projects', 'documents', 'sources')
+    `);
+    
+    console.log(`Found ${tableCheck.rows.length} tables in database`);
+    
+    client.release();
+    return true;
+  } catch (error) {
+    console.error('Database connection failed:', error);
+    return false;
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function initializeDatabase() {
+  console.log('Checking database connection...');
+  const isConnected = await checkDatabase();
+  
+  if (isConnected) {
+    await runMigrations();
+    await seedInitialData();
+    return true;
+  } else {
+    console.error('Cannot initialize database - connection failed');
     return false;
   }
 }

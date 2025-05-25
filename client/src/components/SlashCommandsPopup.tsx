@@ -21,6 +21,8 @@ interface SlashCommandsPopupProps {
   content: string;
   setContent: (content: string) => void;
   editorRef: React.RefObject<HTMLDivElement>;
+  llmProvider: 'openai' | 'ollama';
+  llmModel: string;
 }
 
 export interface SlashCommand {
@@ -103,7 +105,9 @@ export default function SlashCommandsPopup({
   position, 
   content, 
   setContent,
-  editorRef 
+  editorRef,
+  llmProvider,
+  llmModel
 }: SlashCommandsPopupProps) {
   const { toast } = useToast();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -155,7 +159,9 @@ export default function SlashCommandsPopup({
         command,
         content,
         selectionInfo,
-        style: null // You can add style information here if needed
+        style: null, // You can add style information here if needed
+        llmProvider,
+        llmModel
       });
       
       const data = await res.json();
@@ -174,6 +180,13 @@ export default function SlashCommandsPopup({
       } else {
         setContent(data.result);
       }
+      
+      // Force focus back to editor after content update
+      setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.focus();
+        }
+      }, 100);
       
       toast({
         title: 'AI Command Executed',

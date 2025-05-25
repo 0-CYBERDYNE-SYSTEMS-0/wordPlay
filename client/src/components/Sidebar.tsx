@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Project, Document, Source } from "@shared/schema";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   FileText, Search, Upload, Code, Brush, Link, File, Settings, 
   HelpCircle, BarChart2, PlusCircle, FolderPlus, ChevronDown, 
-  ChevronRight, Trash2, Edit2, Sparkles, BookOpen
+  ChevronRight, Trash2, Edit2, Sparkles, BookOpen, Plus, Wrench, Folder, X
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -16,21 +17,26 @@ interface SidebarProps {
   isOpen: boolean;
   projects: Project[];
   activeProjectId: number | null;
+  activeTab: "editor" | "search" | "command" | "style";
   onSelectProject: (projectId: number) => void;
   onSelectDocument: (documentId: number) => void;
   onChangeTab: (tab: "editor" | "search" | "command" | "style") => void;
+  onClose: () => void;
 }
 
 export default function Sidebar({
   isOpen,
   projects,
   activeProjectId,
+  activeTab,
   onSelectProject,
   onSelectDocument,
-  onChangeTab
+  onChangeTab,
+  onClose
 }: SidebarProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location, setLocation] = useLocation();
   const [expandedSections, setExpandedSections] = useState<{
     projects: boolean;
     documents: boolean;
@@ -49,10 +55,8 @@ export default function Sidebar({
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [editingDocumentName, setEditingDocumentName] = useState("");
 
-  // If the sidebar is not open, don't render anything
-  if (!isOpen) {
-    return null;
-  }
+  // Only show sidebar content when open
+  if (!isOpen) return null;
 
   // Fetch documents for the active project
   const { data: documents = [] } = useQuery<Document[]>({
@@ -236,305 +240,257 @@ export default function Sidebar({
     }
   };
 
+  // Navigate to Settings
+  const handleNavigateToSettings = () => {
+    setLocation('/settings');
+  };
+
   return (
-    <aside className="w-64 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 flex flex-col h-full shadow-sm">
-      {/* Projects Section */}
-      <div className="p-4 border-b dark:border-gray-700">
-        <div className="flex items-center justify-between mb-2">
-          <div 
-            className="flex items-center cursor-pointer" 
-            onClick={() => toggleSection('projects')}
-          >
-            {expandedSections.projects ? (
-              <ChevronDown className="h-4 w-4 mr-1 text-gray-500" />
-            ) : (
-              <ChevronRight className="h-4 w-4 mr-1 text-gray-500" />
-            )}
-            <h2 className="font-medium text-gray-700 dark:text-gray-300">Projects</h2>
-          </div>
-          
-          <button 
-            className="h-5 w-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600"
-            onClick={() => setIsCreatingProject(!isCreatingProject)}
-            title="New Project"
-          >
-            <PlusCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
-          </button>
-        </div>
-        
-        {isCreatingProject && (
-          <form onSubmit={handleCreateProject} className="mb-3">
-            <div className="flex items-center space-x-1 mb-1">
-              <Input
-                type="text"
-                placeholder="Project name..."
-                className="h-7 text-sm"
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                autoFocus
-              />
-              <Button 
-                type="submit" 
-                size="sm"
-                className="h-7 px-2"
-                disabled={!newProjectName.trim() || createProjectMutation.isPending}
-              >
-                {createProjectMutation.isPending ? "..." : "Add"}
-              </Button>
-            </div>
-          </form>
-        )}
-        
-        {expandedSections.projects && (
-          <div className="space-y-1">
-            {projects.map((project) => (
-              <div
-                key={project.id}
-                className={`flex items-center p-2 rounded-md cursor-pointer ${
-                  project.id === activeProjectId
-                    ? "bg-primary bg-opacity-10 text-primary dark:text-primary-light"
-                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
-                }`}
-                onClick={() => onSelectProject(project.id)}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                <span className="text-sm">{project.name}</span>
-              </div>
-            ))}
-            
-            {projects.length === 0 && !isCreatingProject && (
-              <div className="text-sm text-gray-500 dark:text-gray-400 p-2">
-                No projects yet. Create your first project.
-              </div>
-            )}
-          </div>
-        )}
+    <aside className="h-full w-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-lg">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Navigation</h2>
+        <button 
+          onClick={onClose}
+          className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+          title="Close navigation"
+        >
+          <X className="h-4 w-4 text-gray-500" />
+        </button>
       </div>
-      
-      {/* Documents Section */}
-      {activeProjectId && (
-        <div className="p-4 border-b dark:border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <div 
-              className="flex items-center cursor-pointer" 
-              onClick={() => toggleSection('documents')}
-            >
-              {expandedSections.documents ? (
-                <ChevronDown className="h-4 w-4 mr-1 text-gray-500" />
-              ) : (
-                <ChevronRight className="h-4 w-4 mr-1 text-gray-500" />
-              )}
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Documents</h2>
-            </div>
-            
+
+      <div className="flex-1 overflow-y-auto">
+        {/* Projects Section */}
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center">
+              <Folder className="h-4 w-4 mr-2" />
+              Projects
+            </h3>
             <button 
-              className="h-5 w-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600"
-              onClick={() => setIsCreatingDocument(!isCreatingDocument)}
-              title="New Document"
+              onClick={() => setIsCreatingProject(true)}
+              className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+              title="New project"
             >
-              <PlusCircle className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+              <Plus className="h-4 w-4 text-gray-500" />
             </button>
           </div>
           
-          {isCreatingDocument && (
-            <form onSubmit={handleCreateDocument} className="mb-3">
-              <div className="flex items-center space-x-1 mb-1">
-                <Input
-                  type="text"
-                  placeholder="Document title..."
-                  className="h-7 text-sm"
-                  value={newDocumentName}
-                  onChange={(e) => setNewDocumentName(e.target.value)}
-                  autoFocus
-                />
+          <div className="space-y-2">
+            {projects.map((project) => (
+              <div
+                key={project.id}
+                onClick={() => onSelectProject(project.id)}
+                className={`p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                  project.id === activeProjectId
+                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                }`}
+              >
+                <div className="font-medium">{project.name}</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {project.type || 'Writing'}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Create new project */}
+          {isCreatingProject && (
+            <form onSubmit={handleCreateProject} className="mt-2">
+              <Input
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Project name"
+                className="mb-2"
+                autoFocus
+              />
+              <div className="flex space-x-2">
+                <Button type="submit" size="sm" disabled={createProjectMutation.isPending}>
+                  Create
+                </Button>
                 <Button 
-                  type="submit" 
+                  type="button" 
+                  variant="outline" 
                   size="sm"
-                  className="h-7 px-2"
-                  disabled={!newDocumentName.trim() || createDocumentMutation.isPending}
+                  onClick={() => {
+                    setIsCreatingProject(false);
+                    setNewProjectName("");
+                  }}
                 >
-                  {createDocumentMutation.isPending ? "..." : "Add"}
+                  Cancel
                 </Button>
               </div>
             </form>
           )}
-          
-          {expandedSections.documents && (
-            <div className="space-y-1">
+        </div>
+
+        {/* Documents Section */}
+        {activeProjectId && (
+          <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center">
+                <FileText className="h-4 w-4 mr-2" />
+                Documents
+              </h3>
+              <button 
+                onClick={() => setIsCreatingDocument(true)}
+                className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                title="New document"
+              >
+                <Plus className="h-4 w-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
               {documents.map((document) => (
-                <div key={document.id} className="relative group">
+                <div key={document.id} className="group">
                   {editingDocumentId === document.id ? (
-                    <form onSubmit={handleRenameDocument}>
-                      <div className="flex items-center space-x-1 mb-1">
-                        <Input
-                          type="text"
-                          className="h-7 text-sm"
-                          value={editingDocumentName}
-                          onChange={(e) => setEditingDocumentName(e.target.value)}
-                          autoFocus
-                        />
+                    <form onSubmit={handleRenameDocument} className="space-y-2">
+                      <Input
+                        value={editingDocumentName}
+                        onChange={(e) => setEditingDocumentName(e.target.value)}
+                        className="text-sm"
+                        autoFocus
+                      />
+                      <div className="flex space-x-1">
+                        <Button type="submit" size="sm">Save</Button>
                         <Button 
-                          type="submit" 
+                          type="button" 
+                          variant="outline" 
                           size="sm"
-                          className="h-7 px-2"
-                          disabled={!editingDocumentName.trim() || updateDocumentMutation.isPending}
+                          onClick={() => setEditingDocumentId(null)}
                         >
-                          {updateDocumentMutation.isPending ? "..." : "Save"}
+                          Cancel
                         </Button>
                       </div>
                     </form>
                   ) : (
                     <div
-                      className={`flex items-center justify-between p-2 rounded-md cursor-pointer ${
-                        document.id === (document as any).activeDocumentId
-                          ? "bg-primary-light bg-opacity-10 text-primary dark:text-primary-light"
-                          : "hover:bg-gray-100 dark:hover:bg-gray-700"
-                      }`}
                       onClick={() => onSelectDocument(document.id)}
+                      className="p-2 rounded-lg text-sm cursor-pointer transition-colors hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center justify-between"
                     >
-                      <div className="flex items-center overflow-hidden">
-                        <FileText className="h-4 w-4 mr-2 flex-shrink-0" />
-                        <span className="text-sm truncate">{document.title}</span>
-                      </div>
-                      
-                      <div className="flex space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="truncate flex-1">{document.title}</span>
+                      <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
                         <button
-                          className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                           onClick={(e) => {
                             e.stopPropagation();
                             startEditingDocument(document);
                           }}
-                          title="Rename"
+                          className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                         >
-                          <Edit2 className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                          <Edit2 className="h-3 w-3" />
                         </button>
                         <button
-                          className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                           onClick={(e) => {
                             e.stopPropagation();
                             confirmDeleteDocument(document.id);
                           }}
-                          title="Delete"
+                          className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
                         >
-                          <Trash2 className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+                          <Trash2 className="h-3 w-3" />
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
               ))}
-              
-              {documents.length === 0 && !isCreatingDocument && (
-                <div className="text-sm text-gray-500 dark:text-gray-400 p-2">
-                  No documents in this project. Create your first document.
+            </div>
+
+            {/* Create new document */}
+            {isCreatingDocument && (
+              <form onSubmit={handleCreateDocument} className="mt-2">
+                <Input
+                  value={newDocumentName}
+                  onChange={(e) => setNewDocumentName(e.target.value)}
+                  placeholder="Document title"
+                  className="mb-2"
+                  autoFocus
+                />
+                <div className="flex space-x-2">
+                  <Button type="submit" size="sm" disabled={createDocumentMutation.isPending}>
+                    Create
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setIsCreatingDocument(false);
+                      setNewDocumentName("");
+                    }}
+                  >
+                    Cancel
+                  </Button>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-      
-      {/* Tools Navigation */}
-      <div className="p-4 border-b dark:border-gray-700">
-        <div className="flex items-center justify-between mb-2">
-          <div 
-            className="flex items-center cursor-pointer" 
-            onClick={() => toggleSection('tools')}
-          >
-            {expandedSections.tools ? (
-              <ChevronDown className="h-4 w-4 mr-1 text-gray-500" />
-            ) : (
-              <ChevronRight className="h-4 w-4 mr-1 text-gray-500" />
+              </form>
             )}
-            <h2 className="font-medium text-gray-700 dark:text-gray-300">Writing Tools</h2>
-          </div>
-        </div>
-        
-        {expandedSections.tools && (
-          <div className="space-y-1">
-            <div 
-              className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-              onClick={() => onChangeTab("editor")}
-            >
-              <Edit2 className="h-4 w-4 mr-2" />
-              <span className="text-sm">Editor</span>
-            </div>
-            <div 
-              className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-              onClick={() => onChangeTab("search")}
-            >
-              <Search className="h-4 w-4 mr-2" />
-              <span className="text-sm">Research</span>
-            </div>
-            <div 
-              className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-              onClick={() => onChangeTab("command")}
-            >
-              <Sparkles className="h-4 w-4 mr-2" />
-              <span className="text-sm">AI Assistant</span>
-            </div>
-            <div 
-              className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-              onClick={() => onChangeTab("style")}
-            >
-              <BarChart2 className="h-4 w-4 mr-2" />
-              <span className="text-sm">Style Analysis</span>
-            </div>
           </div>
         )}
-      </div>
-      
-      {/* Recent Sources */}
-      {activeProjectId && sources.length > 0 && (
-        <div className="p-4 border-b dark:border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <div 
-              className="flex items-center cursor-pointer" 
-              onClick={() => toggleSection('sources')}
-            >
-              {expandedSections.sources ? (
-                <ChevronDown className="h-4 w-4 mr-1 text-gray-500" />
-              ) : (
-                <ChevronRight className="h-4 w-4 mr-1 text-gray-500" />
-              )}
-              <h2 className="font-medium text-gray-700 dark:text-gray-300">Research Sources</h2>
-            </div>
-          </div>
+
+        {/* Tools Section */}
+        <div className="p-4">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center">
+            <Wrench className="h-4 w-4 mr-2" />
+            Tools
+          </h3>
           
-          {expandedSections.sources && (
-            <div className="space-y-1">
-              {sources.map((source: Source) => (
-                <div 
-                  key={source.id}
-                  className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-                >
-                  {source.type === 'url' ? (
-                    <Link className="h-4 w-4 mr-2" />
-                  ) : source.type === 'pdf' ? (
-                    <File className="h-4 w-4 mr-2" />
-                  ) : source.type === 'notes' ? (
-                    <BookOpen className="h-4 w-4 mr-2" />
-                  ) : (
-                    <FileText className="h-4 w-4 mr-2" />
-                  )}
-                  <span className="text-sm truncate">{source.name || 'Unnamed Source'}</span>
-                </div>
-              ))}
+          <div className="space-y-2">
+            <div 
+              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                activeTab === "editor"
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+              onClick={() => onChangeTab("editor")}
+            >
+              <Edit2 className="h-4 w-4 mr-3 flex-shrink-0" />
+              <span>Editor</span>
             </div>
-          )}
-        </div>
-      )}
-      
-      {/* Help & Settings */}
-      <div className="mt-auto p-4 border-t dark:border-gray-700">
-        <div className="space-y-1">
-          <div className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-            <Settings className="h-4 w-4 mr-2" />
-            <span className="text-sm">Settings</span>
+            <div 
+              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                activeTab === "search"
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+              onClick={() => onChangeTab("search")}
+            >
+              <Search className="h-4 w-4 mr-3 flex-shrink-0" />
+              <span>Research</span>
+            </div>
+            <div 
+              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                activeTab === "command"
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+              onClick={() => onChangeTab("command")}
+            >
+              <Sparkles className="h-4 w-4 mr-3 flex-shrink-0" />
+              <span>AI Assistant</span>
+            </div>
+            <div 
+              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                activeTab === "style"
+                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
+              }`}
+              onClick={() => onChangeTab("style")}
+            >
+              <BarChart2 className="h-4 w-4 mr-3 flex-shrink-0" />
+              <span>Style Analysis</span>
+            </div>
           </div>
-          <div className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-            <HelpCircle className="h-4 w-4 mr-2" />
-            <span className="text-sm">Help & Support</span>
+        </div>
+
+        {/* Settings */}
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+          <div 
+            className="flex items-center p-3 rounded-lg text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
+            onClick={handleNavigateToSettings}
+          >
+            <Settings className="h-4 w-4 mr-3 flex-shrink-0" />
+            <span>Settings</span>
           </div>
         </div>
       </div>
