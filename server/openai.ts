@@ -2,7 +2,7 @@ import OpenAI from "openai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
 // the newest OpenAI model is "gpt-4.1" which was released April 14, 2025 and excels at coding. Updated from gpt-4o.
-const DEFAULT_MODEL = "gpt-4.1-mini";
+export const DEFAULT_MODEL = "gpt-4.1-mini";
 const DEFAULT_PROVIDER = "openai";
 
 const openai = new OpenAI({ 

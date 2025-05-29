@@ -1,6 +1,42 @@
 import OpenAI from "openai";
 import { DEFAULT_MODEL } from "./openai";
 
+// Call Ollama API directly
+async function callOllama(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
+  try {
+    // Combine system and user prompts for Ollama
+    const fullPrompt = `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:`;
+    
+    const res = await fetch("http://localhost:11434/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        model, 
+        prompt: fullPrompt,
+        stream: false,
+        options: {
+          temperature: 0.7,
+          top_p: 0.9
+        }
+      })
+    });
+    
+    if (!res.ok) {
+      throw new Error(`Ollama server error: ${res.status} ${res.statusText}`);
+    }
+    
+    const data = await res.json();
+    if (!data.response) {
+      throw new Error('No response from Ollama server');
+    }
+    
+    return data.response.trim();
+  } catch (err: any) {
+    console.error("Ollama fetch error:", err);
+    throw new Error(`Ollama error: ${err.message}`);
+  }
+}
+
 // Define the AI commands handlers for each slash command type
 export async function executeSlashCommand(
   command: string,
@@ -26,9 +62,8 @@ export async function executeSlashCommand(
     apiKey: process.env.OPENAI_API_KEY || "default_key" 
   });
   
-  // For now, we'll continue using OpenAI regardless of provider
-  // TODO: Implement Ollama support for slash commands
-  const modelToUse = llmProvider === 'openai' ? llmModel : DEFAULT_MODEL;
+  // Determine which model to use based on provider
+  const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
   
   // The context is either the selected text (if any) or the entire content
   const context = selectionInfo.selectedText || content;
@@ -119,23 +154,34 @@ export async function executeSlashCommand(
       systemPrompt += `\n\nStyle information: ${JSON.stringify(style)}`;
     }
     
-    // Make the API call
-    const response = await openai.chat.completions.create({
-      model: modelToUse,
-      messages: [
-        {
-          role: "system",
-          content: systemPrompt
-        },
-        {
-          role: "user",
-          content: userPrompt
-        }
-      ],
-      max_tokens: 1000,
-    });
+    // Make the API call based on provider
+    let generatedText = "";
     
-    const generatedText = response.choices[0].message.content?.trim() || "";
+    if (llmProvider === 'ollama') {
+      // Use Ollama
+      if (!modelToUse) {
+        throw new Error("Ollama model name is required");
+      }
+      generatedText = await callOllama(modelToUse, systemPrompt, userPrompt);
+    } else {
+      // Use OpenAI
+      const response = await openai.chat.completions.create({
+        model: modelToUse,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt
+          },
+          {
+            role: "user",
+            content: userPrompt
+          }
+        ],
+        max_tokens: 1000,
+      });
+      
+      generatedText = response.choices[0].message.content?.trim() || "";
+    }
     
     // Determine if we should replace the entire content or just the selection
     const replaceEntireContent = command === 'continue' || command === 'list' || 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/use-debounce";
 import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, WifiOff, Info, Maximize, Minimize, Undo, Redo } from "lucide-react";
 import { useAISuggestions } from "@/hooks/use-ai-suggestions";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
@@ -44,7 +45,6 @@ export default function Editor({
   const { toast } = useToast();
   const [hasFocus, setHasFocus] = useState(false);
   const editorRef = useRef<HTMLTextAreaElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
   
   // State for slash commands popup
   const [slashCommandsOpen, setSlashCommandsOpen] = useState(false);
@@ -64,16 +64,20 @@ export default function Editor({
   // Initialize undo/redo system
   const undoRedo = useUndoRedo(
     { title, content },
-    { maxHistorySize: 50, debounceMs: 500 }
+    { maxHistorySize: 50, debounceMs: 1000 }
   );
   
-  // Track when content changes to add to history
+  // Debounce content and title changes for undo/redo
+  const debouncedTitle = useDebounce(title, 1000);
+  const debouncedContent = useDebounce(content, 1000);
+  
+  // Track when debounced content changes to add to history (not on every keystroke)
   useEffect(() => {
-    // Only add to history if we're not currently applying undo/redo
-    if (!undoRedo.isApplyingHistory()) {
-      undoRedo.pushState({ title, content });
+    // Only add to history if we're not currently applying undo/redo and values have actually changed
+    if (!undoRedo.isApplyingHistory() && (debouncedTitle || debouncedContent)) {
+      undoRedo.pushState({ title: debouncedTitle, content: debouncedContent });
     }
-  }, [title, content, undoRedo]);
+  }, [debouncedTitle, debouncedContent, undoRedo]);
   
   // Handle undo
   const handleUndo = () => {
@@ -248,30 +252,6 @@ export default function Editor({
       });
     }
   };
-
-  // Add this useEffect after your other hooks, inside the Editor component
-  useEffect(() => {
-    if (editorRef.current && editorRef.current.innerText !== content) {
-      editorRef.current.innerText = content;
-      
-      // Move cursor to end after updating content
-      if (content) {
-        const range = document.createRange();
-        const selection = window.getSelection();
-        range.selectNodeContents(editorRef.current);
-        range.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-    }
-  }, [content]);
-
-  // Add this useEffect after your other hooks, inside the Editor component
-  useEffect(() => {
-    if (titleRef.current && titleRef.current.innerText !== title) {
-      titleRef.current.innerText = title;
-    }
-  }, [title]);
 
   return (
     <div className="w-full h-full flex flex-col">

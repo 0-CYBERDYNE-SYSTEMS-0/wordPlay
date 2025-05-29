@@ -14,7 +14,7 @@ export function useUndoRedo(
   initialState: UndoRedoState,
   options: UseUndoRedoOptions = {}
 ) {
-  const { maxHistorySize = 50, debounceMs = 300 } = options;
+  const { maxHistorySize = 50, debounceMs = 500 } = options;
   
   // History stack
   const [history, setHistory] = useState<UndoRedoState[]>([initialState]);
@@ -100,7 +100,7 @@ export function useUndoRedo(
     // Reset the flag after a short delay to allow state updates to propagate
     setTimeout(() => {
       isApplyingHistory.current = false;
-    }, 100);
+    }, 50);
     
     return previousState;
   }, [canUndo, currentIndex, history]);
@@ -121,7 +121,7 @@ export function useUndoRedo(
     // Reset the flag after a short delay to allow state updates to propagate
     setTimeout(() => {
       isApplyingHistory.current = false;
-    }, 100);
+    }, 50);
     
     return nextState;
   }, [canRedo, currentIndex, history]);
