@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, WifiOff, Info, Maximize, Minimize } from "lucide-react";
+import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, WifiOff, Info, Maximize, Minimize, Undo, Redo } from "lucide-react";
 import { useAISuggestions } from "@/hooks/use-ai-suggestions";
+import { useUndoRedo } from "@/hooks/use-undo-redo";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
 
 interface EditorProps {
@@ -60,8 +61,59 @@ export default function Editor({
     llmModel
   });
   
+  // Initialize undo/redo system
+  const undoRedo = useUndoRedo(
+    { title, content },
+    { maxHistorySize: 50, debounceMs: 500 }
+  );
+  
+  // Track when content changes to add to history
+  useEffect(() => {
+    // Only add to history if we're not currently applying undo/redo
+    if (!undoRedo.isApplyingHistory()) {
+      undoRedo.pushState({ title, content });
+    }
+  }, [title, content, undoRedo]);
+  
+  // Handle undo
+  const handleUndo = () => {
+    const previousState = undoRedo.undo();
+    if (previousState) {
+      setTitle(previousState.title);
+      setContent(previousState.content);
+    }
+  };
+  
+  // Handle redo
+  const handleRedo = () => {
+    const nextState = undoRedo.redo();
+    if (nextState) {
+      setTitle(nextState.title);
+      setContent(nextState.content);
+    }
+  };
+  
   // Handle keyboard events for slash commands
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Handle undo/redo shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+      if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+      if (e.key === 's') {
+        e.preventDefault();
+        handleManualSave();
+        return;
+      }
+    }
+
     // Detect slash key press
     if (e.key === '/' && !slashCommandsOpen) {
       e.preventDefault(); // Prevent slash from being typed
@@ -258,6 +310,34 @@ export default function Editor({
               <Info className="h-4 w-4 mr-1" />
               Insights
             </Button>
+
+            {/* Undo/Redo Buttons */}
+            <div className="flex items-center space-x-1">
+              <Button
+                onClick={handleUndo}
+                disabled={!undoRedo.canUndo}
+                variant="ghost"
+                size="sm"
+                className="flex items-center"
+                title="Undo (Ctrl+Z)"
+              >
+                <Undo className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={handleRedo}
+                disabled={!undoRedo.canRedo}
+                variant="ghost"
+                size="sm"
+                className="flex items-center"
+                title="Redo (Ctrl+Y)"
+              >
+                <Redo className="h-4 w-4" />
+              </Button>
+              {/* History indicator for debugging */}
+              <span className="text-xs text-gray-400 ml-2" title={`History: ${undoRedo.currentIndex + 1}/${undoRedo.historySize}`}>
+                {undoRedo.currentIndex + 1}/{undoRedo.historySize}
+              </span>
+            </div>
             
             {/* Full Screen Toggle */}
             <Button
@@ -297,6 +377,26 @@ export default function Editor({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => {
+              // Handle undo/redo shortcuts in title field too
+              if (e.ctrlKey || e.metaKey) {
+                if (e.key === 'z' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleUndo();
+                  return;
+                }
+                if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+                  e.preventDefault();
+                  handleRedo();
+                  return;
+                }
+                if (e.key === 's') {
+                  e.preventDefault();
+                  handleManualSave();
+                  return;
+                }
+              }
+            }}
             placeholder="Document Title"
             className={`w-full bg-transparent border-none outline-none placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-gray-100 font-bold ${
               isFullScreen ? 'text-4xl' : 'text-3xl'

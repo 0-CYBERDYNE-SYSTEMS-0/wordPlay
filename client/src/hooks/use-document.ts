@@ -37,6 +37,8 @@ export function useDocument({
   const hasInitialized = useRef(false);
   const saveRetryCount = useRef(0);
   const maxRetries = 3;
+  const lastSaveTime = useRef(0);
+  const minimumSaveInterval = 500; // Minimum time between saves
   
   // Debounce content changes using settings interval
   const debouncedContent = useDebounce(content, autosaveInterval);
@@ -190,9 +192,21 @@ export function useDocument({
   // Auto-save when content or title changes (only if document exists and is dirty)
   useEffect(() => {
     if (documentId && isDirty && hasInitialized.current && autoSaveEnabled) {
-      saveDocument(false); // false = not manual save
+      const now = Date.now();
+      const timeSinceLastSave = now - lastSaveTime.current;
+      
+      // Rate limit saves to prevent excessive API calls
+      if (timeSinceLastSave < minimumSaveInterval) {
+        return;
+      }
+      
+      // Only save if we're not currently saving
+      if (!isSaving) {
+        lastSaveTime.current = now;
+        saveDocument(false); // false = not manual save
+      }
     }
-  }, [debouncedContent, debouncedTitle, documentId, isDirty, autoSaveEnabled]);
+  }, [debouncedContent, debouncedTitle, documentId, isDirty, autoSaveEnabled, isSaving]);
   
   return {
     title,
