@@ -1,8 +1,9 @@
 import OpenAI from "openai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
-// the newest OpenAI model is "gpt-4o" which was released May 13, 2024. do not change this unless explicitly requested by the user
-export const DEFAULT_MODEL = "gpt-4o";
+// the newest OpenAI model is "gpt-4.1" which was released April 14, 2025 and excels at coding. Updated from gpt-4o.
+const DEFAULT_MODEL = "gpt-4.1-mini";
+const DEFAULT_PROVIDER = "openai";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || "default_key" 
@@ -10,12 +11,15 @@ const openai = new OpenAI({
 
 async function callOllama(model: string, prompt: string): Promise<string> {
   try {
+    // Prepend 'no_think' for qwen3 models to speed up processing
+    const finalPrompt = model.toLowerCase().includes('qwen3') ? `no_think\n${prompt}` : prompt;
+    
     const res = await fetch("http://localhost:11434/api/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
         model, 
-        prompt,
+        prompt: finalPrompt,
         stream: false,
         options: {
           temperature: 0.7,

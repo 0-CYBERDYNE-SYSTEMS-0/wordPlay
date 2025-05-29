@@ -515,10 +515,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // NEW: Intelligent agent workflow with tool execution and result synthesis
+  // ENHANCED: Maximum capability autonomous agent workflow
   app.post("/api/agent/intelligent-request", async (req: Request, res: Response) => {
     const { createAgent } = await import("./ai-agent");
-    const { request, context } = req.body;
+    const { request, context, autonomyLevel = 'moderate', maxExecutionTime = 300000 } = req.body; // 5 min default
     
     if (!request) {
       return res.status(400).json({ message: "Request is required" });
@@ -527,140 +527,394 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const agent = createAgent(1); // Default user ID
       
+      // Set autonomy level for maximum capability
+      if (autonomyLevel) {
+        agent.setAutonomyLevel(autonomyLevel);
+      }
+      
       // Update agent context if provided
       if (context) {
         await agent.updateContext(context);
       }
       
-      // Step 1: Plan the approach and determine tools needed
-      const plan = await agent.processRequest(request);
+      const startTime = Date.now();
+      const executionLog: any[] = [];
+      let totalToolsExecuted = 0;
+      let currentIteration = 0;
+      const maxIterations = autonomyLevel === 'aggressive' ? 50 : autonomyLevel === 'moderate' ? 20 : 10;
       
-      // Step 2: Execute tools if any are planned
-      const toolExecutions: Array<{ toolName: string; parameters: any; result: any }> = [];
+      // Step 1: Initial planning and goal setting
+      console.log(`🤖 Starting autonomous execution with ${autonomyLevel} autonomy level`);
+      const initialPlan = await agent.processRequest(request);
       
-      if (plan.toolCalls && plan.toolCalls.length > 0) {
-        for (const toolCall of plan.toolCalls) {
-          try {
-            const toolResult = await agent.executeTool(toolCall.tool, toolCall.params);
-            toolExecutions.push({
-              toolName: toolCall.tool,
-              parameters: toolCall.params,
-              result: toolResult
-            });
-            
-            // If this is a research tool with good results, consider chaining additional tools
-            if (toolCall.tool === 'web_search' && toolResult.success && toolResult.data?.results?.length > 0) {
-              // Automatically scrape the most promising result
-              const topResult = toolResult.data.results[0];
-              if (topResult.url) {
-                try {
-                  const scrapeResult = await agent.executeTool('scrape_webpage', { url: topResult.url });
-                  if (scrapeResult.success) {
-                    toolExecutions.push({
-                      toolName: 'scrape_webpage',
-                      parameters: { url: topResult.url },
-                      result: scrapeResult
-                    });
-                    
-                    // Auto-save the source if we have a current project
-                    if (context?.currentProject) {
-                      const saveResult = await agent.executeTool('save_source', {
-                        projectId: context.currentProject.id,
-                        type: 'url',
-                        name: topResult.title || 'Web Source',
-                        url: topResult.url,
-                        content: scrapeResult.data?.content || ''
-                      });
-                      if (saveResult.success) {
-                        toolExecutions.push({
-                          toolName: 'save_source',
-                          parameters: {
-                            projectId: context.currentProject.id,
-                            type: 'url',
-                            name: topResult.title || 'Web Source',
-                            url: topResult.url,
-                            content: scrapeResult.data?.content || ''
-                          },
-                          result: saveResult
-                        });
-                      }
-                    }
-                  }
-                } catch (scrapeError) {
-                  console.log("Auto-scraping failed, continuing with search results");
-                }
-              }
-            }
-            
-            // If this is document analysis, consider generating suggestions
-            if (toolCall.tool === 'analyze_writing_style' && toolResult.success && context?.currentDocument?.content) {
-              try {
-                const suggestionsResult = await agent.executeTool('get_writing_suggestions', {
-                  text: context.currentDocument.content,
-                  type: 'improvement'
-                });
-                if (suggestionsResult.success) {
-                  toolExecutions.push({
-                    toolName: 'get_writing_suggestions',
-                    parameters: { text: context.currentDocument.content, type: 'improvement' },
-                    result: suggestionsResult
+      // Set up goal tracking
+      await agent.executeTool('set_goal', {
+        description: request,
+        priority: 1,
+        estimatedSteps: initialPlan.toolCalls?.length || 5
+      });
+      
+      executionLog.push({
+        iteration: 0,
+        phase: 'planning',
+        action: 'Initial plan created',
+        plan: initialPlan.plan,
+        toolsPlanned: initialPlan.toolCalls?.length || 0,
+        timestamp: new Date()
+      });
+      
+      // Step 2: Autonomous execution loop with self-monitoring
+      let continuousExecution = true;
+      let finalResponse = initialPlan.response;
+      let allToolExecutions: any[] = [];
+      let suggestedActions: string[] = [];
+      
+      while (continuousExecution && currentIteration < maxIterations && (Date.now() - startTime) < maxExecutionTime) {
+        currentIteration++;
+        console.log(`🔄 Autonomous iteration ${currentIteration}/${maxIterations}`);
+        
+        // Execute planned tools
+        const iterationExecutions: any[] = [];
+        
+        if (initialPlan.toolCalls && initialPlan.toolCalls.length > 0) {
+          for (const toolCall of initialPlan.toolCalls) {
+            try {
+              console.log(`🛠️  Executing tool: ${toolCall.tool}`);
+              const toolResult = await agent.executeTool(toolCall.tool, toolCall.params);
+              
+              iterationExecutions.push({
+                toolName: toolCall.tool,
+                parameters: toolCall.params,
+                result: toolResult,
+                reasoning: toolCall.reasoning
+              });
+              
+              totalToolsExecuted++;
+              
+              // AUTONOMOUS CHAINING: Intelligently chain additional tools based on results
+              if (toolResult.success) {
+                const chainedTools = await determineChainedTools(toolCall.tool, toolResult, context, agent);
+                
+                for (const chainedTool of chainedTools) {
+                  console.log(`🔗 Auto-chaining tool: ${chainedTool.tool}`);
+                  const chainedResult = await agent.executeTool(chainedTool.tool, chainedTool.params);
+                  
+                  iterationExecutions.push({
+                    toolName: chainedTool.tool,
+                    parameters: chainedTool.params,
+                    result: chainedResult,
+                    reasoning: `Auto-chained from ${toolCall.tool}: ${chainedTool.reasoning}`
                   });
+                  
+                  totalToolsExecuted++;
                 }
-              } catch (suggestError) {
-                console.log("Auto-suggestions failed, continuing with analysis");
               }
+              
+            } catch (toolError: any) {
+              iterationExecutions.push({
+                toolName: toolCall.tool,
+                parameters: toolCall.params,
+                result: { success: false, error: toolError.message },
+                reasoning: toolCall.reasoning
+              });
             }
-            
-          } catch (toolError: any) {
-            toolExecutions.push({
-              toolName: toolCall.tool,
-              parameters: toolCall.params,
-              result: { success: false, error: toolError.message }
-            });
           }
+        }
+        
+        allToolExecutions.push(...iterationExecutions);
+        
+        // Step 3: Self-reflection and adaptive planning
+        if (iterationExecutions.length > 0) {
+          console.log(`🧠 Performing self-reflection after ${iterationExecutions.length} tool executions`);
+          
+          const synthesis = await agent.processToolResults(request, iterationExecutions);
+          finalResponse = synthesis.synthesizedResponse;
+          suggestedActions = synthesis.suggestedActions;
+          
+          // Check if we should continue autonomous execution
+          const shouldContinue = await shouldContinueExecution(
+            iterationExecutions, 
+            synthesis, 
+            currentIteration, 
+            maxIterations,
+            agent
+          );
+          
+          if (!shouldContinue.continue) {
+            console.log(`🛑 Stopping autonomous execution: ${shouldContinue.reason}`);
+            continuousExecution = false;
+          } else if (synthesis.additionalToolCalls && synthesis.additionalToolCalls.length > 0) {
+            // Plan next iteration with additional tools
+            console.log(`📋 Planning next iteration with ${synthesis.additionalToolCalls.length} additional tools`);
+            initialPlan.toolCalls = synthesis.additionalToolCalls;
+          } else {
+            // No more tools suggested, execution complete
+            console.log(`✅ No additional tools suggested, execution complete`);
+            continuousExecution = false;
+          }
+          
+          executionLog.push({
+            iteration: currentIteration,
+            phase: 'execution',
+            action: `Executed ${iterationExecutions.length} tools`,
+            toolsExecuted: iterationExecutions.map(exec => exec.toolName),
+            successfulTools: iterationExecutions.filter(exec => exec.result.success).length,
+            failedTools: iterationExecutions.filter(exec => !exec.result.success).length,
+            shouldContinue: shouldContinue.continue,
+            reasoning: shouldContinue.reason,
+            timestamp: new Date()
+          });
+        } else {
+          // No tools to execute, stop
+          continuousExecution = false;
+        }
+        
+        // Safety check: prevent infinite loops
+        if (currentIteration >= maxIterations) {
+          console.log(`⚠️  Reached maximum iterations (${maxIterations}), stopping`);
+          break;
+        }
+        
+        if ((Date.now() - startTime) >= maxExecutionTime) {
+          console.log(`⏰ Reached maximum execution time (${maxExecutionTime}ms), stopping`);
+          break;
         }
       }
       
-      // Step 3: Process results intelligently if we executed any tools
-      let finalResponse = plan.response;
-      let suggestedActions: string[] = [];
-      let additionalToolCalls: any[] = [];
+      const totalDuration = Date.now() - startTime;
+      const successfulTools = allToolExecutions.filter(exec => exec.result.success).length;
+      const failedTools = allToolExecutions.filter(exec => !exec.result.success).length;
       
-      if (toolExecutions.length > 0) {
-        const synthesis = await agent.processToolResults(request, toolExecutions);
-        finalResponse = synthesis.synthesizedResponse;
-        suggestedActions = synthesis.suggestedActions;
-        additionalToolCalls = synthesis.additionalToolCalls || [];
+      console.log(`🎯 Autonomous execution completed:`);
+      console.log(`   Duration: ${totalDuration}ms`);
+      console.log(`   Iterations: ${currentIteration}`);
+      console.log(`   Tools executed: ${totalToolsExecuted}`);
+      console.log(`   Success rate: ${((successfulTools / totalToolsExecuted) * 100).toFixed(1)}%`);
+      
+      // Step 4: Final synthesis and learning
+      let finalSynthesis: any = null;
+      if (allToolExecutions.length > 0) {
+        finalSynthesis = await agent.processToolResults(request, allToolExecutions);
+        finalResponse = finalSynthesis.synthesizedResponse;
+        suggestedActions = finalSynthesis.suggestedActions;
       }
       
-      // Step 4: Return comprehensive result
-      res.json({
-        plan: plan.plan,
-        toolsExecuted: toolExecutions.map(exec => ({
+      // Update goal status
+      const activeGoals = await agent.executeTool('recall_memory', { key: 'current_goals' });
+      if (activeGoals.success && activeGoals.data?.value?.length > 0) {
+        await agent.executeTool('update_goal_status', {
+          goalId: activeGoals.data.value[0].id,
+          status: 'completed',
+          notes: `Completed with ${successfulTools}/${totalToolsExecuted} successful tool executions`
+        });
+      }
+      
+      // Store execution summary in memory for future learning
+      await agent.executeTool('store_memory', {
+        key: `execution_${Date.now()}`,
+        value: {
+          request,
+          duration: totalDuration,
+          iterations: currentIteration,
+          toolsExecuted: totalToolsExecuted,
+          successRate: successfulTools / totalToolsExecuted,
+          autonomyLevel
+        },
+        category: 'execution_history'
+      });
+      
+      // Step 5: Return comprehensive autonomous execution results
+      const responseData: any = {
+        plan: initialPlan.plan,
+        autonomousExecution: {
+          completed: true,
+          iterations: currentIteration,
+          duration: totalDuration,
+          autonomyLevel,
+          executionLog
+        },
+        toolsExecuted: allToolExecutions.map(exec => ({
           tool: exec.toolName,
           success: exec.result.success,
-          message: exec.result.message || (exec.result.success ? 'Executed successfully' : exec.result.error)
+          message: exec.result.message || (exec.result.success ? 'Executed successfully' : exec.result.error),
+          reasoning: exec.reasoning,
+          parameters: exec.parameters,
+          data: exec.result.data // Include actual tool data
         })),
         response: finalResponse,
         suggestedActions: suggestedActions,
-        additionalToolCalls: additionalToolCalls,
         executionDetails: {
-          toolsPlanned: plan.toolCalls?.length || 0,
-          toolsExecuted: toolExecutions.length,
-          successfulTools: toolExecutions.filter(exec => exec.result.success).length,
-          failedTools: toolExecutions.filter(exec => !exec.result.success).length
+          toolsPlanned: initialPlan.toolCalls?.length || 0,
+          toolsExecuted: totalToolsExecuted,
+          successfulTools,
+          failedTools,
+          successRate: ((successfulTools / totalToolsExecuted) * 100).toFixed(1) + '%',
+          averageToolTime: (totalDuration / totalToolsExecuted).toFixed(0) + 'ms'
+        },
+        performance: {
+          totalDuration,
+          iterationsCompleted: currentIteration,
+          maxIterationsAllowed: maxIterations,
+          executionEfficiency: ((successfulTools / totalToolsExecuted) * 100).toFixed(1) + '%',
+          autonomyLevel
         }
-      });
+      };
+
+      // Include research findings if available
+      if (finalSynthesis?.researchFindings) {
+        responseData.researchFindings = finalSynthesis.researchFindings;
+      }
+
+      // Include ALL tool results for comprehensive visibility
+      if (finalSynthesis?.allToolResults) {
+        responseData.allToolResults = finalSynthesis.allToolResults;
+      }
+
+      // Include continuous operation plan
+      if (finalSynthesis?.continuousOperationPlan) {
+        responseData.continuousOperationPlan = finalSynthesis.continuousOperationPlan;
+      }
+
+      // Enhanced user experience summary
+      responseData.userExperienceSummary = {
+        toolResultsVisible: Object.keys(finalSynthesis?.allToolResults || {}).length > 0,
+        researchVisible: !!finalSynthesis?.researchFindings,
+        actionableSteps: suggestedActions.length,
+        continuousOperationReady: !!finalSynthesis?.continuousOperationPlan,
+        overallExperience: assessUserExperience(finalSynthesis, allToolExecutions, suggestedActions)
+      };
+
+      res.json(responseData);
       
     } catch (error: any) {
-      console.error("Error in intelligent agent workflow:", error);
+      console.error("Error in autonomous agent workflow:", error);
       res.status(500).json({ 
-        message: "Error processing intelligent agent request", 
+        message: "Error processing autonomous agent request", 
         error: error.message,
-        fallbackResponse: "I encountered an issue while processing your request. Let me try a simpler approach - could you be more specific about what you'd like me to help you with?"
+        fallbackResponse: "I encountered an issue during autonomous execution. The system attempted to complete your request but ran into technical difficulties. Please try again with a more specific request or lower autonomy level."
       });
     }
   });
 
   return httpServer;
+}
+
+// Helper method for determining chained tools
+async function determineChainedTools(previousTool: string, result: any, context: any, agent: any): Promise<any[]> {
+  const chainedTools: any[] = [];
+  
+  // Smart chaining based on tool results and context
+  if (previousTool === 'web_search' && result.success && result.data?.results?.length > 0) {
+    const topResult = result.data.results[0];
+    if (topResult.url) {
+      chainedTools.push({
+        tool: 'scrape_webpage',
+        params: { url: topResult.url },
+        reasoning: 'Auto-scraping top search result for detailed content'
+      });
+      
+      // If we have a current project, also save the source
+      if (context?.currentProject) {
+        chainedTools.push({
+          tool: 'save_source',
+          params: {
+            projectId: context.currentProject.id,
+            type: 'url',
+            name: topResult.title || 'Web Source',
+            url: topResult.url,
+            content: '' // Will be filled by scrape result
+          },
+          reasoning: 'Auto-saving research source to current project'
+        });
+      }
+    }
+  }
+  
+  if (previousTool === 'scrape_webpage' && result.success && result.data?.content) {
+    // If we scraped content, analyze it
+    chainedTools.push({
+      tool: 'analyze_document_structure',
+      params: { text: result.data.content.substring(0, 5000) }, // First 5k chars
+      reasoning: 'Auto-analyzing scraped content structure'
+    });
+  }
+  
+  if (previousTool === 'create_document' && result.success && context?.currentProject) {
+    // If we created a document, analyze its style
+    chainedTools.push({
+      tool: 'analyze_writing_style',
+      params: { documentId: result.data.id },
+      reasoning: 'Auto-analyzing newly created document style'
+    });
+  }
+  
+  if (previousTool === 'analyze_writing_style' && result.success && context?.currentDocument) {
+    // If we analyzed style, get improvement suggestions
+    chainedTools.push({
+      tool: 'get_writing_suggestions',
+      params: { 
+        text: context.currentDocument.content,
+        type: 'improvement'
+      },
+      reasoning: 'Auto-generating improvement suggestions based on style analysis'
+    });
+  }
+  
+  return chainedTools;
+}
+
+// Helper method for determining if execution should continue
+async function shouldContinueExecution(
+  iterationExecutions: any[], 
+  synthesis: any, 
+  currentIteration: number, 
+  maxIterations: number,
+  agent: any
+): Promise<{ continue: boolean; reason: string }> {
+  
+  // Check success rate
+  const successRate = iterationExecutions.filter(exec => exec.result.success).length / iterationExecutions.length;
+  if (successRate < 0.3) {
+    return { continue: false, reason: 'Low success rate, stopping to prevent further failures' };
+  }
+  
+  // Check if we have more tools to execute
+  if (!synthesis.additionalToolCalls || synthesis.additionalToolCalls.length === 0) {
+    return { continue: false, reason: 'No additional tools suggested, task appears complete' };
+  }
+  
+  // Check iteration limit
+  if (currentIteration >= maxIterations - 1) {
+    return { continue: false, reason: 'Approaching maximum iteration limit' };
+  }
+  
+  // Check if we're making progress
+  if (currentIteration > 5) {
+    const recentExecutions = iterationExecutions.slice(-3);
+    const recentSuccessRate = recentExecutions.filter(exec => exec.result.success).length / recentExecutions.length;
+    if (recentSuccessRate < 0.5) {
+      return { continue: false, reason: 'Recent execution success rate declining' };
+    }
+  }
+  
+  return { continue: true, reason: 'Continuing autonomous execution with good progress' };
+}
+
+// Helper function to assess user experience quality
+function assessUserExperience(finalSynthesis: any, allToolExecutions: any[], suggestedActions: string[]): string {
+  const hasToolResults = finalSynthesis?.allToolResults && Object.keys(finalSynthesis.allToolResults).length > 0;
+  const hasResearchFindings = !!finalSynthesis?.researchFindings;
+  const hasActionableSteps = suggestedActions.length > 0;
+  const hasContinuousOperation = !!finalSynthesis?.continuousOperationPlan;
+  const toolsExecuted = allToolExecutions.length;
+  
+  if (hasToolResults && hasResearchFindings && hasActionableSteps && hasContinuousOperation) {
+    return 'EXCELLENT';
+  } else if (hasToolResults && (hasResearchFindings || hasActionableSteps)) {
+    return 'GOOD';
+  } else if (toolsExecuted > 0) {
+    return 'BASIC';
+  } else {
+    return 'POOR';
+  }
 }

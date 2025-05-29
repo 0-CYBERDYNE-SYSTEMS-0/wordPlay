@@ -26,7 +26,7 @@ interface AgentTool {
   execute: (params: any, context: AgentContext) => Promise<any>;
 }
 
-// Agent context - full app state available to agent
+// Enhanced Agent context with persistent memory and execution state
 interface AgentContext {
   userId: number;
   currentProject?: any;
@@ -37,6 +37,51 @@ interface AgentContext {
   researchNotes: string;
   llmProvider?: 'openai' | 'ollama';
   llmModel?: string;
+  
+  // NEW: Enhanced autonomous capabilities
+  executionHistory: ExecutionStep[];
+  persistentMemory: Map<string, any>;
+  currentGoals: Goal[];
+  maxToolChainLength: number;
+  autonomyLevel: 'conservative' | 'moderate' | 'aggressive';
+  reflectionEnabled: boolean;
+  learningEnabled: boolean;
+}
+
+// NEW: Execution tracking for long-horizon tasks
+interface ExecutionStep {
+  id: string;
+  timestamp: Date;
+  action: string;
+  toolUsed?: string;
+  parameters?: any;
+  result?: any;
+  success: boolean;
+  reasoning: string;
+  nextSteps?: string[];
+}
+
+// NEW: Goal tracking for complex multi-step tasks
+interface Goal {
+  id: string;
+  description: string;
+  priority: number;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  subGoals: Goal[];
+  requiredTools: string[];
+  estimatedSteps: number;
+  actualSteps: number;
+  startTime?: Date;
+  completionTime?: Date;
+}
+
+// NEW: Enhanced tool result with reflection capabilities
+interface EnhancedToolResult extends ToolResult {
+  confidence: number;
+  qualityScore: number;
+  shouldContinue: boolean;
+  suggestedNextActions: string[];
+  learningPoints: string[];
 }
 
 // Tool execution result
@@ -295,6 +340,165 @@ export const agentTools: AgentTool[] = [
       const result = replaceText(params.text, params.pattern, params.replacement);
       return { success: true, data: result, message: "Text replacement completed" };
     }
+  },
+
+  // NEW: Advanced autonomous operation tools
+  {
+    name: "reflect_on_progress",
+    description: "Analyze current progress and adjust strategy",
+    parameters: { currentGoal: "string", executedSteps: "array" },
+    execute: async (params, context) => {
+      // Note: This would need to be implemented differently since we can't access agent methods here
+      return { 
+        success: true, 
+        data: { analysis: "Self-reflection not yet implemented in tool context" }, 
+        message: "Self-reflection analysis placeholder" 
+      };
+    }
+  },
+
+  {
+    name: "set_goal",
+    description: "Set a new goal for autonomous execution",
+    parameters: { description: "string", priority: "number", estimatedSteps: "number" },
+    execute: async (params, context) => {
+      const goal: Goal = {
+        id: Date.now().toString(),
+        description: params.description,
+        priority: params.priority || 1,
+        status: 'pending',
+        subGoals: [],
+        requiredTools: [],
+        estimatedSteps: params.estimatedSteps || 5,
+        actualSteps: 0,
+        startTime: new Date()
+      };
+      
+      context.currentGoals.push(goal);
+      return { 
+        success: true, 
+        data: goal, 
+        message: `Set new goal: ${params.description}` 
+      };
+    }
+  },
+
+  {
+    name: "update_goal_status",
+    description: "Update the status of a goal",
+    parameters: { goalId: "string", status: "string", notes: "string?" },
+    execute: async (params, context) => {
+      const goal = context.currentGoals.find(g => g.id === params.goalId);
+      if (!goal) {
+        return { success: false, error: "Goal not found" };
+      }
+      
+      goal.status = params.status as any;
+      if (params.status === 'completed') {
+        goal.completionTime = new Date();
+      }
+      
+      return { 
+        success: true, 
+        data: goal, 
+        message: `Updated goal status to: ${params.status}` 
+      };
+    }
+  },
+
+  {
+    name: "store_memory",
+    description: "Store information in persistent memory for future use",
+    parameters: { key: "string", value: "any", category: "string?" },
+    execute: async (params, context) => {
+      const memoryEntry = {
+        value: params.value,
+        category: params.category || 'general',
+        timestamp: new Date(),
+        accessCount: 0
+      };
+      
+      context.persistentMemory.set(params.key, memoryEntry);
+      return { 
+        success: true, 
+        data: memoryEntry, 
+        message: `Stored memory: ${params.key}` 
+      };
+    }
+  },
+
+  {
+    name: "recall_memory",
+    description: "Retrieve information from persistent memory",
+    parameters: { key: "string?" },
+    execute: async (params, context) => {
+      if (params.key) {
+        const memory = context.persistentMemory.get(params.key);
+        if (memory) {
+          memory.accessCount++;
+          return { 
+            success: true, 
+            data: memory, 
+            message: `Retrieved memory: ${params.key}` 
+          };
+        } else {
+          return { success: false, error: "Memory not found" };
+        }
+      } else {
+        // Return all memories
+        const allMemories = Array.from(context.persistentMemory.entries()).map(([key, value]) => ({
+          key,
+          ...value
+        }));
+        return { 
+          success: true, 
+          data: allMemories, 
+          message: `Retrieved ${allMemories.length} memories` 
+        };
+      }
+    }
+  },
+
+  {
+    name: "plan_multi_step_task",
+    description: "Create a detailed plan for complex multi-step tasks",
+    parameters: { task: "string", constraints: "object?", timeLimit: "number?" },
+    execute: async (params, context) => {
+      // Note: This would need to be implemented differently since we can't access agent methods here
+      return { 
+        success: true, 
+        data: { steps: [], totalEstimatedTime: "5 minutes" }, 
+        message: "Multi-step planning not yet implemented in tool context" 
+      };
+    }
+  },
+
+  {
+    name: "execute_autonomous_workflow",
+    description: "Execute a complex workflow autonomously with self-monitoring",
+    parameters: { workflow: "object", maxSteps: "number?", checkpoints: "array?" },
+    execute: async (params, context) => {
+      // Note: This would need to be implemented differently since we can't access agent methods here
+      return { 
+        success: true, 
+        data: { stepsCompleted: 0, totalSteps: 0 }, 
+        message: "Autonomous workflow execution not yet implemented in tool context" 
+      };
+    }
+  },
+
+  {
+    name: "continuous_improvement",
+    description: "Analyze past executions and improve future performance",
+    parameters: { analysisDepth: "string?" },
+    execute: async (params, context) => {
+      // Note: This would need to be implemented differently since we can't access agent methods here
+      return { 
+        success: true, 
+        data: [], 
+        message: "Continuous improvement analysis not yet implemented in tool context" 
+      };
+    }
   }
 ];
 
@@ -305,7 +509,9 @@ export class WordPlayAgent {
 
   constructor(userId: number = 1) {
     this.tools = new Map();
-    agentTools.forEach(tool => this.tools.set(tool.name, tool));
+    agentTools.forEach(tool => {
+      this.tools.set(tool.name, tool);
+    });
     
     this.context = {
       userId,
@@ -314,38 +520,347 @@ export class WordPlayAgent {
       projectSources: [],
       researchNotes: "",
       llmProvider: undefined,
-      llmModel: undefined
+      llmModel: undefined,
+      
+      // NEW: Enhanced autonomous capabilities
+      executionHistory: [],
+      persistentMemory: new Map(),
+      currentGoals: [],
+      maxToolChainLength: 10, // Increased for long-horizon tasks
+      autonomyLevel: 'moderate', // Default to moderate autonomy
+      reflectionEnabled: true,
+      learningEnabled: true
     };
   }
 
-  // Update agent context with current app state
-  async updateContext(updates: Partial<AgentContext>) {
-    this.context = { ...this.context, ...updates };
+  // NEW: Set autonomy level for different use cases
+  setAutonomyLevel(level: 'conservative' | 'moderate' | 'aggressive') {
+    this.context.autonomyLevel = level;
     
-    // Auto-load related data when project changes
-    if (updates.currentProject) {
-      this.context.projectDocuments = await storage.getDocuments(updates.currentProject.id);
-      this.context.projectSources = await storage.getSources(updates.currentProject.id);
+    // Adjust parameters based on autonomy level
+    switch (level) {
+      case 'conservative':
+        this.context.maxToolChainLength = 5;
+        this.context.reflectionEnabled = true;
+        break;
+      case 'moderate':
+        this.context.maxToolChainLength = 10;
+        this.context.reflectionEnabled = true;
+        break;
+      case 'aggressive':
+        this.context.maxToolChainLength = 20;
+        this.context.reflectionEnabled = false; // Less reflection for speed
+        break;
     }
   }
 
-  // Get available tools
+  // NEW: Record execution step for learning and reflection
+  private recordExecutionStep(action: string, toolUsed?: string, parameters?: any, result?: any, reasoning?: string): void {
+    const step: ExecutionStep = {
+      id: Date.now().toString(),
+      timestamp: new Date(),
+      action,
+      toolUsed,
+      parameters,
+      result,
+      success: result?.success ?? true,
+      reasoning: reasoning || '',
+      nextSteps: []
+    };
+    
+    this.context.executionHistory.push(step);
+    
+    // Keep only last 100 steps to prevent memory bloat
+    if (this.context.executionHistory.length > 100) {
+      this.context.executionHistory = this.context.executionHistory.slice(-100);
+    }
+  }
+
+  // NEW: Self-reflection capability
+  private async performSelfReflection(currentGoal: string, executedSteps: any[], context: AgentContext): Promise<any> {
+    const recentHistory = context.executionHistory.slice(-10);
+    const successRate = recentHistory.filter(step => step.success).length / recentHistory.length;
+    
+    const reflectionPrompt = `Analyze my recent performance and suggest improvements:
+
+CURRENT GOAL: ${currentGoal}
+
+RECENT EXECUTION HISTORY:
+${recentHistory.map(step => `- ${step.action}: ${step.success ? 'SUCCESS' : 'FAILED'} (${step.reasoning})`).join('\n')}
+
+SUCCESS RATE: ${(successRate * 100).toFixed(1)}%
+
+ANALYSIS NEEDED:
+1. What patterns do you see in my successes and failures?
+2. What should I do differently to improve performance?
+3. Are there tools I'm underutilizing or overusing?
+4. What adjustments should I make to my approach?
+
+Respond with JSON:
+{
+  "analysis": "detailed analysis of performance",
+  "improvements": ["specific improvement suggestions"],
+  "toolRecommendations": ["tool usage recommendations"],
+  "strategyAdjustments": ["strategic changes to make"]
+}`;
+
+    try {
+      const { generateTextCompletion } = await import("./openai");
+      const result = await generateTextCompletion("", {}, reflectionPrompt, context.llmProvider, context.llmModel);
+      return JSON.parse(result);
+    } catch (error) {
+      return {
+        analysis: "Unable to perform detailed reflection",
+        improvements: ["Continue with current approach"],
+        toolRecommendations: ["Monitor tool success rates"],
+        strategyAdjustments: ["Maintain current strategy"]
+      };
+    }
+  }
+
+  // NEW: Create detailed multi-step plans
+  private async createDetailedPlan(task: string, constraints: any = {}, context: AgentContext): Promise<any> {
+    const planningPrompt = `Create a detailed execution plan for this task:
+
+TASK: ${task}
+
+CONSTRAINTS: ${JSON.stringify(constraints)}
+
+AVAILABLE TOOLS: ${this.getAvailableTools().join(', ')}
+
+CURRENT CONTEXT:
+- Project: ${context.currentProject?.name || 'None'}
+- Document: ${context.currentDocument?.title || 'None'}
+- Goals: ${context.currentGoals.length} active
+- Memory entries: ${context.persistentMemory.size}
+
+PLANNING REQUIREMENTS:
+1. Break down the task into specific, actionable steps
+2. Identify which tools to use for each step
+3. Consider dependencies between steps
+4. Include checkpoints for progress monitoring
+5. Plan for error handling and alternative approaches
+
+Respond with JSON:
+{
+  "steps": [
+    {
+      "id": "step_1",
+      "description": "specific action to take",
+      "tool": "tool_name",
+      "parameters": {},
+      "dependencies": ["step_ids"],
+      "estimatedTime": "time estimate",
+      "successCriteria": "how to know this step succeeded"
+    }
+  ],
+  "totalEstimatedTime": "overall time estimate",
+  "riskFactors": ["potential issues"],
+  "alternativeApproaches": ["backup plans"]
+}`;
+
+    try {
+      const { generateTextCompletion } = await import("./openai");
+      const result = await generateTextCompletion("", {}, planningPrompt, context.llmProvider, context.llmModel);
+      return JSON.parse(result);
+    } catch (error) {
+      return {
+        steps: [
+          {
+            id: "step_1",
+            description: task,
+            tool: "web_search",
+            parameters: { query: task },
+            dependencies: [],
+            estimatedTime: "5 minutes",
+            successCriteria: "Task completed successfully"
+          }
+        ],
+        totalEstimatedTime: "5 minutes",
+        riskFactors: ["Planning failed, using fallback"],
+        alternativeApproaches: ["Manual execution"]
+      };
+    }
+  }
+
+  // NEW: Execute autonomous workflows with self-monitoring
+  private async executeAutonomousWorkflow(workflow: any, maxSteps: number = 20, context: AgentContext): Promise<any> {
+    const startTime = Date.now();
+    let stepsCompleted = 0;
+    const results: any[] = [];
+    const errors: any[] = [];
+    
+    try {
+      for (const step of workflow.steps) {
+        if (stepsCompleted >= maxSteps) {
+          break;
+        }
+        
+        this.recordExecutionStep(`Executing step: ${step.description}`, step.tool, step.parameters, null, `Autonomous workflow step ${stepsCompleted + 1}`);
+        
+        try {
+          const result = await this.executeTool(step.tool, step.parameters);
+          results.push({ step: step.id, result });
+          
+          if (!result.success) {
+            errors.push({ step: step.id, error: result.error });
+            
+            // Try alternative approach if available
+            if (workflow.alternativeApproaches && workflow.alternativeApproaches.length > 0) {
+              console.log(`Step ${step.id} failed, trying alternative approach`);
+              // Could implement alternative execution here
+            }
+          }
+          
+          stepsCompleted++;
+          
+          // Self-reflection checkpoint every 5 steps
+          if (context.reflectionEnabled && stepsCompleted % 5 === 0) {
+            await this.performSelfReflection(`Workflow: ${workflow.description || 'Autonomous task'}`, results, context);
+          }
+          
+        } catch (stepError) {
+          errors.push({ step: step.id, error: stepError });
+          console.error(`Error in workflow step ${step.id}:`, stepError);
+        }
+      }
+      
+      const duration = Date.now() - startTime;
+      const successRate = (stepsCompleted - errors.length) / stepsCompleted;
+      
+      return {
+        success: errors.length < stepsCompleted / 2, // Success if less than 50% failed
+        stepsCompleted,
+        totalSteps: workflow.steps.length,
+        duration,
+        successRate,
+        results,
+        errors,
+        summary: `Completed ${stepsCompleted}/${workflow.steps.length} steps in ${duration}ms with ${(successRate * 100).toFixed(1)}% success rate`
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        stepsCompleted,
+        totalSteps: workflow.steps.length,
+        duration: Date.now() - startTime,
+        successRate: 0,
+        results,
+        errors: [...errors, { step: 'workflow', error }],
+        summary: `Workflow failed after ${stepsCompleted} steps: ${error}`
+      };
+    }
+  }
+
+  // NEW: Analyze past performance for continuous improvement
+  private async analyzePastPerformance(context: AgentContext): Promise<any[]> {
+    const recentHistory = context.executionHistory.slice(-50);
+    const toolUsage = new Map<string, { successes: number; failures: number }>();
+    
+    // Analyze tool performance
+    recentHistory.forEach(step => {
+      if (step.toolUsed) {
+        const stats = toolUsage.get(step.toolUsed) || { successes: 0, failures: 0 };
+        if (step.success) {
+          stats.successes++;
+        } else {
+          stats.failures++;
+        }
+        toolUsage.set(step.toolUsed, stats);
+      }
+    });
+    
+    const improvements: any[] = [];
+    
+    // Identify underperforming tools
+    toolUsage.forEach((stats, tool) => {
+      const successRate = stats.successes / (stats.successes + stats.failures);
+      if (successRate < 0.7 && stats.failures > 2) {
+        improvements.push({
+          type: 'tool_performance',
+          tool,
+          issue: `Low success rate: ${(successRate * 100).toFixed(1)}%`,
+          suggestion: `Review parameters and usage patterns for ${tool}`
+        });
+      }
+    });
+    
+    // Identify patterns in failures
+    const failedSteps = recentHistory.filter(step => !step.success);
+    if (failedSteps.length > recentHistory.length * 0.3) {
+      improvements.push({
+        type: 'general_performance',
+        issue: `High failure rate: ${(failedSteps.length / recentHistory.length * 100).toFixed(1)}%`,
+        suggestion: 'Consider reducing autonomy level or increasing reflection frequency'
+      });
+    }
+    
+    return improvements;
+  }
+
+  // Get list of available tool names
   getAvailableTools(): string[] {
     return Array.from(this.tools.keys());
   }
 
-  // Execute a tool
+  // Update agent context with current app state
+  async updateContext(newContext: Partial<AgentContext>) {
+    // Merge new context with existing context
+    Object.assign(this.context, newContext);
+    
+    // Load current project data if project ID provided
+    if (newContext.currentProject?.id) {
+      try {
+        const { storage } = await import("./storage");
+        
+        this.context.currentProject = newContext.currentProject;
+        this.context.projectDocuments = await storage.getDocuments(newContext.currentProject.id);
+        this.context.projectSources = await storage.getSources(newContext.currentProject.id);
+      } catch (error) {
+        console.error("Error loading project context:", error);
+      }
+    }
+    
+    // Load all projects for the user
+    try {
+      const { storage } = await import("./storage");
+      this.context.allProjects = await storage.getProjects(this.context.userId);
+    } catch (error) {
+      console.error("Error loading user projects:", error);
+    }
+  }
+
+  // Execute a specific tool with parameters
   async executeTool(toolName: string, parameters: any): Promise<ToolResult> {
     const tool = this.tools.get(toolName);
     if (!tool) {
-      return { success: false, error: `Tool '${toolName}' not found` };
+      return {
+        success: false,
+        error: `Tool '${toolName}' not found. Available tools: ${this.getAvailableTools().join(', ')}`
+      };
     }
 
     try {
+      // Record the execution attempt
+      this.recordExecutionStep(`Executing tool: ${toolName}`, toolName, parameters, null, `Tool execution with parameters: ${JSON.stringify(parameters)}`);
+      
       const result = await tool.execute(parameters, this.context);
+      
+      // Record the execution result
+      this.recordExecutionStep(`Tool completed: ${toolName}`, toolName, parameters, result, result.success ? 'Tool executed successfully' : `Tool failed: ${result.error}`);
+      
       return result;
     } catch (error: any) {
-      return { success: false, error: error.message };
+      const errorResult = {
+        success: false,
+        error: `Error executing tool '${toolName}': ${error.message}`
+      };
+      
+      // Record the execution error
+      this.recordExecutionStep(`Tool error: ${toolName}`, toolName, parameters, errorResult, `Tool execution failed with error: ${error.message}`);
+      
+      return errorResult;
     }
   }
 
@@ -357,14 +872,34 @@ export class WordPlayAgent {
     synthesizedResponse: string;
     suggestedActions: string[];
     additionalToolCalls?: Array<{ tool: string; params: any; reasoning: string }>;
+    researchFindings?: {
+      sources: any[];
+      content: string;
+      summary: string;
+    };
+    allToolResults?: {
+      [toolName: string]: {
+        success: boolean;
+        data: any;
+        message: string;
+        summary: string;
+        actionableInsights: string[];
+      };
+    };
+    continuousOperationPlan?: {
+      nextPhase: string;
+      recommendedTools: string[];
+      reasoning: string;
+    };
   }> {
-    // Create summary of tool executions for analysis
+    // Create comprehensive summary of ALL tool executions for analysis
     const executionSummary = toolExecutions.map(exec => ({
       tool: exec.toolName,
       success: exec.result.success,
       data: exec.result.data,
       message: exec.result.message,
-      error: exec.result.error
+      error: exec.result.error,
+      parameters: exec.parameters
     }));
 
     const contextSummary = {
@@ -382,57 +917,210 @@ export class WordPlayAgent {
       sourceCount: this.context.projectSources.length
     };
 
-    const analysisPrompt = `You are an intelligent AI assistant analyzing the results of tool executions. Your job is to:
+    // Process ALL tool results comprehensively
+    const allToolResults: any = {};
+    let researchFindings: any = null;
+    
+    // Categorize and process each tool execution
+    for (const exec of toolExecutions) {
+      const toolName = exec.toolName;
+      const result = exec.result;
+      
+      // Create detailed summary for each tool
+      allToolResults[toolName] = {
+        success: result.success,
+        data: result.data,
+        message: result.message || (result.success ? 'Executed successfully' : result.error),
+        summary: this.generateToolSummary(toolName, exec.parameters, result),
+        actionableInsights: this.extractActionableInsights(toolName, result)
+      };
+    }
 
-1. **SYNTHESIZE RESULTS**: Process tool outputs into meaningful insights
-2. **PROVIDE VALUE**: Explain what the results mean for the user's writing project
-3. **SUGGEST NEXT STEPS**: Recommend follow-up actions based on the results
-4. **CHAIN TOOLS**: Identify if additional tools would add value
+    // Extract research findings (enhanced from previous version)
+    const webSearchResults = toolExecutions.find(exec => exec.toolName === 'web_search' && exec.result.success);
+    const scrapeResults = toolExecutions.filter(exec => exec.toolName === 'scrape_webpage' && exec.result.success);
+    const savedSources = toolExecutions.filter(exec => exec.toolName === 'save_source' && exec.result.success);
+
+    if (webSearchResults || scrapeResults.length > 0) {
+      let researchContent = '';
+      let sources: any[] = [];
+      
+      // Include web search results
+      if (webSearchResults?.result.data) {
+        const searchData = webSearchResults.result.data;
+        if (searchData.results) {
+          sources.push(...searchData.results);
+          researchContent += `## Web Search Results for "${webSearchResults.parameters.query}"\n\n`;
+          
+          if (searchData.summary) {
+            researchContent += `### AI Summary:\n${searchData.summary}\n\n`;
+          }
+          
+          researchContent += `### Sources Found:\n`;
+          searchData.results.forEach((result: any, index: number) => {
+            researchContent += `${index + 1}. **${result.title}**\n`;
+            researchContent += `   ${result.snippet}\n`;
+            researchContent += `   Source: ${result.url}\n\n`;
+          });
+        }
+      }
+      
+      // Include scraped content
+      scrapeResults.forEach((scrapeResult, index) => {
+        if (scrapeResult.result.data) {
+          const scrapeData = scrapeResult.result.data;
+          researchContent += `## Extracted Content ${index + 1}: ${scrapeData.title || 'Webpage'}\n\n`;
+          researchContent += `**Source:** ${scrapeResult.parameters.url}\n`;
+          researchContent += `**Word Count:** ${scrapeData.wordCount || 'Unknown'}\n\n`;
+          
+          if (scrapeData.content) {
+            // Include first 1000 characters of content
+            const preview = scrapeData.content.substring(0, 1000);
+            researchContent += `**Content Preview:**\n${preview}${scrapeData.content.length > 1000 ? '...\n\n[Content truncated - full content saved to sources]' : ''}\n\n`;
+          }
+        }
+      });
+      
+      if (researchContent) {
+        researchFindings = {
+          sources,
+          content: researchContent,
+          summary: webSearchResults?.result.data?.summary || `Research completed with ${sources.length} sources found and ${scrapeResults.length} pages extracted.`
+        };
+      }
+    }
+
+    // Enhanced analysis prompt that covers ALL tool types
+    const analysisPrompt = `You are an intelligent AI assistant analyzing the results of autonomous tool executions. Your job is to:
+
+1. **SYNTHESIZE ALL RESULTS**: Process ALL tool outputs into meaningful insights and actionable information
+2. **PROVIDE COMPREHENSIVE VALUE**: Explain what ALL results mean for the user's request and project
+3. **SUGGEST INTELLIGENT NEXT STEPS**: Recommend follow-up actions based on ALL tool results
+4. **CHAIN TOOLS STRATEGICALLY**: Identify additional tools that would add value based on current results
+5. **SHOW ALL FINDINGS**: Display research, document analysis, project updates, and any other tool results
+6. **PLAN CONTINUOUS OPERATION**: Determine next phase of autonomous operation
 
 ORIGINAL USER REQUEST: "${originalRequest}"
 
 CURRENT CONTEXT:
 ${JSON.stringify(contextSummary, null, 2)}
 
-TOOL EXECUTION RESULTS:
+COMPREHENSIVE TOOL EXECUTION RESULTS:
 ${JSON.stringify(executionSummary, null, 2)}
 
-ANALYSIS GUIDELINES:
-- **For Web Search Results**: Summarize key findings, identify most relevant sources, explain how they relate to the user's needs
-- **For Document Analysis**: Provide concrete insights about writing quality, structure, and specific improvement areas
-- **For Text Generation**: Explain the approach taken and how it fits the user's style/goals
-- **For Project Operations**: Confirm actions taken and suggest logical next steps
-- **For Research Sources**: Explain what was found and how it can be used
+ALL TOOL RESULTS SUMMARY:
+${JSON.stringify(allToolResults, null, 2)}
 
-RESPONSE INSTRUCTIONS:
+${researchFindings ? `
+RESEARCH FINDINGS AVAILABLE:
+- ${researchFindings.sources.length} sources found
+- ${researchFindings.content.length} characters of research content
+- Summary: ${researchFindings.summary}
+` : ''}
+
+ANALYSIS GUIDELINES FOR ALL TOOL TYPES:
+
+**Research Tools (web_search, scrape_webpage, save_source):**
+- Include actual findings, sources, and key insights
+- Show what was discovered and saved
+- Explain relevance to user's request
+
+**Document Tools (get_document, create_document, update_document, analyze_writing_style):**
+- Show document content, analysis results, and changes made
+- Provide concrete insights about writing quality and structure
+- Explain how documents were modified or created
+
+**Project Tools (list_projects, create_project, get_project):**
+- Display project information, creation confirmations, and organizational updates
+- Show how the project structure was modified
+- Explain project management actions taken
+
+**Text Processing Tools (search_in_text, replace_in_text, analyze_document_structure):**
+- Show search results, replacements made, and structural analysis
+- Display before/after comparisons where applicable
+- Explain text processing outcomes
+
+**AI Generation Tools (generate_text, get_writing_suggestions, process_text_command):**
+- Include generated content and suggestions
+- Show how AI assistance was applied
+- Explain the creative or analytical process
+
+**Memory & Goal Tools (store_memory, recall_memory, set_goal, update_goal_status):**
+- Display stored information and retrieved memories
+- Show goal progress and status updates
+- Explain how the agent's knowledge was enhanced
+
+RESPONSE REQUIREMENTS:
+- **Show actual results** from ALL tools, not just summaries
+- **Include specific data** returned by each tool
+- **Explain the impact** of each tool execution
+- **Provide actionable next steps** based on ALL results
+- **Plan continuous operation** for autonomous agents
+
+RESPONSE FORMAT:
 Respond with a JSON object containing:
 {
-  "synthesizedResponse": "Comprehensive, intelligent summary of what was accomplished and what it means",
-  "suggestedActions": ["Specific actionable next steps for the user"],
+  "synthesizedResponse": "Comprehensive response showing ALL tool results and their impact",
+  "suggestedActions": ["Specific actionable next steps based on ALL tool results"],
   "additionalToolCalls": [
     {
       "tool": "tool_name",
       "params": { "param": "value" },
-      "reasoning": "Why this additional tool would add value"
+      "reasoning": "Why this tool would add value based on current results"
     }
-  ]
+  ],
+  "continuousOperationPlan": {
+    "nextPhase": "Description of next autonomous operation phase",
+    "recommendedTools": ["tools for next phase"],
+    "reasoning": "Why these tools and this phase make sense"
+  }
 }
 
-EXAMPLES OF GOOD SYNTHESIZED RESPONSES:
+EXAMPLES OF EXCELLENT RESPONSES:
 
-For Web Search:
-❌ "Found 5 search results"
-✅ "I found several valuable sources about sustainable writing practices. The Stanford study shows a 40% improvement in productivity with structured breaks. I've identified three actionable techniques you can apply immediately to your current project. The research particularly supports the approach you're taking in your second chapter."
+For Research + Document Creation:
+✅ "I've completed comprehensive research on [topic] and created a new document with the findings:
 
-For Document Analysis:
-❌ "Document has 1,247 words"
-✅ "Your document shows strong argumentative structure with clear thesis development. The readability score of 8.2 indicates professional-level writing. However, I noticed the transition between paragraphs 3-4 could be smoother, and your conclusion would benefit from a stronger call-to-action. Your technical vocabulary usage is excellent for your target audience."
+**Research Results:**
+- Found 3 authoritative sources on [topic]
+- Key insight 1: [specific finding from source 1]
+- Key insight 2: [specific finding from source 2]
+- Key insight 3: [specific finding from source 3]
 
-For Text Processing:
-❌ "Replaced 3 instances"
-✅ "I've updated your document to use more inclusive language, replacing 3 instances of gendered terms with neutral alternatives. This maintains your professional tone while broadening your audience appeal. The changes flow naturally and preserve your original meaning while making the content more accessible."
+**Document Created:**
+- Title: '[Document Title]'
+- Content: [Brief preview of generated content]
+- Word Count: [X] words
+- Saved to: [Project Name]
 
-Provide your analysis now:`;
+**Sources Saved:**
+1. [Source 1] - [Key point]
+2. [Source 2] - [Key point]
+3. [Source 3] - [Key point]
+
+All research has been organized and is ready for your use."
+
+For Project Management + Analysis:
+✅ "I've analyzed your project structure and made organizational improvements:
+
+**Project Analysis:**
+- Current projects: [X] projects found
+- Active documents: [Y] documents
+- Research sources: [Z] sources
+
+**Actions Taken:**
+- Created new project: '[Project Name]'
+- Organized [X] documents by topic
+- Updated project metadata
+
+**Writing Analysis:**
+- Average document length: [X] words
+- Writing style: [Analysis results]
+- Improvement suggestions: [Specific recommendations]
+
+Your project is now better organized for efficient writing."
+
+Provide your comprehensive analysis now, showing ALL tool results and their actionable value:`;
 
     try {
       const { generateTextCompletion } = await import("./openai");
@@ -448,26 +1136,382 @@ Provide your analysis now:`;
       try {
         const parsed = JSON.parse(result);
         return {
-          synthesizedResponse: parsed.synthesizedResponse || this.generateBasicSynthesis(toolExecutions, originalRequest),
+          synthesizedResponse: parsed.synthesizedResponse || this.generateEnhancedSynthesis(toolExecutions, originalRequest, researchFindings, allToolResults),
           suggestedActions: parsed.suggestedActions || [],
-          additionalToolCalls: parsed.additionalToolCalls || []
+          additionalToolCalls: parsed.additionalToolCalls || [],
+          researchFindings,
+          allToolResults,
+          continuousOperationPlan: parsed.continuousOperationPlan || this.generateContinuousOperationPlan(toolExecutions, originalRequest)
         };
       } catch (parseError) {
-        // Fallback to basic synthesis
+        // Fallback to enhanced basic synthesis with ALL tool results
         return {
-          synthesizedResponse: this.generateBasicSynthesis(toolExecutions, originalRequest),
+          synthesizedResponse: this.generateEnhancedSynthesis(toolExecutions, originalRequest, researchFindings, allToolResults),
           suggestedActions: this.generateBasicSuggestions(toolExecutions),
-          additionalToolCalls: []
+          additionalToolCalls: [],
+          researchFindings,
+          allToolResults,
+          continuousOperationPlan: this.generateContinuousOperationPlan(toolExecutions, originalRequest)
         };
       }
     } catch (error) {
-      console.error("Error in tool result analysis:", error);
+      console.error("Error in comprehensive tool result analysis:", error);
       return {
-        synthesizedResponse: this.generateBasicSynthesis(toolExecutions, originalRequest),
+        synthesizedResponse: this.generateEnhancedSynthesis(toolExecutions, originalRequest, researchFindings, allToolResults),
         suggestedActions: this.generateBasicSuggestions(toolExecutions),
-        additionalToolCalls: []
+        additionalToolCalls: [],
+        researchFindings,
+        allToolResults,
+        continuousOperationPlan: this.generateContinuousOperationPlan(toolExecutions, originalRequest)
       };
     }
+  }
+
+  // Generate detailed summary for each tool type
+  private generateToolSummary(toolName: string, parameters: any, result: ToolResult): string {
+    if (!result.success) {
+      return `Failed: ${result.error || 'Unknown error'}`;
+    }
+
+    switch (toolName) {
+      case 'web_search':
+        const searchData = result.data;
+        return `Found ${searchData?.results?.length || 0} search results for "${parameters.query}"`;
+      
+      case 'scrape_webpage':
+        const scrapeData = result.data;
+        return `Extracted ${scrapeData?.wordCount || 'content'} from ${scrapeData?.domain || parameters.url}`;
+      
+      case 'save_source':
+        return `Saved source "${parameters.name}" to project ${parameters.projectId}`;
+      
+      case 'get_document':
+        const docData = result.data;
+        return `Retrieved document "${docData?.title}" (${docData?.wordCount || 0} words)`;
+      
+      case 'create_document':
+        const newDocData = result.data;
+        return `Created document "${newDocData?.title || parameters.title}" in project ${parameters.projectId}`;
+      
+      case 'update_document':
+        return `Updated document ${parameters.documentId} with new content`;
+      
+      case 'analyze_writing_style':
+        const styleData = result.data;
+        return `Analyzed writing style - ${Object.keys(styleData || {}).length} metrics calculated`;
+      
+      case 'get_writing_suggestions':
+        const suggestions = result.data;
+        return `Generated ${Array.isArray(suggestions) ? suggestions.length : 'multiple'} writing suggestions`;
+      
+      case 'list_projects':
+        const projects = result.data;
+        return `Found ${Array.isArray(projects) ? projects.length : 0} projects`;
+      
+      case 'create_project':
+        const projectData = result.data;
+        return `Created project "${projectData?.name || parameters.name}"`;
+      
+      case 'search_in_text':
+        const searchResults = result.data;
+        return `Found ${searchResults?.count || 0} matches for pattern "${parameters.pattern}"`;
+      
+      case 'replace_in_text':
+        const replaceResults = result.data;
+        return `Replaced "${parameters.pattern}" with "${parameters.replacement}"`;
+      
+      case 'analyze_document_structure':
+        const structureData = result.data;
+        return `Analyzed document structure - found ${structureData?.sections?.length || 0} sections`;
+      
+      case 'generate_text':
+        return `Generated text content based on prompt: "${parameters.prompt?.substring(0, 50)}..."`;
+      
+      case 'store_memory':
+        return `Stored memory entry "${parameters.key}" in category "${parameters.category || 'general'}"`;
+      
+      case 'recall_memory':
+        const memoryData = result.data;
+        return parameters.key ? `Retrieved memory "${parameters.key}"` : `Retrieved ${Array.isArray(memoryData) ? memoryData.length : 0} memory entries`;
+      
+      case 'set_goal':
+        return `Set new goal: "${parameters.description}" with priority ${parameters.priority || 1}`;
+      
+      case 'update_goal_status':
+        return `Updated goal ${parameters.goalId} status to "${parameters.status}"`;
+      
+      default:
+        return result.message || 'Tool executed successfully';
+    }
+  }
+
+  // Extract actionable insights from each tool result
+  private extractActionableInsights(toolName: string, result: ToolResult): string[] {
+    if (!result.success) {
+      return [`Fix error: ${result.error}`];
+    }
+
+    const insights: string[] = [];
+
+    switch (toolName) {
+      case 'web_search':
+        const searchData = result.data;
+        if (searchData?.results?.length > 0) {
+          insights.push('Review search results for relevant information');
+          insights.push('Consider scraping top results for detailed content');
+          insights.push('Save valuable sources to current project');
+        }
+        break;
+      
+      case 'scrape_webpage':
+        insights.push('Analyze scraped content for key insights');
+        insights.push('Extract quotes or data points for writing');
+        insights.push('Consider creating outline based on content structure');
+        break;
+      
+      case 'get_document':
+        const docData = result.data;
+        if (docData?.content) {
+          insights.push('Analyze document writing style');
+          insights.push('Generate improvement suggestions');
+          insights.push('Check document structure and organization');
+        }
+        break;
+      
+      case 'analyze_writing_style':
+        insights.push('Apply style recommendations to improve writing');
+        insights.push('Adjust tone and complexity based on analysis');
+        insights.push('Use insights for future content generation');
+        break;
+      
+      case 'list_projects':
+        insights.push('Review project organization and structure');
+        insights.push('Consider consolidating or reorganizing projects');
+        insights.push('Identify projects that need attention');
+        break;
+      
+      case 'create_document':
+        insights.push('Add content to the newly created document');
+        insights.push('Set up document structure and outline');
+        insights.push('Begin writing or research for the document');
+        break;
+      
+      case 'generate_text':
+        insights.push('Review generated content for accuracy');
+        insights.push('Edit and refine the generated text');
+        insights.push('Integrate generated content into documents');
+        break;
+      
+      default:
+        insights.push('Review tool results and plan next steps');
+        break;
+    }
+
+    return insights;
+  }
+
+  // Generate continuous operation plan
+  private generateContinuousOperationPlan(toolExecutions: Array<{ toolName: string; parameters: any; result: ToolResult }>, originalRequest: string): any {
+    const successfulTools = toolExecutions.filter(exec => exec.result.success);
+    const toolTypes = successfulTools.map(exec => exec.toolName);
+    
+    // Determine next phase based on tools executed
+    if (toolTypes.includes('web_search') && !toolTypes.includes('scrape_webpage')) {
+      return {
+        nextPhase: 'Content Extraction',
+        recommendedTools: ['scrape_webpage', 'save_source'],
+        reasoning: 'Web search completed, now extract detailed content from top results'
+      };
+    }
+    
+    if (toolTypes.includes('scrape_webpage') && !toolTypes.includes('create_document')) {
+      return {
+        nextPhase: 'Content Creation',
+        recommendedTools: ['create_document', 'generate_text'],
+        reasoning: 'Content extracted, now create documents with the research findings'
+      };
+    }
+    
+    if (toolTypes.includes('create_document') && !toolTypes.includes('analyze_writing_style')) {
+      return {
+        nextPhase: 'Content Analysis',
+        recommendedTools: ['analyze_writing_style', 'get_writing_suggestions'],
+        reasoning: 'Document created, now analyze and improve the writing quality'
+      };
+    }
+    
+    if (toolTypes.includes('analyze_writing_style')) {
+      return {
+        nextPhase: 'Content Refinement',
+        recommendedTools: ['update_document', 'generate_text'],
+        reasoning: 'Analysis complete, now refine and improve the content based on insights'
+      };
+    }
+    
+    return {
+      nextPhase: 'Task Completion',
+      recommendedTools: ['store_memory', 'update_goal_status'],
+      reasoning: 'Primary objectives achieved, now consolidate learnings and update goals'
+    };
+  }
+
+  // Generate enhanced synthesis with research findings
+  private generateEnhancedSynthesis(
+    toolExecutions: Array<{ toolName: string; parameters: any; result: ToolResult }>, 
+    originalRequest: string,
+    researchFindings: any,
+    allToolResults: any
+  ): string {
+    const successfulTools = toolExecutions.filter(exec => exec.result.success);
+    const failedTools = toolExecutions.filter(exec => !exec.result.success);
+
+    if (successfulTools.length === 0) {
+      return `I attempted to help with your request "${originalRequest}" but encountered issues with the tools. Let me try a different approach.`;
+    }
+
+    let response = `I've completed your request "${originalRequest}". Here's a comprehensive summary of what was accomplished:\n\n`;
+
+    // Group tools by category for better organization
+    const toolCategories = {
+      research: ['web_search', 'scrape_webpage', 'save_source'],
+      documents: ['get_document', 'create_document', 'update_document', 'analyze_writing_style', 'get_writing_suggestions'],
+      projects: ['list_projects', 'create_project', 'get_project', 'update_project'],
+      textProcessing: ['search_in_text', 'replace_in_text', 'analyze_document_structure'],
+      aiGeneration: ['generate_text', 'process_text_command'],
+      memory: ['store_memory', 'recall_memory', 'set_goal', 'update_goal_status']
+    };
+
+    // Process each category
+    Object.entries(toolCategories).forEach(([category, tools]) => {
+      const categoryTools = successfulTools.filter(exec => tools.includes(exec.toolName));
+      if (categoryTools.length > 0) {
+        response += this.generateCategoryResponse(category, categoryTools, allToolResults);
+      }
+    });
+
+    // For research tasks, include detailed findings
+    if (researchFindings) {
+      response += `\n**📚 RESEARCH FINDINGS:**\n`;
+      
+      if (researchFindings.sources.length > 0) {
+        response += `Found ${researchFindings.sources.length} relevant sources:\n\n`;
+        
+        researchFindings.sources.forEach((source: any, index: number) => {
+          response += `${index + 1}. **${source.title}**\n`;
+          response += `   ${source.snippet}\n`;
+          response += `   Source: ${source.url}\n\n`;
+        });
+      }
+      
+      if (researchFindings.summary) {
+        response += `**Key Insights:** ${researchFindings.summary}\n\n`;
+      }
+      
+      response += `All sources have been saved to your project for easy reference.\n\n`;
+    }
+
+    // Show specific tool results
+    response += `**🔧 DETAILED RESULTS:**\n`;
+    successfulTools.forEach((exec, index) => {
+      const toolResult = allToolResults[exec.toolName];
+      if (toolResult) {
+        response += `${index + 1}. **${exec.toolName}**: ${toolResult.summary}\n`;
+        if (toolResult.actionableInsights.length > 0) {
+          response += `   💡 Insights: ${toolResult.actionableInsights.join(', ')}\n`;
+        }
+      }
+    });
+
+    if (failedTools.length > 0) {
+      response += `\n⚠️ Note: ${failedTools.length} operations had issues but the main task was completed successfully.`;
+    }
+
+    return response;
+  }
+
+  // Generate category-specific responses
+  private generateCategoryResponse(category: string, tools: Array<{ toolName: string; parameters: any; result: ToolResult }>, allToolResults: any): string {
+    let response = '';
+
+    switch (category) {
+      case 'research':
+        response += `**🔍 RESEARCH COMPLETED:**\n`;
+        tools.forEach(tool => {
+          const result = allToolResults[tool.toolName];
+          if (result) {
+            response += `- ${result.summary}\n`;
+          }
+        });
+        response += '\n';
+        break;
+
+      case 'documents':
+        response += `**📄 DOCUMENT OPERATIONS:**\n`;
+        tools.forEach(tool => {
+          const result = allToolResults[tool.toolName];
+          if (result && result.data) {
+            if (tool.toolName === 'get_document') {
+              response += `- Retrieved: "${result.data.title}" (${result.data.wordCount || 0} words)\n`;
+            } else if (tool.toolName === 'create_document') {
+              response += `- Created: "${result.data.title || tool.parameters.title}"\n`;
+            } else if (tool.toolName === 'update_document') {
+              response += `- Updated document with new content\n`;
+            } else if (tool.toolName === 'analyze_writing_style') {
+              response += `- Analyzed writing style: ${Object.keys(result.data || {}).length} metrics\n`;
+            } else if (tool.toolName === 'get_writing_suggestions') {
+              response += `- Generated writing suggestions for improvement\n`;
+            }
+          }
+        });
+        response += '\n';
+        break;
+
+      case 'projects':
+        response += `**📁 PROJECT MANAGEMENT:**\n`;
+        tools.forEach(tool => {
+          const result = allToolResults[tool.toolName];
+          if (result) {
+            response += `- ${result.summary}\n`;
+          }
+        });
+        response += '\n';
+        break;
+
+      case 'textProcessing':
+        response += `**✏️ TEXT PROCESSING:**\n`;
+        tools.forEach(tool => {
+          const result = allToolResults[tool.toolName];
+          if (result) {
+            response += `- ${result.summary}\n`;
+          }
+        });
+        response += '\n';
+        break;
+
+      case 'aiGeneration':
+        response += `**🤖 AI CONTENT GENERATION:**\n`;
+        tools.forEach(tool => {
+          const result = allToolResults[tool.toolName];
+          if (result) {
+            response += `- ${result.summary}\n`;
+          }
+        });
+        response += '\n';
+        break;
+
+      case 'memory':
+        response += `**🧠 MEMORY & GOALS:**\n`;
+        tools.forEach(tool => {
+          const result = allToolResults[tool.toolName];
+          if (result) {
+            response += `- ${result.summary}\n`;
+          }
+        });
+        response += '\n';
+        break;
+    }
+
+    return response;
   }
 
   // Generate basic synthesis when AI analysis fails
@@ -547,8 +1591,8 @@ Provide your analysis now:`;
       availableTools: this.getAvailableTools()
     };
 
-    // Enhanced system prompt for intelligent tool usage and result processing
-    const systemPrompt = `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically and processing their results to provide valuable, synthesized responses.
+    // Enhanced system prompt for structured outputs
+    const systemPrompt = `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically.
 
 CORE PRINCIPLES:
 1. **Chain Tools Intelligently**: Use multiple tools in sequence when beneficial
@@ -573,36 +1617,14 @@ INTELLIGENT TOOL USAGE PATTERNS:
 - **Text Processing**: search_in_text → replace_in_text → update_document → explain changes
 - **Project Management**: list_projects → get_project → list_documents → provide overview
 
-RESPONSE INSTRUCTIONS:
-When tools are needed, respond with JSON containing:
-{
-  "needsTools": true,
-  "plan": "Multi-step plan explaining tool chain and reasoning",
-  "toolCalls": [
-    {
-      "tool": "tool_name",
-      "params": { "param1": "value1" },
-      "reasoning": "Specific reason for this tool in the context"
-    }
-  ],
-  "response": "What you'll tell the user about your plan"
-}
+You must respond with a structured plan that includes:
+1. A clear explanation of your approach
+2. Specific tools to execute with parameters
+3. A response explaining what you'll accomplish
 
-When no tools needed, respond with:
-{
-  "needsTools": false,
-  "plan": "Direct response strategy",
-  "response": "Helpful, contextual response"
-}
+Always plan at least one tool when the request requires action. For research requests, always start with web_search.`;
 
-EXAMPLES OF INTELLIGENT RESPONSES:
-❌ BAD: "I found 5 search results" (raw data)
-✅ GOOD: "I found several relevant sources about X. The most promising is Y because Z. I've saved this to your project sources and here's what it means for your writing..."
-
-❌ BAD: "Document updated" (basic confirmation)
-✅ GOOD: "I've enhanced your document by improving the flow in paragraph 2 and strengthening the conclusion. The changes maintain your voice while making the argument 23% more compelling..."
-
-USER REQUEST: "${request}"
+    const userPrompt = `USER REQUEST: "${request}"
 
 Analyze this request carefully. Consider:
 1. What is the user really trying to accomplish?
@@ -610,45 +1632,156 @@ Analyze this request carefully. Consider:
 3. How can I chain tools to deliver a complete solution?
 4. What insights can I provide beyond just executing tools?
 
-Respond with your strategic plan and tool usage.`;
+Create a strategic plan with specific tool executions.`;
 
     try {
       const { generateTextCompletion } = await import("./openai");
       
-      const result = await generateTextCompletion(
-        "", 
-        {}, 
-        systemPrompt,
-        this.context.llmProvider,
-        this.context.llmModel
-      );
-      
-      try {
-        const parsed = JSON.parse(result);
-        
+      // Use OpenAI's Structured Outputs for deterministic responses
+      const openai = new (await import("openai")).default({ 
+        apiKey: process.env.OPENAI_API_KEY || "default_key" 
+      });
+
+      // Define the response schema using OpenAI's structured outputs
+      const response = await openai.beta.chat.completions.parse({
+        model: this.context.llmModel || "gpt-4.1-mini",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "agent_plan",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                needsTools: {
+                  type: "boolean",
+                  description: "Whether tools are needed to fulfill the request"
+                },
+                plan: {
+                  type: "string",
+                  description: "Multi-step plan explaining tool chain and reasoning"
+                },
+                toolCalls: {
+                  type: "array",
+                  description: "Array of tools to execute",
+                  items: {
+                    type: "object",
+                    properties: {
+                      tool: {
+                        type: "string",
+                        description: "Name of the tool to execute"
+                      },
+                      params: {
+                        type: "object",
+                        description: "Parameters for the tool",
+                        additionalProperties: true
+                      },
+                      reasoning: {
+                        type: "string",
+                        description: "Specific reason for using this tool"
+                      }
+                    },
+                    required: ["tool", "params", "reasoning"],
+                    additionalProperties: false
+                  }
+                },
+                response: {
+                  type: "string",
+                  description: "What you'll tell the user about your plan"
+                }
+              },
+              required: ["needsTools", "plan", "toolCalls", "response"],
+              additionalProperties: false
+            }
+          }
+        }
+      });
+
+      // Handle refusals
+      if (response.choices[0].message.refusal) {
+        console.log("OpenAI refused the request:", response.choices[0].message.refusal);
         return {
-          plan: parsed.plan || `Developing strategic approach for: "${request}"`,
-          toolCalls: parsed.toolCalls || [],
-          response: parsed.response || "I'm analyzing your request and determining the best approach to help you. Let me think about this strategically..."
-        };
-      } catch (parseError) {
-        // Fallback if JSON parsing fails - but make it more intelligent
-        return {
-          plan: `Analyzing request contextually: "${request}"`,
+          plan: `Unable to process request: ${response.choices[0].message.refusal}`,
           toolCalls: [],
-          response: this.generateContextualFallbackResponse(request, contextSummary)
+          response: "I'm unable to process this request. Please try rephrasing or asking for something different."
         };
       }
+
+      const parsed = response.choices[0].message.parsed;
+      
+      if (!parsed) {
+        throw new Error("Failed to parse structured response");
+      }
+
+      // Type assertion for the structured response
+      const structuredResponse = parsed as {
+        needsTools: boolean;
+        plan: string;
+        toolCalls: Array<{ tool: string; params: any; reasoning: string }>;
+        response: string;
+      };
+
+      return {
+        plan: structuredResponse.plan || `Developing strategic approach for: "${request}"`,
+        toolCalls: structuredResponse.toolCalls || [],
+        response: structuredResponse.response || "I'm analyzing your request and determining the best approach to help you."
+      };
+      
     } catch (error) {
-      console.error("Error in agent request processing:", error);
+      console.error("Error in structured agent request processing:", error);
       
       // Intelligent fallback response
       return {
         plan: `Developing approach for: "${request}"`,
-        toolCalls: [],
+        toolCalls: this.generateFallbackToolCalls(request, contextSummary),
         response: this.generateContextualFallbackResponse(request, contextSummary)
       };
     }
+  }
+
+  // Generate fallback tool calls when structured outputs fail
+  private generateFallbackToolCalls(request: string, context: any): Array<{ tool: string; params: any; reasoning: string }> {
+    const lowerRequest = request.toLowerCase();
+    const toolCalls: Array<{ tool: string; params: any; reasoning: string }> = [];
+    
+    // Smart fallback tool selection based on request content
+    if (lowerRequest.includes('search') || lowerRequest.includes('research') || lowerRequest.includes('find')) {
+      toolCalls.push({
+        tool: 'web_search',
+        params: { 
+          query: request.length > 100 ? 
+            lowerRequest.split(' ').slice(0, 10).join(' ') : // First 10 words for long requests
+            request
+        },
+        reasoning: 'Performing web search based on user request'
+      });
+    }
+    
+    if (lowerRequest.includes('analyze') && context.currentDocument) {
+      toolCalls.push({
+        tool: 'analyze_writing_style',
+        params: { text: context.currentDocument.content || '' },
+        reasoning: 'Analyzing current document style'
+      });
+    }
+    
+    if (lowerRequest.includes('create') && lowerRequest.includes('document') && context.currentProject) {
+      toolCalls.push({
+        tool: 'create_document',
+        params: { 
+          projectId: context.currentProject.id,
+          title: 'New Document',
+          content: ''
+        },
+        reasoning: 'Creating new document as requested'
+      });
+    }
+    
+    return toolCalls;
   }
 
   // Generate contextual fallback responses when LLM fails

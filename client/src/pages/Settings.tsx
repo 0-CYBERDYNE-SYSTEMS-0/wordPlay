@@ -363,6 +363,9 @@ export default function Settings({ onBack }: SettingsProps) {
                     <SelectContent>
                       {settings.llmProvider === 'openai' ? (
                         <>
+                          <SelectItem value="gpt-4.1">GPT-4.1 (Latest - Best for Coding)</SelectItem>
+                          <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                          <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
                           <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
                           <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
