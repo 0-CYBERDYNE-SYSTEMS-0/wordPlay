@@ -95,6 +95,15 @@ wordPlay is an advanced writing assistant that combines powerful AI capabilities
 - **Keyboard Shortcuts**: Efficient navigation and command execution
 - **Real-time Collaboration**: Multi-tab editing with conflict resolution
 
+**Layout System:**
+- **CSS Grid Architecture**: Proper viewport division between sidebars and editor
+- **Fluid Transitions**: Smooth resizing when toggling panels (0.3s transitions)
+- **Responsive Breakpoints**: Adaptive layout for desktop, tablet, and mobile
+- **Mobile Overlay Mode**: Sidebars become overlays on smaller screens (< 768px)
+- **Full-Width Mobile**: Single panel mode on phones (< 640px) for optimal UX
+- **No Content Overlap**: Editor and sidebars properly divided, no floating overlays
+- **Proper Scrolling**: Each panel has independent, contained scrolling
+
 ## Technology Stack
 
 ### Frontend

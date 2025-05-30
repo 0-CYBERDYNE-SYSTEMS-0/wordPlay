@@ -32,7 +32,7 @@ export default function Settings({ onBack }: SettingsProps) {
     
     // AI Settings
     llmProvider: 'openai',
-    llmModel: 'gpt-4o',
+    llmModel: '04-mini',
     openaiApiKey: '',
     ollamaUrl: 'http://localhost:11434',
     
@@ -363,22 +363,19 @@ export default function Settings({ onBack }: SettingsProps) {
                     <SelectContent>
                       {settings.llmProvider === 'openai' ? (
                         <>
-                          <SelectItem value="gpt-4.1">GPT-4.1 (Latest - Best for Coding)</SelectItem>
+                          <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
                           <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
                           <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                          <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
-                          <SelectItem value="gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                          <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                          <SelectItem value="04-mini-low">04-mini-low</SelectItem>
+                          <SelectItem value="04-mini">04-mini</SelectItem>
                         </>
                       ) : ollamaModels.length > 0 ? (
                         ollamaModels.map(model => (
                           <SelectItem key={model} value={model}>{model}</SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="llama3" disabled>
-                          {loadingModels ? 'Loading models...' : 'No models found'}
-                        </SelectItem>
+                        <SelectItem value="" disabled>No models found - check Ollama</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -727,6 +724,117 @@ export default function Settings({ onBack }: SettingsProps) {
                   />
                   <Label htmlFor="autoBackup">Enable auto-backup</Label>
                 </div>
+              </div>
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* Agent Settings */}
+          <section>
+            <h2 className="text-xl font-semibold mb-4">AI Agent Settings</h2>
+            <div className="space-y-4">
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="autonomyLevel">Autonomy Level</Label>
+                  <Select value={settings.autonomyLevel} onValueChange={(value) => updateSettings({ autonomyLevel: value as any })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="conservative">Conservative (5 tools max)</SelectItem>
+                      <SelectItem value="moderate">Moderate (10 tools max)</SelectItem>
+                      <SelectItem value="aggressive">Aggressive (20 tools max)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500">
+                    Controls how many tools the agent can use in sequence and how autonomous it operates
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="maxExecutionTime">Max Execution Time (minutes)</Label>
+                  <Input
+                    id="maxExecutionTime"
+                    type="number"
+                    min="1"
+                    max="30"
+                    value={settings.maxExecutionTime}
+                    onChange={(e) => updateSettings({ maxExecutionTime: parseInt(e.target.value) })}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Maximum time the agent can run before stopping (safety limit)
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableSelfReflection"
+                    checked={settings.enableSelfReflection}
+                    onCheckedChange={(checked) => updateSettings({ enableSelfReflection: checked })}
+                  />
+                  <Label htmlFor="enableSelfReflection">Enable self-reflection</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableLearning"
+                    checked={settings.enableLearning}
+                    onCheckedChange={(checked) => updateSettings({ enableLearning: checked })}
+                  />
+                  <Label htmlFor="enableLearning">Enable learning from results</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableMemoryPersistence"
+                    checked={settings.enableMemoryPersistence}
+                    onCheckedChange={(checked) => updateSettings({ enableMemoryPersistence: checked })}
+                  />
+                  <Label htmlFor="enableMemoryPersistence">Persistent memory</Label>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="enableChainOfThought"
+                    checked={settings.enableChainOfThought}
+                    onCheckedChange={(checked) => updateSettings({ enableChainOfThought: checked })}
+                  />
+                  <Label htmlFor="enableChainOfThought">Show reasoning process</Label>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="toolExecutionDelay">Tool Execution Delay (ms)</Label>
+                <Input
+                  id="toolExecutionDelay"
+                  type="number"
+                  min="0"
+                  max="5000"
+                  step="100"
+                  value={settings.toolExecutionDelay}
+                  onChange={(e) => updateSettings({ toolExecutionDelay: parseInt(e.target.value) })}
+                />
+                <p className="text-xs text-gray-500">
+                  Delay between tool executions (0 = fastest, higher = easier to follow)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="agentInstructions">Custom Agent Instructions</Label>
+                <Textarea
+                  id="agentInstructions"
+                  placeholder="Additional instructions for the AI agent's behavior..."
+                  className="min-h-24"
+                  value={settings.agentInstructions}
+                  onChange={(e) => updateSettings({ agentInstructions: e.target.value })}
+                />
+                <p className="text-xs text-gray-500">
+                  These instructions will guide the agent's behavior and tool selection
+                </p>
               </div>
             </div>
           </section>

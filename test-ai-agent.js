@@ -30,14 +30,14 @@ This should test your ability to chain multiple tools autonomously and synthesiz
       wordCount: 10
     },
     llmProvider: 'openai',
-    llmModel: 'gpt-4.1',
+    llmModel: 'gpt-4o-mini',
     userId: 1
   };
 
   try {
     console.log('🤖 Sending comprehensive multi-step request to AI agent...');
     console.log('📝 Request length:', request.length, 'characters');
-    console.log('⚙️  Using model: GPT-4.1 via OpenAI (Latest Model)');
+    console.log('⚙️  Using model: GPT-4o-mini via OpenAI (Valid Model)');
     console.log('🌐 Target URL:', `${baseUrl}/api/agent/intelligent-request`);
     console.log('📦 Context:', JSON.stringify(context, null, 2));
     console.log('');

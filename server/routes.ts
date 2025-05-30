@@ -538,260 +538,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const startTime = Date.now();
-      const executionLog: any[] = [];
-      let totalToolsExecuted = 0;
-      let currentIteration = 0;
-      const maxIterations = autonomyLevel === 'aggressive' ? 50 : autonomyLevel === 'moderate' ? 20 : 10;
       
-      // Step 1: Initial planning and goal setting
-      console.log(`🤖 Starting autonomous execution with ${autonomyLevel} autonomy level`);
-      const initialPlan = await agent.processRequest(request);
+      // Step 1: Get initial agent response
+      console.log(`🤖 Processing intelligent request with ${autonomyLevel} autonomy level`);
+      const agentResponse = await agent.processRequest(request);
       
-      // Set up goal tracking
-      await agent.executeTool('set_goal', {
-        description: request,
-        priority: 1,
-        estimatedSteps: initialPlan.toolCalls?.length || 5
-      });
-      
-      executionLog.push({
-        iteration: 0,
-        phase: 'planning',
-        action: 'Initial plan created',
-        plan: initialPlan.plan,
-        toolsPlanned: initialPlan.toolCalls?.length || 0,
-        timestamp: new Date()
-      });
-      
-      // Step 2: Autonomous execution loop with self-monitoring
-      let continuousExecution = true;
-      let finalResponse = initialPlan.response;
-      let allToolExecutions: any[] = [];
+      // Step 2: If the agent used tools, process their results for better output
+      let finalResponse = agentResponse.content;
       let suggestedActions: string[] = [];
+      let additionalToolCalls: any[] = [];
       
-      while (continuousExecution && currentIteration < maxIterations && (Date.now() - startTime) < maxExecutionTime) {
-        currentIteration++;
-        console.log(`🔄 Autonomous iteration ${currentIteration}/${maxIterations}`);
+      if (agentResponse.toolResults && agentResponse.toolResults.length > 0) {
+        console.log(`🛠️  Processing ${agentResponse.toolResults.length} tool results`);
         
-        // Execute planned tools
-        const iterationExecutions: any[] = [];
+        // Convert tool results to the format expected by processToolResults
+        const toolExecutions = agentResponse.toolResults.map((result, index) => ({
+          toolName: result.tool || `tool_${index}`,
+          parameters: {}, // We don't have the original parameters
+          result: result
+        }));
         
-        if (initialPlan.toolCalls && initialPlan.toolCalls.length > 0) {
-          for (const toolCall of initialPlan.toolCalls) {
-            try {
-              console.log(`🛠️  Executing tool: ${toolCall.tool}`);
-              const toolResult = await agent.executeTool(toolCall.tool, toolCall.params);
-              
-              iterationExecutions.push({
-                toolName: toolCall.tool,
-                parameters: toolCall.params,
-                result: toolResult,
-                reasoning: toolCall.reasoning
-              });
-              
-              totalToolsExecuted++;
-              
-              // AUTONOMOUS CHAINING: Intelligently chain additional tools based on results
-              if (toolResult.success) {
-                const chainedTools = await determineChainedTools(toolCall.tool, toolResult, context, agent);
-                
-                for (const chainedTool of chainedTools) {
-                  console.log(`🔗 Auto-chaining tool: ${chainedTool.tool}`);
-                  const chainedResult = await agent.executeTool(chainedTool.tool, chainedTool.params);
-                  
-                  iterationExecutions.push({
-                    toolName: chainedTool.tool,
-                    parameters: chainedTool.params,
-                    result: chainedResult,
-                    reasoning: `Auto-chained from ${toolCall.tool}: ${chainedTool.reasoning}`
-                  });
-                  
-                  totalToolsExecuted++;
-                }
-              }
-              
-            } catch (toolError: any) {
-              iterationExecutions.push({
-                toolName: toolCall.tool,
-                parameters: toolCall.params,
-                result: { success: false, error: toolError.message },
-                reasoning: toolCall.reasoning
-              });
-            }
-          }
-        }
-        
-        allToolExecutions.push(...iterationExecutions);
-        
-        // Step 3: Self-reflection and adaptive planning
-        if (iterationExecutions.length > 0) {
-          console.log(`🧠 Performing self-reflection after ${iterationExecutions.length} tool executions`);
-          
-          const synthesis = await agent.processToolResults(request, iterationExecutions);
-          finalResponse = synthesis.synthesizedResponse;
-          suggestedActions = synthesis.suggestedActions;
-          
-          // Check if we should continue autonomous execution
-          const shouldContinue = await shouldContinueExecution(
-            iterationExecutions, 
-            synthesis, 
-            currentIteration, 
-            maxIterations,
-            agent
-          );
-          
-          if (!shouldContinue.continue) {
-            console.log(`🛑 Stopping autonomous execution: ${shouldContinue.reason}`);
-            continuousExecution = false;
-          } else if (synthesis.additionalToolCalls && synthesis.additionalToolCalls.length > 0) {
-            // Plan next iteration with additional tools
-            console.log(`📋 Planning next iteration with ${synthesis.additionalToolCalls.length} additional tools`);
-            initialPlan.toolCalls = synthesis.additionalToolCalls;
-          } else {
-            // No more tools suggested, execution complete
-            console.log(`✅ No additional tools suggested, execution complete`);
-            continuousExecution = false;
-          }
-          
-          executionLog.push({
-            iteration: currentIteration,
-            phase: 'execution',
-            action: `Executed ${iterationExecutions.length} tools`,
-            toolsExecuted: iterationExecutions.map(exec => exec.toolName),
-            successfulTools: iterationExecutions.filter(exec => exec.result.success).length,
-            failedTools: iterationExecutions.filter(exec => !exec.result.success).length,
-            shouldContinue: shouldContinue.continue,
-            reasoning: shouldContinue.reason,
-            timestamp: new Date()
-          });
-        } else {
-          // No tools to execute, stop
-          continuousExecution = false;
-        }
-        
-        // Safety check: prevent infinite loops
-        if (currentIteration >= maxIterations) {
-          console.log(`⚠️  Reached maximum iterations (${maxIterations}), stopping`);
-          break;
-        }
-        
-        if ((Date.now() - startTime) >= maxExecutionTime) {
-          console.log(`⏰ Reached maximum execution time (${maxExecutionTime}ms), stopping`);
-          break;
+        try {
+          const synthesis = await agent.processToolResults(request, toolExecutions);
+          finalResponse = synthesis.synthesizedResponse || finalResponse;
+          suggestedActions = synthesis.suggestedActions || [];
+          additionalToolCalls = synthesis.additionalToolCalls || [];
+        } catch (synthError) {
+          console.warn('Failed to synthesize tool results, using basic response:', synthError);
         }
       }
       
       const totalDuration = Date.now() - startTime;
-      const successfulTools = allToolExecutions.filter(exec => exec.result.success).length;
-      const failedTools = allToolExecutions.filter(exec => !exec.result.success).length;
       
-      console.log(`🎯 Autonomous execution completed:`);
-      console.log(`   Duration: ${totalDuration}ms`);
-      console.log(`   Iterations: ${currentIteration}`);
-      console.log(`   Tools executed: ${totalToolsExecuted}`);
-      console.log(`   Success rate: ${((successfulTools / totalToolsExecuted) * 100).toFixed(1)}%`);
-      
-      // Step 4: Final synthesis and learning
-      let finalSynthesis: any = null;
-      if (allToolExecutions.length > 0) {
-        finalSynthesis = await agent.processToolResults(request, allToolExecutions);
-        finalResponse = finalSynthesis.synthesizedResponse;
-        suggestedActions = finalSynthesis.suggestedActions;
-      }
-      
-      // Update goal status
-      const activeGoals = await agent.executeTool('recall_memory', { key: 'current_goals' });
-      if (activeGoals.success && activeGoals.data?.value?.length > 0) {
-        await agent.executeTool('update_goal_status', {
-          goalId: activeGoals.data.value[0].id,
-          status: 'completed',
-          notes: `Completed with ${successfulTools}/${totalToolsExecuted} successful tool executions`
-        });
-      }
-      
-      // Store execution summary in memory for future learning
-      await agent.executeTool('store_memory', {
-        key: `execution_${Date.now()}`,
-        value: {
-          request,
-          duration: totalDuration,
-          iterations: currentIteration,
-          toolsExecuted: totalToolsExecuted,
-          successRate: successfulTools / totalToolsExecuted,
-          autonomyLevel
-        },
-        category: 'execution_history'
-      });
-      
-      // Step 5: Return comprehensive autonomous execution results
-      const responseData: any = {
-        plan: initialPlan.plan,
+      // Step 3: Return comprehensive response
+      const responseData = {
+        response: finalResponse,
+        plan: "Analyzed request and executed appropriate tools based on context",
         autonomousExecution: {
           completed: true,
-          iterations: currentIteration,
+          iterations: 1,
           duration: totalDuration,
-          autonomyLevel,
-          executionLog
+          autonomyLevel
         },
-        toolsExecuted: allToolExecutions.map(exec => ({
-          tool: exec.toolName,
-          success: exec.result.success,
-          message: exec.result.message || (exec.result.success ? 'Executed successfully' : exec.result.error),
-          reasoning: exec.reasoning,
-          parameters: exec.parameters,
-          data: exec.result.data // Include actual tool data
+        toolsExecuted: agentResponse.toolResults.map(result => ({
+          tool: result.tool || 'unknown',
+          success: result.success,
+          message: result.message || (result.success ? 'Executed successfully' : result.error),
+          data: result.data
         })),
-        response: finalResponse,
         suggestedActions: suggestedActions,
+        additionalToolCalls: additionalToolCalls,
         executionDetails: {
-          toolsPlanned: initialPlan.toolCalls?.length || 0,
-          toolsExecuted: totalToolsExecuted,
-          successfulTools,
-          failedTools,
-          successRate: ((successfulTools / totalToolsExecuted) * 100).toFixed(1) + '%',
-          averageToolTime: (totalDuration / totalToolsExecuted).toFixed(0) + 'ms'
+          toolsPlanned: agentResponse.toolResults.length,
+          toolsExecuted: agentResponse.toolResults.length,
+          successfulTools: agentResponse.toolResults.filter(r => r.success).length,
+          failedTools: agentResponse.toolResults.filter(r => !r.success).length,
+          successRate: agentResponse.toolResults.length > 0 
+            ? ((agentResponse.toolResults.filter(r => r.success).length / agentResponse.toolResults.length) * 100).toFixed(1) + '%'
+            : '100%',
+          averageToolTime: agentResponse.toolResults.length > 0 
+            ? (totalDuration / agentResponse.toolResults.length).toFixed(0) + 'ms'
+            : '0ms'
         },
         performance: {
           totalDuration,
-          iterationsCompleted: currentIteration,
-          maxIterationsAllowed: maxIterations,
-          executionEfficiency: ((successfulTools / totalToolsExecuted) * 100).toFixed(1) + '%',
-          autonomyLevel
+          iterationsCompleted: 1,
+          maxIterationsAllowed: 1,
+          executionEfficiency: agentResponse.toolResults.length > 0 
+            ? ((agentResponse.toolResults.filter(r => r.success).length / agentResponse.toolResults.length) * 100).toFixed(1) + '%'
+            : '100%',
+          autonomyLevel,
+          tokensUsed: agentResponse.tokensUsed
         }
-      };
-
-      // Include research findings if available
-      if (finalSynthesis?.researchFindings) {
-        responseData.researchFindings = finalSynthesis.researchFindings;
-      }
-
-      // Include ALL tool results for comprehensive visibility
-      if (finalSynthesis?.allToolResults) {
-        responseData.allToolResults = finalSynthesis.allToolResults;
-      }
-
-      // Include continuous operation plan
-      if (finalSynthesis?.continuousOperationPlan) {
-        responseData.continuousOperationPlan = finalSynthesis.continuousOperationPlan;
-      }
-
-      // Enhanced user experience summary
-      responseData.userExperienceSummary = {
-        toolResultsVisible: Object.keys(finalSynthesis?.allToolResults || {}).length > 0,
-        researchVisible: !!finalSynthesis?.researchFindings,
-        actionableSteps: suggestedActions.length,
-        continuousOperationReady: !!finalSynthesis?.continuousOperationPlan,
-        overallExperience: assessUserExperience(finalSynthesis, allToolExecutions, suggestedActions)
       };
 
       res.json(responseData);
       
     } catch (error: any) {
-      console.error("Error in autonomous agent workflow:", error);
+      console.error("Error in intelligent agent request:", error);
       res.status(500).json({ 
-        message: "Error processing autonomous agent request", 
+        message: "Error processing intelligent agent request", 
         error: error.message,
-        fallbackResponse: "I encountered an issue during autonomous execution. The system attempted to complete your request but ran into technical difficulties. Please try again with a more specific request or lower autonomy level."
+        response: "I encountered an issue while processing your request. Please try again with a simpler request.",
+        fallbackResponse: "I encountered an issue during execution. The system attempted to complete your request but ran into technical difficulties. Please try again with a more specific request."
       });
     }
   });

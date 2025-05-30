@@ -34,6 +34,16 @@ export interface AppSettings {
     enabled: boolean;
   }>;
   
+  // Agent Settings
+  autonomyLevel: 'conservative' | 'moderate' | 'aggressive';
+  maxExecutionTime: number; // minutes
+  enableSelfReflection: boolean;
+  enableLearning: boolean;
+  enableMemoryPersistence: boolean;
+  enableChainOfThought: boolean;
+  toolExecutionDelay: number; // ms
+  agentInstructions: string;
+  
   // UI Settings
   sidebarDefaultOpen: boolean;
   contextPanelDefaultOpen: boolean;
@@ -84,7 +94,7 @@ const defaultSettings: AppSettings = {
   
   // AI Settings
   llmProvider: 'openai',
-  llmModel: 'gpt-4.1',
+  llmModel: '04-mini',
   ollamaUrl: 'http://localhost:11434',
   
   // Reasoning Model Settings
@@ -98,6 +108,16 @@ const defaultSettings: AppSettings = {
   tonePreference: 'professional',
   customTone: '',
   customCommands: [],
+  
+  // Agent Settings
+  autonomyLevel: 'moderate',
+  maxExecutionTime: 5,
+  enableSelfReflection: true,
+  enableLearning: true,
+  enableMemoryPersistence: false,
+  enableChainOfThought: false,
+  toolExecutionDelay: 1000,
+  agentInstructions: '',
   
   // UI Settings
   sidebarDefaultOpen: true,

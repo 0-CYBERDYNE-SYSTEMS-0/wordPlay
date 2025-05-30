@@ -43,8 +43,8 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
 
   return (
     <header className="border-b dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-50">
-      <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
+      <div className="w-full px-0 py-3 flex items-center justify-between">
+        <div className="flex items-center space-x-3 ml-2">
           <Button variant="ghost" size="icon" onClick={toggleSidebar} aria-label="Toggle sidebar">
             <Menu className="h-5 w-5" />
           </Button>
@@ -60,7 +60,7 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
           </div>
         </div>
         
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 mr-2">
           <Button 
             variant="outline" 
             size="sm"
@@ -117,8 +117,8 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
                   <SelectItem value="gpt-4.1-mini">gpt-4.1-mini</SelectItem>
                   <SelectItem value="gpt-4.1-nano">gpt-4.1-nano</SelectItem>
                   <SelectItem value="gpt-4o">gpt-4o</SelectItem>
-                  <SelectItem value="gpt-4o-mini">gpt-4o-mini</SelectItem>
-                  <SelectItem value="gpt-4-turbo">gpt-4-turbo</SelectItem>
+                  <SelectItem value="04-mini-low">04-mini-low</SelectItem>
+                  <SelectItem value="04-mini">04-mini</SelectItem>
                 </>
               ) : (
                 ollamaModels.map(model => (

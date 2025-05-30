@@ -90,6 +90,45 @@ interface ToolResult {
   data?: any;
   error?: string;
   message?: string;
+  tool?: string;
+  executionTime?: number;
+}
+
+// Agent response interface
+interface AgentResponse {
+  content: string;
+  toolResults: ToolResult[];
+  executionTime: number;
+  tokensUsed: number;
+}
+
+// Define valid OpenAI models to prevent 404 errors
+const VALID_OPENAI_MODELS = [
+  'gpt-4.1',
+  'gpt-4.1-mini', 
+  'gpt-4.1-nano',
+  'gpt-4o',
+  '04-mini-low',
+  '04-mini'
+];
+
+// Validate model based on provider
+function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
+  if (!model) {
+    return provider === 'openai' ? '04-mini' : 'qwen3:4b';
+  }
+
+  if (provider === 'openai') {
+    return VALID_OPENAI_MODELS.includes(model) ? model : '04-mini';
+  } else {
+    // For Ollama, we'll trust the model name since it should come from actual installed models
+    return model;
+  }
+}
+
+// Enhanced to support local models
+function getValidOpenAIModel(model: string | undefined): string {
+  return getValidModel(model, 'openai');
 }
 
 // Create all available tools for the agent
@@ -606,7 +645,7 @@ Respond with JSON:
 
     try {
       const { generateTextCompletion } = await import("./openai");
-      const result = await generateTextCompletion("", {}, reflectionPrompt, context.llmProvider, context.llmModel);
+      const result = await generateTextCompletion("", {}, reflectionPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel));
       return JSON.parse(result);
     } catch (error) {
       return {
@@ -661,7 +700,7 @@ Respond with JSON:
 
     try {
       const { generateTextCompletion } = await import("./openai");
-      const result = await generateTextCompletion("", {}, planningPrompt, context.llmProvider, context.llmModel);
+      const result = await generateTextCompletion("", {}, planningPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel));
       return JSON.parse(result);
     } catch (error) {
       return {
@@ -802,6 +841,68 @@ Respond with JSON:
   // Get list of available tool names
   getAvailableTools(): string[] {
     return Array.from(this.tools.keys());
+  }
+
+  getAllTools(): { name: string; description: string; parameters: any }[] {
+    return Array.from(this.tools.values()).map(tool => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters
+    }));
+  }
+
+  buildSystemPrompt(): string {
+    const contextSummary = {
+      currentProject: this.context.currentProject ? {
+        id: this.context.currentProject.id,
+        name: this.context.currentProject.name,
+        type: this.context.currentProject.type
+      } : null,
+      currentDocument: this.context.currentDocument ? {
+        id: this.context.currentDocument.id,
+        title: this.context.currentDocument.title,
+        wordCount: this.context.currentDocument.wordCount
+      } : null,
+      documentCount: this.context.projectDocuments.length,
+      sourceCount: this.context.projectSources.length,
+      availableTools: this.getAvailableTools()
+    };
+
+    return `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically.
+
+CORE PRINCIPLES:
+1. **Provide Detailed, Helpful Responses**: Always give substantial, insightful answers. Never respond with generic phrases like "I've processed your request." Explain your thinking, provide specific advice, and be genuinely helpful.
+2. **Chain Tools Intelligently**: Use multiple tools in sequence when beneficial to provide comprehensive assistance
+3. **Process Results**: Always analyze and synthesize tool outputs into meaningful insights
+4. **Provide Value**: Don't just show raw data - interpret and explain what it means for the user's specific situation
+5. **Be Proactive**: Suggest follow-up actions based on tool results and user needs
+6. **Context Awareness**: Use current project/document context to make better decisions and more relevant suggestions
+
+RESPONSE REQUIREMENTS:
+- Be specific and detailed in your responses
+- Explain your reasoning and thought process
+- Provide actionable advice and insights
+- Use tools when they would genuinely help the user
+- Suggest meaningful follow-up actions
+- Never give generic or placeholder responses
+
+AVAILABLE TOOLS:
+${this.getAvailableTools().map(toolName => {
+  const tool = this.tools.get(toolName);
+  return `- ${toolName}: ${tool?.description}`;
+}).join('\n')}
+
+CURRENT CONTEXT:
+${JSON.stringify(contextSummary, null, 2)}
+
+INTELLIGENT TOOL USAGE PATTERNS:
+- **Research Workflows**: web_search → scrape_webpage → save_source → analyze results → provide insights
+- **Document Analysis**: get_document → analyze_document_structure → get_writing_suggestions → synthesize feedback
+- **Content Creation**: analyze current content → generate_text → update_document → provide explanation
+- **Text Processing**: search_in_text → replace_in_text → update_document → explain changes
+- **Project Management**: list_projects → get_project → list_documents → provide overview
+
+Remember: Your responses should be detailed, insightful, and specifically tailored to help the user with their writing and research needs.`;
   }
 
   // Update agent context with current app state
@@ -1130,7 +1231,7 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
         {}, 
         analysisPrompt,
         this.context.llmProvider,
-        this.context.llmModel
+        getValidOpenAIModel(this.context.llmModel)
       );
       
       try {
@@ -1568,245 +1669,242 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
   }
 
   // Process natural language request and determine which tools to use
-  async processRequest(request: string): Promise<{
-    plan: string;
-    toolCalls: Array<{ tool: string; params: any; reasoning: string }>;
-    response: string;
-  }> {
-    // Create context summary for the LLM
-    const contextSummary = {
-      currentProject: this.context.currentProject ? {
-        id: this.context.currentProject.id,
-        name: this.context.currentProject.name,
-        type: this.context.currentProject.type
-      } : null,
-      currentDocument: this.context.currentDocument ? {
-        id: this.context.currentDocument.id,
-        title: this.context.currentDocument.title,
-        wordCount: this.context.currentDocument.wordCount,
-        content: this.context.currentDocument.content?.substring(0, 500) + "..." // First 500 chars for context
-      } : null,
-      documentCount: this.context.projectDocuments.length,
-      sourceCount: this.context.projectSources.length,
-      availableTools: this.getAvailableTools()
-    };
-
-    // Enhanced system prompt for structured outputs
-    const systemPrompt = `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically.
-
-CORE PRINCIPLES:
-1. **Chain Tools Intelligently**: Use multiple tools in sequence when beneficial
-2. **Process Results**: Always analyze and synthesize tool outputs into meaningful insights
-3. **Provide Value**: Don't just show raw data - interpret and explain what it means
-4. **Be Proactive**: Suggest follow-up actions based on tool results
-5. **Context Awareness**: Use current project/document context to make better decisions
-
-AVAILABLE TOOLS AND THEIR STRATEGIC USES:
-${this.getAvailableTools().map(tool => {
-  const toolDef = this.tools.get(tool);
-  return `- ${tool}: ${toolDef?.description}`;
-}).join('\n')}
-
-CURRENT CONTEXT:
-${JSON.stringify(contextSummary, null, 2)}
-
-INTELLIGENT TOOL USAGE PATTERNS:
-- **Research Workflows**: web_search → scrape_webpage → save_source → analyze results → provide insights
-- **Document Analysis**: get_document → analyze_document_structure → get_writing_suggestions → synthesize feedback
-- **Content Creation**: analyze current content → generate_text → update_document → provide explanation
-- **Text Processing**: search_in_text → replace_in_text → update_document → explain changes
-- **Project Management**: list_projects → get_project → list_documents → provide overview
-
-You must respond with a structured plan that includes:
-1. A clear explanation of your approach
-2. Specific tools to execute with parameters
-3. A response explaining what you'll accomplish
-
-Always plan at least one tool when the request requires action. For research requests, always start with web_search.`;
-
-    const userPrompt = `USER REQUEST: "${request}"
-
-Analyze this request carefully. Consider:
-1. What is the user really trying to accomplish?
-2. What tools would provide the most value?
-3. How can I chain tools to deliver a complete solution?
-4. What insights can I provide beyond just executing tools?
-
-Create a strategic plan with specific tool executions.`;
-
+  async processRequest(request: string): Promise<AgentResponse> {
+    const startTime = Date.now();
+    
     try {
-      const { generateTextCompletion } = await import("./openai");
+      console.log(`🤖 Agent processing request: ${request.substring(0, 100)}...`);
       
-      // Use OpenAI's Structured Outputs for deterministic responses
-      const openai = new (await import("openai")).default({ 
-        apiKey: process.env.OPENAI_API_KEY || "default_key" 
-      });
+      const systemPrompt = this.buildSystemPrompt();
+      const userPrompt = `User Request: ${request}
 
-      // Define the response schema using OpenAI's structured outputs
-      const response = await openai.beta.chat.completions.parse({
-        model: this.context.llmModel || "gpt-4.1-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "agent_plan",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                needsTools: {
-                  type: "boolean",
-                  description: "Whether tools are needed to fulfill the request"
-                },
-                plan: {
-                  type: "string",
-                  description: "Multi-step plan explaining tool chain and reasoning"
-                },
-                toolCalls: {
-                  type: "array",
-                  description: "Array of tools to execute",
-                  items: {
-                    type: "object",
-                    properties: {
-                      tool: {
-                        type: "string",
-                        description: "Name of the tool to execute"
-                      },
-                      params: {
-                        type: "object",
-                        description: "Parameters for the tool",
-                        additionalProperties: true
-                      },
-                      reasoning: {
-                        type: "string",
-                        description: "Specific reason for using this tool"
-                      }
+Based on your tools and the current context, analyze this request and provide a comprehensive response. 
+Use your tools when necessary to gather information or perform actions.
+
+Remember:
+- Think step by step about what needs to be done
+- Use tools when you need current information or to perform specific actions
+- Be helpful and thorough in your response
+- Provide practical, actionable advice when appropriate`;
+
+      let response: any;
+      const model = getValidModel(this.context.llmModel, this.context.llmProvider);
+
+      if (this.context.llmProvider === 'ollama') {
+        // Use Ollama for local models with tool calling
+        response = await this.processOllamaRequest(systemPrompt, userPrompt, model);
+      } else {
+        // Use OpenAI API
+        response = await this.processOpenAIRequest(systemPrompt, userPrompt, model);
+      }
+
+      return response;
+    } catch (error) {
+      console.error('❌ Agent processing error:', error);
+      return {
+        content: "I apologize, but I encountered an error while processing your request. Please try again.",
+        toolResults: [],
+        executionTime: Date.now() - startTime,
+        tokensUsed: 0
+      };
+    }
+  }
+
+  private async processOpenAIRequest(systemPrompt: string, userPrompt: string, model: string): Promise<AgentResponse> {
+    const startTime = Date.now();
+    
+    // Initialize OpenAI client
+    const { OpenAI } = await import("openai");
+    const openai = new OpenAI({ 
+      apiKey: process.env.OPENAI_API_KEY || "default_key" 
+    });
+    
+    // Define the response schema using OpenAI's structured outputs
+    const response = await openai.beta.chat.completions.parse({
+      model: model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "agent_response",
+          schema: {
+            type: "object",
+            properties: {
+              content: {
+                type: "string",
+                description: "A detailed, helpful response to the user's request. Be specific, insightful, and provide value. Explain your thinking and provide actionable advice. This should be substantial and informative, not just a generic acknowledgment."
+              },
+              reasoning: {
+                type: "string",
+                description: "Your thought process and reasoning for this response and any tool decisions"
+              },
+              tools_to_use: {
+                type: "array",
+                description: "Tools to execute to help answer the user's request. Only include if tools would genuinely help.",
+                items: {
+                  type: "object",
+                  properties: {
+                    tool_name: { 
+                      type: "string",
+                      description: "Name of the tool to use"
                     },
-                    required: ["tool", "params", "reasoning"],
-                    additionalProperties: false
-                  }
-                },
-                response: {
-                  type: "string",
-                  description: "What you'll tell the user about your plan"
+                    parameters: { 
+                      type: "object",
+                      description: "Parameters for the tool"
+                    },
+                    reasoning: { 
+                      type: "string",
+                      description: "Why this tool is needed for the user's request"
+                    }
+                  },
+                  required: ["tool_name", "parameters", "reasoning"]
                 }
               },
-              required: ["needsTools", "plan", "toolCalls", "response"],
-              additionalProperties: false
-            }
+              follow_up_suggestions: {
+                type: "array",
+                description: "Helpful follow-up actions or questions the user might want to consider",
+                items: {
+                  type: "string"
+                }
+              }
+            },
+            required: ["content", "reasoning"]
           }
         }
+      },
+      temperature: 0.7,
+      max_tokens: 2000
+    });
+
+    const parsedResponse = response.choices[0].message.parsed;
+    if (!parsedResponse) {
+      throw new Error('Failed to parse agent response');
+    }
+    
+    const agentResponse = parsedResponse as {
+      content: string;
+      reasoning?: string;
+      tools_to_use?: Array<{
+        tool_name: string;
+        parameters: any;
+        reasoning: string;
+      }>;
+      follow_up_suggestions?: string[];
+    };
+
+    // Execute tools if requested
+    const toolResults: ToolResult[] = [];
+    if (agentResponse.tools_to_use && agentResponse.tools_to_use.length > 0) {
+      for (const toolRequest of agentResponse.tools_to_use) {
+        try {
+          const result = await this.executeTool(toolRequest.tool_name, toolRequest.parameters);
+          toolResults.push(result);
+        } catch (error) {
+          console.error(`Tool execution error for ${toolRequest.tool_name}:`, error);
+          toolResults.push({
+            success: false,
+            data: null,
+            error: `Failed to execute ${toolRequest.tool_name}: ${error}`,
+            tool: toolRequest.tool_name,
+            executionTime: 0
+          });
+        }
+      }
+    }
+
+    return {
+      content: agentResponse.content,
+      toolResults,
+      executionTime: Date.now() - startTime,
+      tokensUsed: response.usage?.total_tokens || 0
+    };
+  }
+
+  private async processOllamaRequest(systemPrompt: string, userPrompt: string, model: string): Promise<AgentResponse> {
+    const startTime = Date.now();
+    
+    // First check if Ollama is available
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+    
+    try {
+      // Use Ollama's tool calling capabilities
+      const tools = this.getAllTools().map(tool => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+
+      const response = await fetch(`${ollamaUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          tools: tools,
+          stream: false,
+          options: {
+            temperature: 0.7,
+            top_p: 0.9
+          }
+        })
       });
 
-      // Handle refusals
-      if (response.choices[0].message.refusal) {
-        console.log("OpenAI refused the request:", response.choices[0].message.refusal);
-        return {
-          plan: `Unable to process request: ${response.choices[0].message.refusal}`,
-          toolCalls: [],
-          response: "I'm unable to process this request. Please try rephrasing or asking for something different."
-        };
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
       }
 
-      const parsed = response.choices[0].message.parsed;
+      const data = await response.json();
       
-      if (!parsed) {
-        throw new Error("Failed to parse structured response");
+      // Process tool calls if any
+      const toolResults: ToolResult[] = [];
+      if (data.message?.tool_calls) {
+        for (const toolCall of data.message.tool_calls) {
+          try {
+            const toolName = toolCall.function.name;
+            const parameters = typeof toolCall.function.arguments === 'string' 
+              ? JSON.parse(toolCall.function.arguments)
+              : toolCall.function.arguments;
+            
+            const result = await this.executeTool(toolName, parameters);
+            toolResults.push(result);
+          } catch (error) {
+            console.error(`Tool execution error:`, error);
+            toolResults.push({
+              success: false,
+              data: null,
+              error: `Failed to execute tool: ${error}`,
+              tool: toolCall.function.name,
+              executionTime: 0
+            });
+          }
+        }
       }
-
-      // Type assertion for the structured response
-      const structuredResponse = parsed as {
-        needsTools: boolean;
-        plan: string;
-        toolCalls: Array<{ tool: string; params: any; reasoning: string }>;
-        response: string;
-      };
 
       return {
-        plan: structuredResponse.plan || `Developing strategic approach for: "${request}"`,
-        toolCalls: structuredResponse.toolCalls || [],
-        response: structuredResponse.response || "I'm analyzing your request and determining the best approach to help you."
+        content: data.message?.content || "I processed your request but couldn't generate a response.",
+        toolResults,
+        executionTime: Date.now() - startTime,
+        tokensUsed: data.eval_count || 0
       };
-      
+
     } catch (error) {
-      console.error("Error in structured agent request processing:", error);
+      console.error('❌ Ollama processing error:', error);
       
-      // Intelligent fallback response
-      return {
-        plan: `Developing approach for: "${request}"`,
-        toolCalls: this.generateFallbackToolCalls(request, contextSummary),
-        response: this.generateContextualFallbackResponse(request, contextSummary)
-      };
+      // Fallback to OpenAI if Ollama fails
+      console.log('🔄 Falling back to OpenAI...');
+      return this.processOpenAIRequest(systemPrompt, userPrompt, getValidOpenAIModel(this.context.llmModel));
     }
-  }
-
-  // Generate fallback tool calls when structured outputs fail
-  private generateFallbackToolCalls(request: string, context: any): Array<{ tool: string; params: any; reasoning: string }> {
-    const lowerRequest = request.toLowerCase();
-    const toolCalls: Array<{ tool: string; params: any; reasoning: string }> = [];
-    
-    // Smart fallback tool selection based on request content
-    if (lowerRequest.includes('search') || lowerRequest.includes('research') || lowerRequest.includes('find')) {
-      toolCalls.push({
-        tool: 'web_search',
-        params: { 
-          query: request.length > 100 ? 
-            lowerRequest.split(' ').slice(0, 10).join(' ') : // First 10 words for long requests
-            request
-        },
-        reasoning: 'Performing web search based on user request'
-      });
-    }
-    
-    if (lowerRequest.includes('analyze') && context.currentDocument) {
-      toolCalls.push({
-        tool: 'analyze_writing_style',
-        params: { text: context.currentDocument.content || '' },
-        reasoning: 'Analyzing current document style'
-      });
-    }
-    
-    if (lowerRequest.includes('create') && lowerRequest.includes('document') && context.currentProject) {
-      toolCalls.push({
-        tool: 'create_document',
-        params: { 
-          projectId: context.currentProject.id,
-          title: 'New Document',
-          content: ''
-        },
-        reasoning: 'Creating new document as requested'
-      });
-    }
-    
-    return toolCalls;
-  }
-
-  // Generate contextual fallback responses when LLM fails
-  private generateContextualFallbackResponse(request: string, context: any): string {
-    const lowerRequest = request.toLowerCase();
-    
-    // Contextual responses based on current state and request type
-    if (lowerRequest.includes('search') || lowerRequest.includes('research')) {
-      return `I can help you research this topic. I have access to web search, webpage scraping, and source management tools. ${context.currentProject ? `This will be added to your "${context.currentProject.name}" project.` : 'I can also help you organize the results into a new or existing project.'}`;
-    }
-    
-    if (lowerRequest.includes('analyze') || lowerRequest.includes('style')) {
-      return `I can analyze your writing in detail. ${context.currentDocument ? `I see you're working on "${context.currentDocument.title}" (${context.currentDocument.wordCount} words). I can examine its structure, style, and suggest improvements.` : 'If you select a document, I can provide comprehensive analysis of its structure, readability, and style.'}`;
-    }
-    
-    if (lowerRequest.includes('write') || lowerRequest.includes('generate')) {
-      return `I can help generate content for your project. ${context.currentProject ? `For your "${context.currentProject.name}" project, I can create content that matches your existing style and goals.` : 'I can also help you start a new project with the right structure and approach.'}`;
-    }
-    
-    if (lowerRequest.includes('project') || lowerRequest.includes('organize')) {
-      return `I can help manage your projects and documents. ${context.currentProject ? `You're currently working on "${context.currentProject.name}" with ${context.documentCount} documents and ${context.sourceCount} research sources.` : 'I can help you create a new project or organize existing content.'} What specific aspect would you like help with?`;
-    }
-    
-    // Generic but contextual fallback
-    return `I'm here to help with your writing project using my 19 specialized tools. ${context.currentProject ? `I can see you're working on "${context.currentProject.name}" - ` : ''}What specific assistance do you need? I can research topics, analyze your writing, generate content, manage projects, or process text in sophisticated ways.`;
   }
 
   // Get current context summary

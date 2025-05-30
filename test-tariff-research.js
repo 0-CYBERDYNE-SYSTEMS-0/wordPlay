@@ -13,7 +13,7 @@ async function testTariffResearch() {
       type: "writing"
     },
     llmProvider: 'openai',
-    llmModel: 'gpt-4.1-mini',
+    llmModel: 'gpt-4o-mini',
     userId: 1
   };
 

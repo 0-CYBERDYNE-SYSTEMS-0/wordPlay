@@ -55,9 +55,6 @@ export default function Sidebar({
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [editingDocumentName, setEditingDocumentName] = useState("");
 
-  // Only show sidebar content when open
-  if (!isOpen) return null;
-
   // Fetch documents for the active project
   const { data: documents = [] } = useQuery<Document[]>({
     queryKey: activeProjectId ? [`/api/projects/${activeProjectId}/documents`] : ['no-documents'],
@@ -246,9 +243,9 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="h-full w-full bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-lg">
+    <aside className="h-full w-full bg-white dark:bg-gray-800 flex flex-col">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between flex-shrink-0">
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Navigation</h2>
         <button 
           onClick={onClose}
@@ -259,7 +256,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto min-h-0">
         {/* Projects Section */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-3">

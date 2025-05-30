@@ -23,6 +23,7 @@ interface EditorProps {
   onToggleContextPanel: () => void;
   isFullScreen: boolean;
   onToggleFullScreen: () => void;
+  onSuggestions?: (suggestions: string) => void;
 }
 
 export default function Editor({
@@ -40,7 +41,8 @@ export default function Editor({
   contextPanelOpen,
   onToggleContextPanel,
   isFullScreen,
-  onToggleFullScreen
+  onToggleFullScreen,
+  onSuggestions
 }: EditorProps) {
   const { toast } = useToast();
   const [hasFocus, setHasFocus] = useState(false);
@@ -118,29 +120,28 @@ export default function Editor({
       }
     }
 
-    // Detect slash key press
+    // Detect slash key press - simplified and more reliable
     if (e.key === '/' && !slashCommandsOpen) {
       e.preventDefault(); // Prevent slash from being typed
       
-      // Get cursor position for menu placement
+      // Get cursor position for menu placement - simplified approach
       const textarea = e.currentTarget;
       const rect = textarea.getBoundingClientRect();
       const scrollTop = textarea.scrollTop;
+      const scrollLeft = textarea.scrollLeft;
       
-      // Calculate approximate cursor position
+      // Use cursor position in the textarea
       const cursorPosition = textarea.selectionStart;
-      const textBeforeCursor = content.substring(0, cursorPosition);
-      const lines = textBeforeCursor.split('\n');
-      const currentLine = lines.length - 1;
-      const charInLine = lines[lines.length - 1].length;
       
-      // Rough estimation of cursor position (this could be improved)
-      const lineHeight = 24; // Approximate line height
-      const charWidth = 10; // Approximate character width
+      // Simple position calculation - place menu near cursor
+      // For better positioning, we could calculate exact line/char position
+      // but this simpler approach should be more reliable
+      const approximateX = rect.left + 50; // Simple offset from left edge
+      const approximateY = rect.top + 50 - scrollTop; // Simple offset from top edge
       
       setSlashCommandPosition({
-        x: rect.left + (charInLine * charWidth),
-        y: rect.top + (currentLine * lineHeight) + lineHeight - scrollTop
+        x: Math.max(approximateX, rect.left + 10), // Ensure it's within bounds
+        y: Math.max(approximateY, rect.top + 10)   // Ensure it's within bounds
       });
       
       // Show slash commands popup
@@ -414,6 +415,7 @@ export default function Editor({
         editorRef={editorRef}
         llmProvider={llmProvider}
         llmModel={llmModel}
+        onSuggestions={onSuggestions}
       />
     </div>
   );

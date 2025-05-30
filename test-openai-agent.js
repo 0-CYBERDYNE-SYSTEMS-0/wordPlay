@@ -13,7 +13,7 @@ async function testOpenAIAgent() {
       type: "research"
     },
     llmProvider: 'openai',
-    llmModel: 'gpt-4.1',
+    llmModel: 'gpt-4o-mini',
     userId: 1
   };
 
@@ -21,7 +21,7 @@ async function testOpenAIAgent() {
     console.log('🧪 Testing OpenAI AI Agent Integration');
     console.log('====================================');
     console.log('📝 Request:', request);
-    console.log('⚙️  Model: GPT-4.1 (Latest OpenAI Model)');
+    console.log('⚙️  Model: GPT-4o-mini (Valid OpenAI Model)');
     console.log('🔑 Provider: OpenAI');
     console.log('');
     

@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* CSS Reset for full viewport usage */
+* {
+  box-sizing: border-box;
+}
+
+/* Target specific layout elements for full width */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -130,4 +150,176 @@
 
 .distraction-free-mode.dark .main-editor {
   background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
+}
+
+/* App Layout Grid System */
+.app-layout {
+  display: grid;
+  width: 100%;
+  height: calc(100vh - 61px); /* Account for header height */
+  overflow: hidden;
+  transition: grid-template-columns 0.3s ease-in-out;
+  background: white;
+  margin: 0;
+  padding: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .app-layout {
+    background: rgb(17 24 39); /* gray-900 */
+  }
+}
+
+.dark .app-layout {
+  background: rgb(17 24 39); /* gray-900 */
+}
+
+/* Default layout - only main content */
+.app-layout {
+  grid-template-columns: 1fr;
+  grid-template-areas: "main";
+}
+
+/* Sidebar open */
+.app-layout.sidebar-open {
+  grid-template-columns: 320px 1fr;
+  grid-template-areas: "sidebar main";
+}
+
+/* Context panel open */
+.app-layout.context-open {
+  grid-template-columns: 1fr 384px;
+  grid-template-areas: "main context";
+}
+
+/* Both sidebars open */
+.app-layout.sidebar-open.context-open {
+  grid-template-columns: 320px 1fr 384px;
+  grid-template-areas: "sidebar main context";
+}
+
+/* Grid containers */
+.sidebar-container {
+  grid-area: sidebar;
+  border-right: 1px solid rgb(229 231 235); /* border-gray-200 */
+  background: white;
+  overflow: hidden;
+}
+
+.dark .sidebar-container {
+  border-right: 1px solid rgb(55 65 81); /* border-gray-700 */
+  background: rgb(31 41 55); /* gray-800 */
+}
+
+.main-content {
+  grid-area: main;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0; /* Prevents grid items from overflowing */
+}
+
+.context-container {
+  grid-area: context;
+  border-left: 1px solid rgb(229 231 235); /* border-gray-200 */
+  background: white;
+  overflow: hidden;
+}
+
+.dark .context-container {
+  border-left: 1px solid rgb(55 65 81); /* border-gray-700 */
+  background: rgb(31 41 55); /* gray-800 */
+}
+
+/* Responsive breakpoints */
+@media (max-width: 1024px) {
+  /* On tablets, reduce sidebar widths */
+  .app-layout.sidebar-open {
+    grid-template-columns: 280px 1fr;
+  }
+  
+  .app-layout.context-open {
+    grid-template-columns: 1fr 320px;
+  }
+  
+  .app-layout.sidebar-open.context-open {
+    grid-template-columns: 280px 1fr 320px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* On mobile, make sidebars overlay (like modals) when space is too tight */
+  .app-layout.sidebar-open.context-open {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main";
+  }
+  
+  .app-layout.sidebar-open.context-open .sidebar-container,
+  .app-layout.sidebar-open.context-open .context-container {
+    position: fixed;
+    top: 61px;
+    height: calc(100vh - 61px);
+    z-index: 40;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+  
+  .app-layout.sidebar-open.context-open .sidebar-container {
+    left: 0;
+    width: 280px;
+  }
+  
+  .app-layout.sidebar-open.context-open .context-container {
+    right: 0;
+    width: 320px;
+  }
+
+  /* Backdrop for mobile when both sidebars are open */
+  .app-layout.sidebar-open.context-open::before {
+    content: '';
+    position: fixed;
+    top: 61px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgb(0 0 0 / 0.5);
+    z-index: 35;
+    backdrop-filter: blur(2px);
+  }
+}
+
+@media (max-width: 640px) {
+  /* On small mobile, make sidebars full width when open */
+  .app-layout.sidebar-open {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main";
+  }
+  
+  .app-layout.context-open {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main";
+  }
+  
+  .sidebar-container,
+  .context-container {
+    position: fixed;
+    top: 61px;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 61px);
+    z-index: 40;
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+}
+
+/* Debug styles for development (add 'debug-layout' class to app-layout to enable) */
+.debug-layout .sidebar-container {
+  outline: 2px solid red;
+}
+
+.debug-layout .main-content {
+  outline: 2px solid blue;
+}
+
+.debug-layout .context-container {
+  outline: 2px solid green;
 }

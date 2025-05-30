@@ -29,6 +29,9 @@ export default function Home() {
     contextPanelOpen: true
   });
 
+  // Add state for AI suggestions
+  const [aiSuggestions, setAiSuggestions] = useState<string>("");
+
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -130,6 +133,15 @@ export default function Home() {
     });
   }, [contextPanelOpen, title, content, settings.contextPanelDefaultOpen]);
 
+  // Handle AI suggestions from slash commands
+  const handleAiSuggestions = (suggestions: string) => {
+    setAiSuggestions(suggestions);
+    // Automatically open context panel to show suggestions
+    if (!contextPanelOpen) {
+      setContextPanelOpen(true);
+    }
+  };
+
   // If in full screen mode, render only the editor
   if (isFullScreen) {
     return (
@@ -167,7 +179,7 @@ export default function Home() {
   }
 
   return (
-    <div className="font-sans bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200 min-h-screen flex flex-col">
+    <div className="fixed inset-0 bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200 flex flex-col">
       <Header
         toggleSidebar={toggleSidebar}
         toggleContextPanel={toggleContextPanel}
@@ -178,9 +190,27 @@ export default function Home() {
         setLlmModel={(model) => updateSettings({ llmModel: model })}
         contextPanelOpen={contextPanelOpen}
       />
-      <div className="flex flex-1 h-[calc(100vh-61px)] min-w-0 bg-white dark:bg-gray-900 relative">
-        {/* Editor - always full width */}
-        <main className="w-full h-full flex flex-col">
+      
+      {/* Main Layout Grid */}
+      <div className={`app-layout ${sidebarOpen ? 'sidebar-open' : ''} ${contextPanelOpen ? 'context-open' : ''}`}>
+        {/* Left Sidebar */}
+        {sidebarOpen && (
+          <div className="sidebar-container">
+            <Sidebar
+              isOpen={sidebarOpen}
+              projects={projects || []}
+              activeProjectId={activeProjectId}
+              activeTab={activeTab}
+              onSelectProject={handleSelectProject}
+              onSelectDocument={handleSelectDocument}
+              onChangeTab={setActiveTab}
+              onClose={() => setSidebarOpen(false)}
+            />
+          </div>
+        )}
+
+        {/* Main Content Area */}
+        <main className="main-content">
           {activeTab === "editor" && (
             <Editor
               title={title}
@@ -198,6 +228,7 @@ export default function Home() {
               onToggleContextPanel={toggleContextPanel}
               isFullScreen={isFullScreen}
               onToggleFullScreen={toggleFullScreen}
+              onSuggestions={handleAiSuggestions}
             />
           )}
           {activeTab === "search" && (
@@ -225,35 +256,21 @@ export default function Home() {
           )}
         </main>
 
-        {/* Left Sidebar - floating over left margin */}
-        {sidebarOpen && (
-          <div className="fixed left-0 top-[61px] h-[calc(100vh-61px)] w-80 z-40 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 shadow-lg">
-            <Sidebar
-              isOpen={sidebarOpen}
-              projects={projects || []}
-              activeProjectId={activeProjectId}
-              activeTab={activeTab}
-              onSelectProject={handleSelectProject}
-              onSelectDocument={handleSelectDocument}
-              onChangeTab={setActiveTab}
-              onClose={() => setSidebarOpen(false)}
-            />
-          </div>
-        )}
-
-        {/* Right Context Panel - floating over right margin */}
+        {/* Right Context Panel */}
         {contextPanelOpen && (
-          <div className="fixed right-0 top-[61px] h-[calc(100vh-61px)] w-96 z-40 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 shadow-lg">
+          <div className="context-container">
             <ContextPanel 
               title={title || ""}
               content={content || ""}
               documentData={documentData as Document | undefined}
               activeTab={activeTab}
               onClose={toggleContextPanel}
+              aiSuggestions={aiSuggestions}
             />
           </div>
         )}
       </div>
+
       {/* Modals */}
       <NewProjectModal
         isOpen={newProjectModalOpen}
@@ -263,6 +280,7 @@ export default function Home() {
           setNewProjectModalOpen(false);
         }}
       />
+      
       {/* AI Agent - floating, minimized by default */}
       {activeTab !== "command" && (
         <AIAgent

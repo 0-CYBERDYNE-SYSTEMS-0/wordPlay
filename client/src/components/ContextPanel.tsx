@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Document } from "@shared/schema";
-import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code } from "lucide-react";
+import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code, Lightbulb } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { countWords, calculateReadingTime, extractStructure } from "@/lib/document-processor";
@@ -13,6 +13,7 @@ interface ContextPanelProps {
   documentData?: Document;
   activeTab: "editor" | "search" | "command" | "style";
   onClose: () => void;
+  aiSuggestions?: string;
 }
 
 export default function ContextPanel({
@@ -20,7 +21,8 @@ export default function ContextPanel({
   content,
   documentData,
   activeTab,
-  onClose
+  onClose,
+  aiSuggestions
 }: ContextPanelProps) {
   const [wordCount, setWordCount] = useState(0);
   const [readingTime, setReadingTime] = useState(0);
@@ -189,7 +191,7 @@ export default function ContextPanel({
   };
 
   return (
-    <div className="w-full h-full bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex flex-col shadow-lg">
+    <div className="w-full h-full bg-white dark:bg-gray-800 flex flex-col">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
         <h2 className="font-medium text-lg text-gray-900 dark:text-gray-100">{getContextHeader()}</h2>
         <button 
@@ -201,7 +203,20 @@ export default function ContextPanel({
         </button>
       </div>
       
-      <div className="flex-1 overflow-auto p-3 space-y-3">
+      <div className="flex-1 overflow-auto p-3 space-y-3 min-h-0">
+        {/* AI Suggestions Section - Show when available */}
+        {aiSuggestions && (
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-3 border border-purple-200 dark:border-purple-700">
+            <h3 className="font-medium text-sm mb-2 flex items-center text-purple-800 dark:text-purple-200">
+              <Lightbulb className="h-4 w-4 mr-1" />
+              AI Ideas & Suggestions
+            </h3>
+            <div className="text-sm text-purple-700 dark:text-purple-300 whitespace-pre-wrap">
+              {aiSuggestions}
+            </div>
+          </div>
+        )}
+
         {/* Context-specific content */}
         {activeTab === "editor" && (
           <>

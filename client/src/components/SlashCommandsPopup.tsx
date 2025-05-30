@@ -23,6 +23,7 @@ interface SlashCommandsPopupProps {
   editorRef: React.RefObject<HTMLTextAreaElement>;
   llmProvider: 'openai' | 'ollama';
   llmModel: string;
+  onSuggestions?: (suggestions: string) => void;
 }
 
 export interface SlashCommand {
@@ -107,7 +108,8 @@ export default function SlashCommandsPopup({
   setContent,
   editorRef,
   llmProvider,
-  llmModel
+  llmModel,
+  onSuggestions
 }: SlashCommandsPopupProps) {
   const { toast } = useToast();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -154,19 +156,40 @@ export default function SlashCommandsPopup({
       
       const data = await res.json();
       
-      // Apply the result to the content
-      if (data.replaceEntireContent) {
-        setContent(data.result);
-      } else if (data.replaceSelection && selectionInfo.selectedText) {
-        setContent(
-          selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
-        );
-      } else if (command === 'continue') {
-        setContent(content + '\n\n' + data.result);
-      } else if (command === 'suggest') {
-        setContent(content + '\n\n--- AI Suggestions ---\n' + data.result);
+      // Special handling for suggestions/ideas command
+      if (command === 'suggest') {
+        if (onSuggestions) {
+          onSuggestions(data.result);
+          toast({
+            title: 'Ideas Generated',
+            description: 'New ideas have been added to the insights panel.'
+          });
+        } else {
+          // Fallback to old behavior if callback not provided
+          setContent(content + '\n\n--- AI Suggestions ---\n' + data.result);
+          toast({
+            title: 'AI Command Executed',
+            description: data.message || 'Command completed successfully'
+          });
+        }
       } else {
-        setContent(data.result);
+        // Apply the result to the content for all other commands
+        if (data.replaceEntireContent) {
+          setContent(data.result);
+        } else if (data.replaceSelection && selectionInfo.selectedText) {
+          setContent(
+            selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
+          );
+        } else if (command === 'continue') {
+          setContent(content + '\n\n' + data.result);
+        } else {
+          setContent(data.result);
+        }
+        
+        toast({
+          title: 'AI Command Executed',
+          description: data.message || 'Command completed successfully'
+        });
       }
       
       // Force focus back to editor after content update
@@ -176,10 +199,6 @@ export default function SlashCommandsPopup({
         }
       }, 100);
       
-      toast({
-        title: 'AI Command Executed',
-        description: data.message || 'Command completed successfully'
-      });
     } catch (error) {
       toast({
         title: 'Error',
