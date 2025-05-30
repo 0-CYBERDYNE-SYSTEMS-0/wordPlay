@@ -40,6 +40,23 @@ export function useDocument({
   const lastSaveTime = useRef(0);
   const minimumSaveInterval = 500; // Minimum time between saves
   
+  // Reset initialization when documentId changes
+  useEffect(() => {
+    hasInitialized.current = false;
+    setIsDirty(false);
+    setSaveError(null);
+    saveRetryCount.current = 0;
+    setAutoSaveEnabled(true);
+    
+    // Reset to initial values when switching documents
+    if (!documentId) {
+      setTitle(initialTitle);
+      setContent(initialContent);
+      setLastSavedTitle(initialTitle);
+      setLastSavedContent(initialContent);
+    }
+  }, [documentId, initialTitle, initialContent]);
+  
   // Debounce content changes using settings interval
   const debouncedContent = useDebounce(content, autosaveInterval);
   const debouncedTitle = useDebounce(title, autosaveInterval);

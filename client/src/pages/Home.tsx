@@ -83,6 +83,8 @@ export default function Home() {
   // Handle document selection
   const handleSelectDocument = (documentId: number) => {
     setActiveDocumentId(documentId);
+    // Automatically switch to editor tab when a document is selected
+    setActiveTab("editor");
   };
 
   // Handle full screen toggle

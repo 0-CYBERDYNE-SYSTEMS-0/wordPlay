@@ -113,6 +113,7 @@ export default function Sidebar({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${activeProjectId}/documents`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/documents/${data.id}`] });
       onSelectDocument(data.id);
       setNewDocumentName("");
       setIsCreatingDocument(false);
