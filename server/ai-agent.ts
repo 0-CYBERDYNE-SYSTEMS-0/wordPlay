@@ -121,14 +121,15 @@ const VALID_OPENAI_MODELS = [
 // Validate model based on provider
 function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
   if (!model) {
-    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:4b';
+    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:8b';
   }
 
   if (provider === 'openai') {
     return VALID_OPENAI_MODELS.includes(model) ? model : 'gpt-4.1-mini';
   } else {
-    // For Ollama, we'll trust the model name since it should come from actual installed models
-    return model;
+    // For Ollama, use available tool-capable models
+    const ollamaToolModels = ['qwen3:8b', 'okamototk/deepseek-r1:8b', 'qwen2.5-coder:7b', 'granite3.3:8b', 'qwen3:4b'];
+    return ollamaToolModels.includes(model) ? model : 'qwen3:8b';
   }
 }
 
@@ -2206,10 +2207,40 @@ Remember:
 
       console.log(`🤖 Initial response received. Tool calls: ${response.choices[0].message.tool_calls?.length || 0}`);
 
+      // Infinite loop protection
+      let iterationCount = 0;
+      const maxIterations = 10;
+      const recentToolCalls = new Map<string, number>();
+
       // Handle function calling loop
       while (response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0) {
+        iterationCount++;
+        
+        // Prevent infinite loops
+        if (iterationCount > maxIterations) {
+          console.warn(`🚫 Breaking function calling loop after ${maxIterations} iterations to prevent infinite loop`);
+          break;
+        }
         // Add assistant message with tool calls to conversation
         conversation.push(response.choices[0].message);
+        
+        // Detect repetitive tool calls
+        let hasRepetitiveCalls = false;
+        for (const toolCall of response.choices[0].message.tool_calls) {
+          const toolKey = `${toolCall.function.name}:${toolCall.function.arguments}`;
+          const callCount = recentToolCalls.get(toolKey) || 0;
+          recentToolCalls.set(toolKey, callCount + 1);
+          
+          if (callCount >= 3) {
+            console.warn(`🚫 Detected repetitive tool call: ${toolCall.function.name}. Breaking loop.`);
+            hasRepetitiveCalls = true;
+            break;
+          }
+        }
+        
+        if (hasRepetitiveCalls) {
+          break;
+        }
         
         // Process each tool call
         for (const toolCall of response.choices[0].message.tool_calls) {
@@ -2304,6 +2335,26 @@ Remember:
         }
       }
 
+      // If we broke out of the loop without a final response, generate one
+      if (!finalContent || finalContent.trim() === "") {
+        console.log(`🤖 Generating final response after tool execution`);
+        const finalResponse = await openai.chat.completions.create({
+          model: model,
+          messages: [
+            ...conversation,
+            {
+              role: "user",
+              content: "Please provide a summary of what you accomplished with the tools you used and respond to the original request."
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 1000
+        });
+        
+        finalContent = finalResponse.choices[0].message.content || "I have processed your request using the available tools.";
+        totalTokens += finalResponse.usage?.total_tokens || 0;
+      }
+
       console.log(`🤖 OpenAI request completed. Total tools executed: ${toolResults.length}`);
       
       return {
@@ -2343,13 +2394,17 @@ Remember:
         }
       }));
 
+      // Use the proper tool-capable model
+      const toolCapableModel = getValidModel(model, 'ollama');
+      console.log(`🦙 Using Ollama tool model: ${toolCapableModel}`);
+      
       const response = await fetch(`${ollamaUrl}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: model,
+          model: toolCapableModel,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
@@ -2358,7 +2413,8 @@ Remember:
           stream: false,
           options: {
             temperature: 0.7,
-            top_p: 0.9
+            top_p: 0.9,
+            num_ctx: 16384 // Larger context for tool calling
           }
         })
       });

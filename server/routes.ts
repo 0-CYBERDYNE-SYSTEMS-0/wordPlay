@@ -592,7 +592,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ENHANCED: Maximum capability autonomous agent workflow
   app.post("/api/agent/intelligent-request", async (req: Request, res: Response) => {
     const { createAgent } = await import("./ai-agent");
-    const { request, context, autonomyLevel = 'moderate', maxExecutionTime = 300000 } = req.body; // 5 min default
+    const { 
+      request, 
+      context, 
+      autonomyLevel = 'moderate', 
+      maxExecutionTime = 300000,
+      llmProvider = 'openai',
+      llmModel 
+    } = req.body; // 5 min default
     
     if (!request) {
       return res.status(400).json({ message: "Request is required" });
@@ -606,10 +613,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agent.setAutonomyLevel(autonomyLevel);
       }
       
-      // Update agent context if provided
-      if (context) {
-        await agent.updateContext(context);
-      }
+      // Update agent context if provided, including LLM selection
+      const updatedContext = {
+        ...context,
+        llmProvider,
+        llmModel
+      };
+      
+      await agent.updateContext(updatedContext);
       
       const startTime = Date.now();
       

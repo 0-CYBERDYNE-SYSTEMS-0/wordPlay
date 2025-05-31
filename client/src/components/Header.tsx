@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useSettings } from "@/providers/SettingsProvider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sun, Moon, Menu, Info, Plus } from "lucide-react";
+import { Sun, Moon, Menu, Info, Plus, Keyboard } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import AIProcessingIndicator from "./AIProcessingIndicator";
 
@@ -53,12 +53,7 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
           </Button>
           
           <div className="flex items-center space-x-2">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 10c0 5.523-4.477 10-10 10S0 15.523 0 10 4.477 0 10 0s10 4.477 10 10z" />
-              <path d="M13 7l4 -4" />
-              <path d="M13 7h-6a2 2 0 0 0 -2 2v6" />
-              <path d="M17 17v-6a2 2 0 0 0 -2 -2h-6" />
-            </svg>FFT
+            <Keyboard className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-semibold">wordPlay </h1>
           </div>
         </div>

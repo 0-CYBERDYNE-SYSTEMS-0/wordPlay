@@ -9,23 +9,34 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || "default_key" 
 });
 
-async function callOllama(model: string, prompt: string): Promise<string> {
+async function callOllama(model: string, prompt: string, requestJson: boolean = false): Promise<string> {
   try {
-    // Prepend 'no_think' for qwen3 models to speed up processing
-    const finalPrompt = model.toLowerCase().includes('qwen3') ? `no_think\n${prompt}` : prompt;
+    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     
-    const res = await fetch("http://localhost:11434/api/generate", {
+    // Use chat endpoint for modern Ollama with tool/JSON support
+    const messages = [
+      { role: "user", content: prompt }
+    ];
+    
+    const requestBody: any = {
+      model,
+      messages,
+      stream: false,
+      options: {
+        temperature: 0.7,
+        top_p: 0.9
+      }
+    };
+    
+    // Add JSON format request if needed
+    if (requestJson) {
+      requestBody.format = "json";
+    }
+    
+    const res = await fetch(`${ollamaUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        model, 
-        prompt: finalPrompt,
-        stream: false,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9
-        }
-      })
+      body: JSON.stringify(requestBody)
     });
     
     if (!res.ok) {
@@ -33,11 +44,11 @@ async function callOllama(model: string, prompt: string): Promise<string> {
     }
     
     const data = await res.json();
-    if (!data.response) {
+    if (!data.message?.content) {
       throw new Error('No response from Ollama server');
     }
     
-    return data.response;
+    return data.message.content;
   } catch (err: any) {
     console.error("Ollama fetch error:", err);
     throw new Error(`Ollama error: ${err.message}`);
@@ -57,7 +68,7 @@ export async function generateTextCompletion(
       const systemPrompt = `You are an AI writing assistant. Continue or modify the given text based on the provided prompt. Maintain the same style and tone.`;
       const fullPrompt = `${systemPrompt}\n\nText: ${content}\n\nPrompt: ${prompt}\n\nContinuation:`;
       
-      const response = await callOllama(llmModel || 'llama2', fullPrompt);
+      const response = await callOllama(llmModel || 'qwen3:8b', fullPrompt);
       return response.trim();
     } catch (error: any) {
       console.error("Error generating text with Ollama:", error);
@@ -219,10 +230,10 @@ export async function generateSuggestions(
 ): Promise<string[]> {
   if (llmProvider === 'ollama') {
     try {
-      const systemPrompt = `You are an AI writing assistant. Based on the given text, generate 3 possible continuations or sentence completions that match the writing style. Format your response as a JSON array of strings.`;
-      const prompt = `${systemPrompt}\n\nText: ${content}\n\nResponse format example: ["suggestion 1", "suggestion 2", "suggestion 3"]\n\nGenerate suggestions:`;
+      const systemPrompt = `You are an AI writing assistant. Based on the given text, generate 3 possible continuations or sentence completions that match the writing style. You must respond with a valid JSON array of exactly 3 strings.`;
+      const prompt = `${systemPrompt}\n\nText: ${content}\n\nRespond with a JSON array format: ["suggestion 1", "suggestion 2", "suggestion 3"]`;
       
-      const raw = await callOllama(llmModel || 'llama2', prompt);
+      const raw = await callOllama(llmModel || 'qwen3:8b', prompt, true);
       
       try {
         // Try to parse as JSON first
@@ -230,7 +241,27 @@ export async function generateSuggestions(
         if (Array.isArray(parsed)) {
           return parsed.slice(0, 3);
         }
+        // If it's an object with suggestions property
+        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+          return parsed.suggestions.slice(0, 3);
+        }
       } catch (e) {
+        // Try to find JSON within the response
+        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if (Array.isArray(parsed)) {
+              return parsed.slice(0, 3);
+            }
+            if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+              return parsed.suggestions.slice(0, 3);
+            }
+          } catch (innerE) {
+            // Fall through to line splitting
+          }
+        }
+        
         // If JSON parsing fails, try to split by newlines and clean up
         const suggestions = raw
           .split('\n')

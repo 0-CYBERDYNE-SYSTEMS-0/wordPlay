@@ -8,6 +8,7 @@ import ContextPanel from "@/components/ContextPanel";
 import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
+import SettingsPanel from "@/components/SettingsPanel";
 import { AIProcessingOverlay } from "@/components/AIProcessingIndicator";
 import { useDocument } from "@/hooks/use-document";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -247,12 +248,10 @@ export default function Home() {
             />
           )}
           {activeTab === "settings" && (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              <div className="text-center">
-                <Settings className="h-12 w-12 mx-auto mb-4" />
-                <p>Settings panel will be implemented here</p>
-              </div>
-            </div>
+            <SettingsPanel
+              contextPanelOpen={contextPanelOpen}
+              onToggleContextPanel={toggleContextPanel}
+            />
           )}
         </main>
 
