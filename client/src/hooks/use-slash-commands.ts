@@ -101,13 +101,17 @@ export function useSlashCommands({
       if (data.replaceEntireContent) {
         // Replace the entire content with the result
         setContent(data.result);
+      } else if (data.appendToContent) {
+        // Append content for expand and continue commands
+        const separator = data.command?.includes('expand') ? '\n\n' : '\n\n';
+        setContent(content + separator + data.result);
       } else if (data.replaceSelection && selectionInfo.selectedText) {
         // Replace just the selection
         setContent(
           selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
         );
       } else if (data.command === 'continue') {
-        // For continue, append the text
+        // For continue, append the text (fallback)
         setContent(content + '\n\n' + data.result);
       } else if (data.command === 'suggest') {
         // For suggest, show as a toast or append with a separator

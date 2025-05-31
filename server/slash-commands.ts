@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+// UPDATED: Fixed expand command to append instead of replace
 const DEFAULT_MODEL = "gpt-4o-mini";
 
 // Helper function to call Ollama API
@@ -79,6 +80,7 @@ export async function executeSlashCommand(
   message: string;
   replaceSelection?: boolean;
   replaceEntireContent?: boolean;
+  appendToContent?: boolean;
 }> {
   // Parse command and parameter
   const { baseCommand, parameter } = parseCommand(command);
@@ -102,7 +104,8 @@ export async function executeSlashCommand(
     result: selectionInfo.selectedText || "",
     message: "Could not process the command.",
     replaceSelection: Boolean(selectionInfo.selectedText),
-    replaceEntireContent: false
+    replaceEntireContent: false,
+    appendToContent: false
   };
   
   // Determine which command to execute
@@ -156,25 +159,25 @@ export async function executeSlashCommand(
         if (parameter) {
           switch (parameter) {
             case 'examples':
-              systemPrompt = `You are an expert writer who excels at illustration. Expand the text by adding concrete examples, case studies, or real-world illustrations that support and clarify the main points.`;
+              systemPrompt = `You are an expert writer who excels at illustration. Generate additional content with concrete examples, case studies, or real-world illustrations that support and clarify the main points from the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
               break;
             case 'detail':
-              systemPrompt = `You are an expert writer who excels at elaboration. Expand the text by adding more specific details, explanations, and depth to each point while maintaining coherence.`;
+              systemPrompt = `You are an expert writer who excels at elaboration. Generate additional content with more specific details, explanations, and depth that expands on the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
               break;
             case 'context':
-              systemPrompt = `You are an expert writer who excels at contextualization. Expand the text by adding background information, historical context, or broader implications to help readers understand the bigger picture.`;
+              systemPrompt = `You are an expert writer who excels at contextualization. Generate additional content with background information, historical context, or broader implications that expands on the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
               break;
             case 'analysis':
-              systemPrompt = `You are an expert analyst and writer. Expand the text by adding deeper analysis, critical thinking, implications, and connections between ideas.`;
+              systemPrompt = `You are an expert analyst and writer. Generate additional content with deeper analysis, critical thinking, implications, and connections that expand on the ideas in the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
               break;
             default:
-              systemPrompt = `You are an expert writer who excels at elaboration. Expand upon the given text by adding more detail, examples, evidence, or context. Develop the ideas more fully while maintaining coherence with the original content.`;
+              systemPrompt = `You are an expert writer who excels at elaboration. Generate additional content that expands upon the given text by adding more detail, examples, evidence, or context. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content and develops the ideas more fully.`;
           }
         } else {
           // Smart default based on content analysis
           const expandStyle = context.tone === 'academic' ? 'analysis and evidence' :
                             context.complexity === 'simple' ? 'examples and details' : 'context and depth';
-          systemPrompt = `You are an expert writer who excels at elaboration. Expand upon the given text by adding ${expandStyle}. Develop the ideas more fully while maintaining coherence with the original content.`;
+          systemPrompt = `You are an expert writer who excels at elaboration. Generate additional content that expands upon the given text by adding ${expandStyle}. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content and develops the ideas more fully.`;
         }
         userPrompt = textContext;
         break;
@@ -318,20 +321,27 @@ export async function executeSlashCommand(
     }
     
     // Determine if we should replace the entire content or just the selection
-    const replaceEntireContent = ['continue', 'list', 'suggest', 'outline', 'format'].includes(baseCommand) || 
+    const replaceEntireContent = ['list', 'suggest', 'outline', 'format'].includes(baseCommand) || 
                                 (!selectionInfo.selectedText && 
                                  ['summarize', 'improve'].includes(baseCommand));
     
+    // Handle append operations first (expand and continue)
+    if (baseCommand === 'expand' || baseCommand === 'continue') {
+      const action = parameter ? `${baseCommand} (${parameter})` : baseCommand;
+      return {
+        result: generatedText,
+        message: baseCommand === 'expand' 
+          ? `Expanded your content with additional ${parameter || 'information'}.`
+          : `Extended your writing with new content.`,
+        replaceSelection: false,
+        replaceEntireContent: false,
+        appendToContent: true
+      };
+    }
+    
     if (replaceEntireContent) {
-      // For commands like continue, we want to add to the existing content
-      if (baseCommand === 'continue') {
-        return {
-          result: generatedText,
-          message: `Extended your writing with new content.`,
-          replaceSelection: false,
-          replaceEntireContent: false // We'll handle this special case separately
-        };
-      } else if (baseCommand === 'suggest') {
+      // For other commands that replace entire content
+      if (baseCommand === 'suggest') {
         return {
           result: generatedText,
           message: `Generated new ideas based on your content.`,

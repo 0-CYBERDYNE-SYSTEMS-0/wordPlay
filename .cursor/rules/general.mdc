@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+This program is basically an AI saturated word processor to make the most intuitive and natural free-flowing but AI assisted writing program available. There are several tabs and different AI features. There are separate agent features that has access to the entire program as well as other aspects that are more isolated and yet the agent still has control and access to those.
+
+It is made to be in the background and be extremely intuitive. Any part of the program needs to properly connect to other parts. We need to always keep an eye on pipeline completion. We want no simulated code or hypothetical code. We only want real working code. No placeholders.

@@ -210,7 +210,7 @@ export default function ContextPanel({
       const res = await apiRequest("GET", `/api/projects/${projectId}/sources`);
       return res.json() as Promise<SavedSource[]>;
     },
-    enabled: !!projectId && activeTab === "search"
+    enabled: !!projectId && (activeTab === "search" || activeTab === "editor")
   });
 
   return (
@@ -264,6 +264,42 @@ export default function ContextPanel({
           </div>
         </div>
             </div>
+
+            {/* Project Sources - Available in Editor */}
+            {sourcesQuery.data && sourcesQuery.data.length > 0 && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
+                <h3 className="font-medium text-xs mb-2 flex items-center text-blue-800 dark:text-blue-200">
+                  <Folder className="h-3 w-3 mr-1" />
+                  Project Sources ({sourcesQuery.data.length})
+                </h3>
+                <div className="space-y-1 max-h-24 overflow-y-auto">
+                  {sourcesQuery.data.slice(0, 3).map((source) => (
+                    <div key={source.id} className="text-xs text-blue-700 dark:text-blue-300">
+                      <div className="font-medium truncate">{source.name}</div>
+                      <div className="text-blue-600 dark:text-blue-400 flex items-center">
+                        {source.type}
+                        {source.url && (
+                          <a 
+                            href={source.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="ml-1"
+                            title="Open source"
+                          >
+                            <ExternalLink className="h-2 w-2" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {sourcesQuery.data.length > 3 && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400">
+                      +{sourcesQuery.data.length - 3} more sources
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
             
             {/* Quick Actions */}
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">

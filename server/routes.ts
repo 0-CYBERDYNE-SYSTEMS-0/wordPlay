@@ -333,6 +333,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
+        // If we have tool results but no content, try to extract from data
+        if (agentResponse.toolResults && agentResponse.toolResults.length > 0) {
+          for (const toolResult of agentResponse.toolResults) {
+            if (toolResult.success && toolResult.data) {
+              // Check various data structures for content
+              if (typeof toolResult.data === 'string') {
+                return res.json({
+                  result: toolResult.data,
+                  message: toolResult.message || "Text processed using agent tools",
+                  method: "agent_targeted_edit",
+                  tool_used: toolResult.tool
+                });
+              } else if (toolResult.data.result) {
+                return res.json({
+                  result: toolResult.data.result,
+                  message: toolResult.message || "Text processed using agent tools",
+                  method: "agent_targeted_edit", 
+                  tool_used: toolResult.tool
+                });
+              }
+            }
+          }
+        }
+        
         // Fallback if agent tools didn't work
         console.warn("Agent tools didn't provide expected edit result, falling back to basic processing");
       }

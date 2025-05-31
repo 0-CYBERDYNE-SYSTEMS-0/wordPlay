@@ -275,12 +275,12 @@ export default function SlashCommandsPopup({
       }, 100);
       
     } catch (error) {
+      console.error('Error executing slash command:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to execute AI command',
+        title: 'AI Command Failed',
+        description: `Failed to execute "${command}" command. Please check your LLM provider settings and try again.`,
         variant: 'destructive'
       });
-      console.error('Error executing slash command:', error);
     } finally {
       setLoading(false);
     }

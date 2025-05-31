@@ -36,6 +36,22 @@ interface ToolCall {
   reasoning: string;
 }
 
+// Helper function to identify editor-related tools
+function isEditorTool(toolName: string): boolean {
+  const editorTools = [
+    'edit_current_document',
+    'replace_current_content', 
+    'edit_text_with_pattern',
+    'improve_current_text',
+    'update_document',
+    'replace_in_text',
+    'generate_text',
+    'process_text_command',
+    'create_document'
+  ];
+  return editorTools.includes(toolName);
+}
+
 export default function AIAgent({ 
   currentProject, 
   currentDocument, 
@@ -153,6 +169,24 @@ export default function AIAgent({
         }
       };
       setMessages(prev => [...prev, agentMessage]);
+
+      // ENHANCED: Process tool results for editor integration
+      if (data.toolsExecuted && data.toolsExecuted.length > 0 && onToolResult) {
+        data.toolsExecuted.forEach((tool: any) => {
+          // Only trigger onToolResult for successful editor-related tools
+          if (tool.success && isEditorTool(tool.tool)) {
+            console.log(`🔧 Triggering editor update for tool: ${tool.tool}`);
+            onToolResult({
+              success: tool.success,
+              data: tool.data,
+              error: tool.error,
+              message: tool.message,
+              tool: tool.tool,
+              executionTime: 0
+            });
+          }
+        });
+      }
 
       // Show suggested actions if any
       if (data.suggestedActions && data.suggestedActions.length > 0) {
