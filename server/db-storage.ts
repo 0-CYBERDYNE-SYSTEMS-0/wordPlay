@@ -59,8 +59,20 @@ export class PostgresStorage implements IStorage {
   }
 
   async deleteProject(id: number): Promise<boolean> {
-    const result = await db.delete(projects).where(eq(projects.id, id)).returning();
-    return result.length > 0;
+    try {
+      // First, delete all documents associated with this project
+      await db.delete(documents).where(eq(documents.projectId, id));
+      
+      // Then, delete all sources associated with this project
+      await db.delete(sources).where(eq(sources.projectId, id));
+      
+      // Finally, delete the project itself
+      const result = await db.delete(projects).where(eq(projects.id, id)).returning();
+      return result.length > 0;
+    } catch (error) {
+      console.error("Error deleting project:", error);
+      return false;
+    }
   }
 
   // Document operations

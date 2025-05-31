@@ -1,14 +1,14 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Settings } from "lucide-react";
 import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import Editor from "@/components/Editor";
 import ContextPanel from "@/components/ContextPanel";
 import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
-import CommandMode from "@/components/CommandMode";
-import StyleAnalysis from "@/components/StyleAnalysis";
 import AIAgent from "@/components/AIAgent";
+import { AIProcessingOverlay } from "@/components/AIProcessingIndicator";
 import { useDocument } from "@/hooks/use-document";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Project, Document } from "@shared/schema";
@@ -20,7 +20,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open to use left space
   const [contextPanelOpen, setContextPanelOpen] = useState(true); // Default to open to use right space
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"editor" | "search" | "command" | "style">("editor");
+  const [activeTab, setActiveTab] = useState<"editor" | "research" | "settings">("editor");
   const [activeProjectId, setActiveProjectId] = useState<number | null>(1); // Default project
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(1); // Default document
   
@@ -31,8 +31,10 @@ export default function Home() {
     contextPanelOpen: true
   });
 
-  // Add state for AI suggestions
+  // Add state for AI suggestions and processing
   const [aiSuggestions, setAiSuggestions] = useState<string>("");
+  const [isAIProcessing, setIsAIProcessing] = useState(false);
+  const [aiProcessingMessage, setAiProcessingMessage] = useState<string>("");
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -120,9 +122,9 @@ export default function Home() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isFullScreen]);
 
-  // Auto-open context panel when switching to style analysis
+  // Auto-open context panel when switching to research
   useEffect(() => {
-    if (activeTab === "style" && !contextPanelOpen) {
+    if (activeTab === "research" && !contextPanelOpen) {
       setContextPanelOpen(true);
     }
   }, [activeTab]);
@@ -193,6 +195,8 @@ export default function Home() {
         llmModel={settings.llmModel}
         setLlmModel={(model) => updateSettings({ llmModel: model })}
         contextPanelOpen={contextPanelOpen}
+        isAIProcessing={isAIProcessing}
+        aiProcessingMessage={aiProcessingMessage}
       />
       
       {/* Main Layout Grid */}
@@ -235,28 +239,20 @@ export default function Home() {
               onSuggestions={handleAiSuggestions}
             />
           )}
-          {activeTab === "search" && (
+          {activeTab === "research" && (
             <WebSearch 
               projectId={activeProjectId || undefined}
               contextPanelOpen={contextPanelOpen}
               onToggleContextPanel={toggleContextPanel}
             />
           )}
-          {activeTab === "command" && (
-            <CommandMode
-              content={content}
-              setContent={setContent}
-              contextPanelOpen={contextPanelOpen}
-              onToggleContextPanel={toggleContextPanel}
-            />
-          )}
-          {activeTab === "style" && (
-            <StyleAnalysis
-              content={content}
-              documentData={documentData as Document | undefined}
-              contextPanelOpen={contextPanelOpen}
-              onToggleContextPanel={toggleContextPanel}
-            />
+          {activeTab === "settings" && (
+            <div className="flex items-center justify-center h-full text-gray-500">
+              <div className="text-center">
+                <Settings className="h-12 w-12 mx-auto mb-4" />
+                <p>Settings panel will be implemented here</p>
+              </div>
+            </div>
           )}
         </main>
 
@@ -286,7 +282,7 @@ export default function Home() {
       />
       
       {/* AI Agent - floating, minimized by default */}
-      {activeTab !== "command" && (
+      {(
         <AIAgent
           currentProject={activeProject}
           currentDocument={documentData}
@@ -434,6 +430,12 @@ export default function Home() {
           }}
         />
       )}
+      
+      {/* Global AI Processing Overlay */}
+      <AIProcessingOverlay 
+        isProcessing={isAIProcessing} 
+        message={aiProcessingMessage || "AI is working on your request..."} 
+      />
     </div>
   );
 }

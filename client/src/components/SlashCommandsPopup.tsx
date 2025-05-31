@@ -12,11 +12,13 @@ import {
   Zap,
   TreePine,
   Layout,
-  Globe
+  Globe,
+  BarChart2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import AIProcessingIndicator from './AIProcessingIndicator';
 
 interface SlashCommandsPopupProps {
   isOpen: boolean;
@@ -172,6 +174,14 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     category: 'utility',
     hasParameters: true,
     parameters: ['spanish', 'french', 'german', 'italian', 'portuguese', 'other']
+  },
+  {
+    id: 'analyze',
+    title: 'Analyze Style',
+    description: 'Get detailed style and readability analysis',
+    icon: <BarChart2 className="h-4 w-4" />,
+    action: 'analyze',
+    category: 'utility'
   }
 ];
 
@@ -231,17 +241,18 @@ export default function SlashCommandsPopup({
       
       const data = await res.json();
       
-      // Special handling for suggestions/ideas command
-      if (command === 'suggest') {
+      // Special handling for suggestions/ideas and analysis commands
+      if (command === 'suggest' || command === 'analyze') {
         if (onSuggestions) {
           onSuggestions(data.result);
           toast({
-            title: 'Ideas Generated',
-            description: 'New ideas have been added to the insights panel.'
+            title: command === 'suggest' ? 'Ideas Generated' : 'Style Analysis Complete',
+            description: command === 'suggest' ? 'New ideas have been added to the insights panel.' : 'Analysis results added to the insights panel.'
           });
         } else {
           // Fallback to old behavior if callback not provided
-          setContent(content + '\n\n--- AI Suggestions ---\n' + data.result);
+          const prefix = command === 'suggest' ? '--- AI Suggestions ---' : '--- Style Analysis ---';
+          setContent(content + '\n\n' + prefix + '\n' + data.result);
           toast({
             title: 'AI Command Executed',
             description: data.message || 'Command completed successfully'

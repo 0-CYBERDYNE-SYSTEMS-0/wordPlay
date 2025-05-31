@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Sun, Moon, Menu, Info, Plus } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+import AIProcessingIndicator from "./AIProcessingIndicator";
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -14,9 +15,11 @@ interface HeaderProps {
   llmModel: string;
   setLlmModel: (model: string) => void;
   contextPanelOpen: boolean;
+  isAIProcessing?: boolean;
+  aiProcessingMessage?: string;
 }
 
-export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel, contextPanelOpen }: HeaderProps) {
+export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel, contextPanelOpen, isAIProcessing, aiProcessingMessage }: HeaderProps) {
   const { settings, updateSettings } = useSettings();
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
@@ -71,11 +74,20 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             <span>New Project</span>
           </Button>
           
-          {/* Connection Status Indicator */}
-          <div className="flex items-center space-x-1 text-xs">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-gray-600 dark:text-gray-400">Connected</span>
-          </div>
+          {/* AI Processing Indicator */}
+          <AIProcessingIndicator 
+            isProcessing={isAIProcessing || false} 
+            message={aiProcessingMessage}
+            className="px-2"
+          />
+          
+          {/* Connection Status Indicator - Only show when AI isn't processing */}
+          {!isAIProcessing && (
+            <div className="flex items-center space-x-1 text-xs">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-gray-600 dark:text-gray-400">Connected</span>
+            </div>
+          )}
           
           <TooltipProvider>
             <Tooltip>

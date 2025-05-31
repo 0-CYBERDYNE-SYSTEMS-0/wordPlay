@@ -69,8 +69,8 @@ export async function executeSlashCommand(
     selectedText: string;
     selectionStart: number;
     selectionEnd: number;
-    beforeSelection: string;
-    afterSelection: string;
+    beforeSelection?: string;
+    afterSelection?: string;
   },
   style: any = {},
   llmProvider: 'openai' | 'ollama' = 'openai',
@@ -112,6 +112,8 @@ export async function executeSlashCommand(
   try {
     let systemPrompt = "";
     let userPrompt = "";
+    
+    console.log(`Executing slash command: ${baseCommand}`);
     
     switch (baseCommand) {
       case 'continue':
@@ -282,6 +284,20 @@ export async function executeSlashCommand(
         userPrompt = textContext;
         break;
         
+      case 'analyze':
+        systemPrompt = `You are a writing analysis expert. Provide a detailed analysis of the text covering:
+        
+1. **Readability**: Grade level, sentence complexity, accessibility
+2. **Style**: Tone, formality level, voice consistency  
+3. **Structure**: Organization, flow, logical progression
+4. **Vocabulary**: Word choice, variety, precision
+5. **Engagement**: Reader interest, clarity, impact
+6. **Suggestions**: Top 3 specific improvements
+
+Format your analysis clearly with headers and bullet points. Be specific and actionable.`;
+        userPrompt = textContext;
+        break;
+        
       default:
         return defaultResponse;
     }
@@ -314,14 +330,14 @@ export async function executeSlashCommand(
             content: userPrompt
           }
         ],
-        max_tokens: 1000,
+        max_tokens: 1500,
       });
       
       generatedText = response.choices[0].message.content?.trim() || "";
     }
     
     // Determine if we should replace the entire content or just the selection
-    const replaceEntireContent = ['list', 'suggest', 'outline', 'format'].includes(baseCommand) || 
+    const replaceEntireContent = ['list', 'suggest', 'outline', 'format', 'analyze'].includes(baseCommand) || 
                                 (!selectionInfo.selectedText && 
                                  ['summarize', 'improve'].includes(baseCommand));
     
@@ -340,11 +356,18 @@ export async function executeSlashCommand(
     }
     
     if (replaceEntireContent) {
-      // For other commands that replace entire content
+      // For commands that should be handled as suggestions/insights
       if (baseCommand === 'suggest') {
         return {
           result: generatedText,
           message: `Generated new ideas based on your content.`,
+          replaceSelection: false,
+          replaceEntireContent: false // We'll handle this special case separately
+        };
+      } else if (baseCommand === 'analyze') {
+        return {
+          result: generatedText,
+          message: `Generated detailed style analysis of your content.`,
           replaceSelection: false,
           replaceEntireContent: false // We'll handle this special case separately
         };

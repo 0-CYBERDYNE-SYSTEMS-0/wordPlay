@@ -424,8 +424,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         selectedText: z.string(),
         selectionStart: z.number(),
         selectionEnd: z.number(),
-        beforeSelection: z.string(),
-        afterSelection: z.string()
+        beforeSelection: z.string().optional(),
+        afterSelection: z.string().optional()
       }),
       style: z.any().optional(),
       llmProvider: z.enum(['openai', 'ollama']).optional(),
@@ -613,7 +613,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const startTime = Date.now();
       
-      // Step 1: Get initial agent response
+      // Step 1: Get initial agent response with multi-step capability
       console.log(`🤖 Processing intelligent request with ${autonomyLevel} autonomy level`);
       const agentResponse = await agent.processRequest(request);
       

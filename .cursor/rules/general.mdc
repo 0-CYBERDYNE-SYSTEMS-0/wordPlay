@@ -1,7 +1,7 @@
 ---
 description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 This program is basically an AI saturated word processor to make the most intuitive and natural free-flowing but AI assisted writing program available. There are several tabs and different AI features. There are separate agent features that has access to the entire program as well as other aspects that are more isolated and yet the agent still has control and access to those.
 

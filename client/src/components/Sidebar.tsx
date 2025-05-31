@@ -17,10 +17,10 @@ interface SidebarProps {
   isOpen: boolean;
   projects: Project[];
   activeProjectId: number | null;
-  activeTab: "editor" | "search" | "command" | "style";
+  activeTab: "editor" | "research" | "settings";
   onSelectProject: (projectId: number) => void;
   onSelectDocument: (documentId: number) => void;
-  onChangeTab: (tab: "editor" | "search" | "command" | "style") => void;
+  onChangeTab: (tab: "editor" | "research" | "settings") => void;
   onClose: () => void;
 }
 
@@ -54,6 +54,10 @@ export default function Sidebar({
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
   const [editingDocumentId, setEditingDocumentId] = useState<number | null>(null);
   const [editingDocumentName, setEditingDocumentName] = useState("");
+  
+  // NEW: Project editing state
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
+  const [editingProjectName, setEditingProjectName] = useState("");
 
   // Fetch documents for the active project
   const { data: documents = [] } = useQuery<Document[]>({
@@ -190,6 +194,65 @@ export default function Sidebar({
     }
   });
   
+  // NEW: Update project mutation
+  const updateProjectMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: number, name: string }) => {
+      const res = await apiRequest("PUT", `/api/projects/${id}`, {
+        name
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      setEditingProjectId(null);
+      setEditingProjectName("");
+      
+      toast({
+        title: "Project renamed",
+        description: `Project has been renamed to "${data.name}".`
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to rename project",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // NEW: Delete project mutation
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/projects/${id}`);
+      return id;
+    },
+    onSuccess: (id) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/projects'] });
+      
+      toast({
+        title: "Project deleted",
+        description: "The project and all its documents have been deleted."
+      });
+      
+      // If the active project was deleted, select another one if available
+      if (activeProjectId === id) {
+        const remainingProjects = projects.filter(project => project.id !== id);
+        if (remainingProjects.length > 0) {
+          onSelectProject(remainingProjects[0].id);
+        }
+        // If no projects remain, the parent component will handle the null activeProjectId
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to delete project",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
   // Toggle section expand/collapse
   const toggleSection = (section: keyof typeof expandedSections) => {
     setExpandedSections(prev => ({
@@ -217,12 +280,12 @@ export default function Sidebar({
   // Handle renaming a document
   const handleRenameDocument = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingDocumentId || !editingDocumentName.trim()) return;
-    
-    updateDocumentMutation.mutate({
-      id: editingDocumentId,
-      title: editingDocumentName
-    });
+    if (editingDocumentId && editingDocumentName.trim()) {
+      updateDocumentMutation.mutate({
+        id: editingDocumentId,
+        title: editingDocumentName.trim()
+      });
+    }
   };
   
   // Start editing document name
@@ -233,8 +296,30 @@ export default function Sidebar({
   
   // Confirm delete document
   const confirmDeleteDocument = (id: number) => {
-    if (confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+    if (window.confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
       deleteDocumentMutation.mutate(id);
+    }
+  };
+
+  // NEW: Project handler functions
+  const handleRenameProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingProjectId && editingProjectName.trim()) {
+      updateProjectMutation.mutate({
+        id: editingProjectId,
+        name: editingProjectName.trim()
+      });
+    }
+  };
+  
+  const startEditingProject = (project: Project) => {
+    setEditingProjectId(project.id);
+    setEditingProjectName(project.name);
+  };
+  
+  const confirmDeleteProject = (id: number) => {
+    if (window.confirm("Are you sure you want to delete this project? This will also delete all documents and sources in this project. This action cannot be undone.")) {
+      deleteProjectMutation.mutate(id);
     }
   };
 
@@ -276,19 +361,64 @@ export default function Sidebar({
           
           <div className="space-y-2">
             {projects.map((project) => (
-              <div
-                key={project.id}
-                onClick={() => onSelectProject(project.id)}
-                className={`p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                  project.id === activeProjectId
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                    : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                <div className="font-medium">{project.name}</div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {project.type || 'Writing'}
-                </div>
+              <div key={project.id} className="group">
+                {editingProjectId === project.id ? (
+                  <form onSubmit={handleRenameProject} className="space-y-2">
+                    <Input
+                      value={editingProjectName}
+                      onChange={(e) => setEditingProjectName(e.target.value)}
+                      className="text-sm"
+                      autoFocus
+                    />
+                    <div className="flex space-x-1">
+                      <Button type="submit" size="sm">Save</Button>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setEditingProjectId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </form>
+                ) : (
+                  <div
+                    onClick={() => onSelectProject(project.id)}
+                    className={`p-3 rounded-lg text-sm cursor-pointer transition-colors flex items-center justify-between ${
+                      project.id === activeProjectId
+                        ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                        : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                    }`}
+                  >
+                    <div className="flex-1">
+                      <div className="font-medium">{project.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {project.type || 'Writing'}
+                      </div>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEditingProject(project);
+                        }}
+                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
+                      >
+                        <Edit2 className="h-3 w-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          confirmDeleteProject(project.id);
+                        }}
+                        className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -426,11 +556,11 @@ export default function Sidebar({
           </div>
         )}
 
-        {/* Tools Section */}
+        {/* Streamlined Tools Section */}
         <div className="p-4">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center">
             <Wrench className="h-4 w-4 mr-2" />
-            Tools
+            Workspace
           </h3>
           
           <div className="space-y-2">
@@ -442,55 +572,35 @@ export default function Sidebar({
               }`}
               onClick={() => onChangeTab("editor")}
             >
-              <Edit2 className="h-4 w-4 mr-3 flex-shrink-0" />
+              <Edit2 className="h-4 w-4 mr-2" />
               <span>Editor</span>
             </div>
             <div 
               className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "search"
+                activeTab === "research"
                   ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
                   : "hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
-              onClick={() => onChangeTab("search")}
+              onClick={() => onChangeTab("research")}
             >
-              <Search className="h-4 w-4 mr-3 flex-shrink-0" />
+              <Search className="h-4 w-4 mr-2" />
               <span>Research</span>
             </div>
             <div 
               className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "command"
+                activeTab === "settings"
                   ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
                   : "hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
-              onClick={() => onChangeTab("command")}
+              onClick={() => onChangeTab("settings")}
             >
-              <Sparkles className="h-4 w-4 mr-3 flex-shrink-0" />
-              <span>AI Assistant</span>
-            </div>
-            <div 
-              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "style"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
-              }`}
-              onClick={() => onChangeTab("style")}
-            >
-              <BarChart2 className="h-4 w-4 mr-3 flex-shrink-0" />
-              <span>Style Analysis</span>
+              <Settings className="h-4 w-4 mr-2" />
+              <span>Settings</span>
             </div>
           </div>
         </div>
 
-        {/* Settings */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700">
-          <div 
-            className="flex items-center p-3 rounded-lg text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
-            onClick={handleNavigateToSettings}
-          >
-            <Settings className="h-4 w-4 mr-3 flex-shrink-0" />
-            <span>Settings</span>
-          </div>
-        </div>
+
       </div>
     </aside>
   );

@@ -143,7 +143,11 @@ export const agentTools: AgentTool[] = [
   {
     name: "list_projects",
     description: "Get all projects for the user",
-    parameters: {},
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    },
     execute: async (params, context) => {
       const projects = await storage.getProjects(context.userId);
       return { success: true, data: projects, message: `Found ${projects.length} projects` };
@@ -153,7 +157,13 @@ export const agentTools: AgentTool[] = [
   {
     name: "get_project",
     description: "Get details of a specific project",
-    parameters: { projectId: "number" },
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The ID of the project to retrieve" }
+      },
+      required: ["projectId"]
+    },
     execute: async (params, context) => {
       const project = await storage.getProject(params.projectId);
       if (!project) {
@@ -166,7 +176,15 @@ export const agentTools: AgentTool[] = [
   {
     name: "create_project",
     description: "Create a new project",
-    parameters: { name: "string", type: "string", style: "string" },
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "The name of the project" },
+        type: { type: "string", description: "The type of project (e.g., 'blog', 'article', 'book')" },
+        style: { type: "string", description: "The writing style (e.g., 'professional', 'casual', 'academic')" }
+      },
+      required: ["name", "type", "style"]
+    },
     execute: async (params, context) => {
       const project = await storage.createProject({
         userId: context.userId,
@@ -181,7 +199,16 @@ export const agentTools: AgentTool[] = [
   {
     name: "update_project",
     description: "Update project details",
-    parameters: { projectId: "number", name: "string?", type: "string?", style: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The ID of the project to update" },
+        name: { type: "string", description: "The new name for the project" },
+        type: { type: "string", description: "The new type for the project" },
+        style: { type: "string", description: "The new style for the project" }
+      },
+      required: ["projectId"]
+    },
     execute: async (params, context) => {
       const { projectId, ...updateData } = params;
       const project = await storage.updateProject(projectId, updateData);
@@ -196,7 +223,13 @@ export const agentTools: AgentTool[] = [
   {
     name: "list_documents",
     description: "Get all documents in a project",
-    parameters: { projectId: "number" },
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The ID of the project to list documents for" }
+      },
+      required: ["projectId"]
+    },
     execute: async (params, context) => {
       const documents = await storage.getDocuments(params.projectId);
       return { success: true, data: documents, message: `Found ${documents.length} documents` };
@@ -206,7 +239,13 @@ export const agentTools: AgentTool[] = [
   {
     name: "get_document",
     description: "Get content and details of a specific document",
-    parameters: { documentId: "number" },
+    parameters: {
+      type: "object",
+      properties: {
+        documentId: { type: "number", description: "The ID of the document to retrieve" }
+      },
+      required: ["documentId"]
+    },
     execute: async (params, context) => {
       const document = await storage.getDocument(params.documentId);
       if (!document) {
@@ -219,7 +258,15 @@ export const agentTools: AgentTool[] = [
   {
     name: "create_document",
     description: "Create a new document in a project",
-    parameters: { projectId: "number", title: "string", content: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The ID of the project to create the document in" },
+        title: { type: "string", description: "The title of the document" },
+        content: { type: "string", description: "The content of the document" }
+      },
+      required: ["projectId", "title"]
+    },
     execute: async (params, context) => {
       const wordCount = countWords(params.content || "");
       const document = await storage.createDocument({
@@ -235,7 +282,15 @@ export const agentTools: AgentTool[] = [
   {
     name: "update_document",
     description: "Update document content or title",
-    parameters: { documentId: "number", title: "string?", content: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        documentId: { type: "number", description: "The ID of the document to update" },
+        title: { type: "string", description: "The new title for the document" },
+        content: { type: "string", description: "The new content for the document" }
+      },
+      required: ["documentId"]
+    },
     execute: async (params, context) => {
       const { documentId, ...updateData } = params;
       
@@ -256,7 +311,14 @@ export const agentTools: AgentTool[] = [
   {
     name: "web_search",
     description: "Search the web for information on a topic",
-    parameters: { query: "string", source: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "The search query" },
+        source: { type: "string", description: "The search source (optional, defaults to 'web')" }
+      },
+      required: ["query"]
+    },
     execute: async (params, context) => {
       const results = await searchWeb(params.query, params.source || "web");
       return { 
@@ -270,7 +332,13 @@ export const agentTools: AgentTool[] = [
   {
     name: "scrape_webpage",
     description: "Extract content from a specific URL",
-    parameters: { url: "string" },
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "The URL to scrape content from" }
+      },
+      required: ["url"]
+    },
     execute: async (params, context) => {
       const content = await scrapeWebpage(params.url);
       if (content.error) {
@@ -287,7 +355,17 @@ export const agentTools: AgentTool[] = [
   {
     name: "save_source",
     description: "Save a research source to a project",
-    parameters: { projectId: "number", type: "string", name: "string", url: "string?", content: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The ID of the project to save the source to" },
+        type: { type: "string", description: "The type of source (e.g., 'url', 'document', 'reference')" },
+        name: { type: "string", description: "The name of the source" },
+        url: { type: "string", description: "The URL of the source (optional)" },
+        content: { type: "string", description: "The content of the source (optional)" }
+      },
+      required: ["projectId", "type", "name"]
+    },
     execute: async (params, context) => {
       const source = await storage.createSource(params);
       return { success: true, data: source, message: `Saved source: ${params.name}` };
@@ -297,7 +375,13 @@ export const agentTools: AgentTool[] = [
   {
     name: "get_sources",
     description: "Get all research sources for a project",
-    parameters: { projectId: "number" },
+    parameters: {
+      type: "object",
+      properties: {
+        projectId: { type: "number", description: "The ID of the project to get sources for" }
+      },
+      required: ["projectId"]
+    },
     execute: async (params, context) => {
       const sources = await storage.getSources(params.projectId);
       return { success: true, data: sources, message: `Found ${sources.length} sources` };
@@ -308,7 +392,15 @@ export const agentTools: AgentTool[] = [
   {
     name: "generate_text",
     description: "Generate text content using AI",
-    parameters: { prompt: "string", context: "string?", style: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: { type: "string", description: "The prompt for text generation" },
+        context: { type: "string", description: "Additional context for generation" },
+        style: { type: "string", description: "The writing style to use" }
+      },
+      required: ["prompt"]
+    },
     execute: async (params, context) => {
       const result = await generateTextCompletion(
         params.context || "", 
@@ -324,7 +416,13 @@ export const agentTools: AgentTool[] = [
   {
     name: "analyze_writing_style",
     description: "Analyze the writing style of text",
-    parameters: { text: "string" },
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text content to analyze" }
+      },
+      required: ["text"]
+    },
     execute: async (params, context) => {
       const analysis = await analyzeTextStyle(params.text);
       return { success: true, data: analysis, message: "Analyzed writing style" };
@@ -334,7 +432,14 @@ export const agentTools: AgentTool[] = [
   {
     name: "get_writing_suggestions",
     description: "Get AI suggestions for improving text",
-    parameters: { text: "string", type: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        text: { type: "string", description: "The text content to get suggestions for" },
+        type: { type: "string", description: "The type of suggestions to generate (optional)" }
+      },
+      required: ["text"]
+    },
     execute: async (params, context) => {
       const suggestions = await generateSuggestions(
         params.text, 
@@ -349,7 +454,15 @@ export const agentTools: AgentTool[] = [
   {
     name: "process_text_command",
     description: "Process a natural language command about text",
-    parameters: { command: "string", text: "string", context: "string?" },
+    parameters: {
+      type: "object",
+      properties: {
+        command: { type: "string", description: "The natural language command to process" },
+        text: { type: "string", description: "The text content to process" },
+        context: { type: "string", description: "Additional context for the command (optional)" }
+      },
+      required: ["command", "text"]
+    },
     execute: async (params, context) => {
       const result = await processTextCommand(params.text, params.command);
       return { success: true, data: result, message: "Processed text command" };
@@ -1122,7 +1235,7 @@ Respond with JSON:
       } : null
     };
 
-    return `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically.
+    return `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically and executing multi-step workflows.
 
 CORE PRINCIPLES:
 1. **Provide Detailed, Helpful Responses**: Always give substantial, insightful answers. Never respond with generic phrases like "I've processed your request." Explain your thinking, provide specific advice, and be genuinely helpful.
@@ -1131,6 +1244,7 @@ CORE PRINCIPLES:
 4. **Provide Value**: Don't just show raw data - interpret and explain what it means for the user's specific situation
 5. **Be Proactive**: Suggest follow-up actions based on tool results and user needs
 6. **Context Awareness**: Use current project/document context to make better decisions and more relevant suggestions
+7. **Tool Selection Priority**: When users ask to "create documents" or "write documents", ALWAYS use create_document tool, NOT generate_text
 
 RESPONSE REQUIREMENTS:
 - Be specific and detailed in your responses
@@ -1164,6 +1278,39 @@ INTELLIGENT TOOL USAGE PATTERNS:
   * Combine search_in_text + replace_in_text for precise text manipulation
   * Use analyze_document_structure before making structural changes
   * Chain generate_text + edit_current_document for content expansion
+
+**CRITICAL TOOL PARAMETER REQUIREMENTS:**
+- create_project REQUIRES: name (string), type (string), style (string) - ALL REQUIRED
+- create_document REQUIRES: projectId (number), title (string) - content is optional
+- When chaining create_project → create_document: use null for projectId (auto-filled from previous project)
+
+**TOOL CHAINING CAPABILITIES:**
+You can chain tools by using results from previous tools. The system automatically:
+- Passes project IDs from create_project to subsequent tools that need projectId
+- Makes tool results available for parameter substitution
+- For projectId parameters: use null or omit entirely and the system will use the last created project ID
+- For template substitution: use {{lastProjectId}} or {{lastDocumentId}} in string parameters
+
+Example chaining workflows:
+1. **Project + Document Creation**: 
+   - create_project with {name: "Blog Project", type: "blog", style: "professional"}
+   - create_document with {projectId: null, title: "My Post", content: "..."}
+2. **Multi-Document Projects**: create_project → create_document (doc 1) → create_document (doc 2)
+3. **Research + Documentation**: web_search → scrape_webpage → create_document with findings
+
+**MANDATORY TOOL SELECTION RULES:**
+- "Create a project" = use create_project tool
+- "Create a document" = use create_document tool (NOT generate_text)
+- "Write content in a document" = use create_document tool
+- "Generate text" = use generate_text only for standalone content generation
+- "Research" = use web_search → scrape_webpage
+- "Save information" = use save_source
+
+**PARAMETER SPECIFICATION RULES:**
+- ALWAYS provide ALL required parameters for each tool
+- For create_project: name, type, style are mandatory strings
+- For create_document: projectId (number or null for chaining), title (string) are mandatory
+- Never leave required string parameters as null or undefined
 
 **EDITOR-AWARE CAPABILITIES:**
 You can directly manipulate the user's editor content in real-time. When users ask you to:
@@ -1963,11 +2110,23 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
 Based on your tools and the current context, analyze this request and provide a comprehensive response. 
 Use your tools when necessary to gather information or perform actions.
 
+**CRITICAL INSTRUCTION FOR MULTI-STEP TASKS:**
+When the user asks you to do multiple things (like "create a project AND create a document"), you MUST:
+1. **Plan the complete workflow**: Think through ALL steps needed
+2. **Use multiple tools in sequence**: Suggest ALL tools needed to complete the entire request
+3. **Chain tools properly**: When you need results from one tool for another, use the chaining mechanism
+
+Example for "Create project X and document Y":
+- ALWAYS suggest both create_project AND create_document tools
+- For create_document, set projectId to null (will auto-chain from create_project)
+- Include content parameter with actual document content
+
 Remember:
 - Think step by step about what needs to be done
-- Use tools when you need current information or to perform specific actions
+- Use ALL tools needed to completely fulfill the user's request in ONE response
 - Be helpful and thorough in your response
-- Provide practical, actionable advice when appropriate`;
+- Provide practical, actionable advice when appropriate
+- For multi-step tasks, suggest multiple tools to complete everything at once`;
 
       let response: any;
       const model = getValidModel(this.context.llmModel, this.context.llmProvider);
@@ -1995,114 +2154,176 @@ Remember:
   private async processOpenAIRequest(systemPrompt: string, userPrompt: string, model: string): Promise<AgentResponse> {
     const startTime = Date.now();
     
-    // Initialize OpenAI client
-    const { OpenAI } = await import("openai");
-    const openai = new OpenAI({ 
-      apiKey: process.env.OPENAI_API_KEY || "default_key" 
-    });
-    
-    // Define the response schema using OpenAI's structured outputs
-    const response = await openai.beta.chat.completions.parse({
-      model: model,
-      messages: [
+    try {
+      // Initialize OpenAI client
+      const { OpenAI } = await import("openai");
+      const openai = new OpenAI({ 
+        apiKey: process.env.OPENAI_API_KEY || "default_key" 
+      });
+      
+      // Convert tools to OpenAI function calling format
+      const allTools = this.getAllTools();
+      
+      // Focus on essential tools for the initial request to avoid payload issues
+      const essentialTools = allTools.filter(tool => 
+        ['create_project', 'create_document', 'update_document', 'list_projects', 'get_project'].includes(tool.name)
+      );
+      
+      const tools = essentialTools.map(tool => ({
+        type: "function" as const,
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters
+        }
+      }));
+      
+      console.log(`🤖 Making OpenAI request with ${tools.length} essential tools (${allTools.length} total available)`);
+      console.log(`🤖 Model: ${model}`);
+      
+      // First call to get initial response and potential function calls
+      let response = await openai.chat.completions.create({
+        model: model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt }
+        ],
+        tools: tools,
+        tool_choice: "auto",
+        temperature: 0.7,
+        max_tokens: 2000
+      });
+
+      let conversation: any[] = [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt }
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: "agent_response",
-          schema: {
-            type: "object",
-            properties: {
-              content: {
-                type: "string",
-                description: "A detailed, helpful response to the user's request. Be specific, insightful, and provide value. Explain your thinking and provide actionable advice. This should be substantial and informative, not just a generic acknowledgment."
-              },
-              reasoning: {
-                type: "string",
-                description: "Your thought process and reasoning for this response and any tool decisions"
-              },
-              tools_to_use: {
-                type: "array",
-                description: "Tools to execute to help answer the user's request. Only include if tools would genuinely help.",
-                items: {
-                  type: "object",
-                  properties: {
-                    tool_name: { 
-                      type: "string",
-                      description: "Name of the tool to use"
-                    },
-                    parameters: { 
-                      type: "object",
-                      description: "Parameters for the tool"
-                    },
-                    reasoning: { 
-                      type: "string",
-                      description: "Why this tool is needed for the user's request"
-                    }
-                  },
-                  required: ["tool_name", "parameters", "reasoning"]
-                }
-              },
-              follow_up_suggestions: {
-                type: "array",
-                description: "Helpful follow-up actions or questions the user might want to consider",
-                items: {
-                  type: "string"
-                }
+      ];
+
+      const toolResults: ToolResult[] = [];
+      const toolContext = new Map<string, any>();
+      let finalContent = response.choices[0].message.content || "";
+      let totalTokens = response.usage?.total_tokens || 0;
+
+      console.log(`🤖 Initial response received. Tool calls: ${response.choices[0].message.tool_calls?.length || 0}`);
+
+      // Handle function calling loop
+      while (response.choices[0].message.tool_calls && response.choices[0].message.tool_calls.length > 0) {
+        // Add assistant message with tool calls to conversation
+        conversation.push(response.choices[0].message);
+        
+        // Process each tool call
+        for (const toolCall of response.choices[0].message.tool_calls) {
+          try {
+            console.log(`🔧 Executing tool: ${toolCall.function.name}`);
+            console.log(`🔧 Raw parameters:`, toolCall.function.arguments);
+            
+            // Parse parameters
+            const rawParameters = JSON.parse(toolCall.function.arguments);
+            
+            // Apply tool chaining logic
+            const processedParams = this.processParametersForChaining(
+              rawParameters, 
+              toolResults, 
+              toolContext
+            );
+            
+            console.log(`🔧 Processed parameters:`, JSON.stringify(processedParams, null, 2));
+            
+            // Execute the tool
+            const result = await this.executeTool(toolCall.function.name, processedParams);
+            toolResults.push(result);
+            
+            // Store successful results for chaining
+            if (result.success && result.data) {
+              toolContext.set(toolCall.function.name, result.data);
+              
+              // Store specific values for common chaining patterns
+              if (toolCall.function.name === 'create_project' && result.data.id) {
+                toolContext.set('lastProjectId', result.data.id);
+                console.log(`🔗 Stored lastProjectId: ${result.data.id}`);
               }
-            },
-            required: ["content", "reasoning"]
+              if (toolCall.function.name === 'create_document' && result.data.id) {
+                toolContext.set('lastDocumentId', result.data.id);
+                console.log(`🔗 Stored lastDocumentId: ${result.data.id}`);
+              }
+            }
+            
+            // Add tool result to conversation
+            conversation.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                success: result.success,
+                data: result.data,
+                message: result.message,
+                error: result.error
+              })
+            });
+            
+          } catch (error) {
+            console.error(`❌ Tool execution error for ${toolCall.function.name}:`, error);
+            
+            const errorResult: ToolResult = {
+              success: false,
+              error: `Failed to execute ${toolCall.function.name}: ${error}`,
+              tool: toolCall.function.name,
+              executionTime: 0
+            };
+            
+            toolResults.push(errorResult);
+            
+            // Add error result to conversation
+            conversation.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                success: false,
+                error: errorResult.error
+              })
+            });
           }
         }
-      },
-      temperature: 0.7,
-      max_tokens: 2000
-    });
-
-    const parsedResponse = response.choices[0].message.parsed;
-    if (!parsedResponse) {
-      throw new Error('Failed to parse agent response');
-    }
-    
-    const agentResponse = parsedResponse as {
-      content: string;
-      reasoning?: string;
-      tools_to_use?: Array<{
-        tool_name: string;
-        parameters: any;
-        reasoning: string;
-      }>;
-      follow_up_suggestions?: string[];
-    };
-
-    // Execute tools if requested
-    const toolResults: ToolResult[] = [];
-    if (agentResponse.tools_to_use && agentResponse.tools_to_use.length > 0) {
-      for (const toolRequest of agentResponse.tools_to_use) {
-        try {
-          const result = await this.executeTool(toolRequest.tool_name, toolRequest.parameters);
-          toolResults.push(result);
-        } catch (error) {
-          console.error(`Tool execution error for ${toolRequest.tool_name}:`, error);
-          toolResults.push({
-            success: false,
-            data: null,
-            error: `Failed to execute ${toolRequest.tool_name}: ${error}`,
-            tool: toolRequest.tool_name,
-            executionTime: 0
-          });
+        
+        console.log(`🤖 Making follow-up OpenAI request with ${conversation.length} messages`);
+        
+        // Get next response from OpenAI with tool results
+        response = await openai.chat.completions.create({
+          model: model,
+          messages: conversation,
+          tools: tools,
+          tool_choice: "auto",
+          temperature: 0.7,
+          max_tokens: 2000
+        });
+        
+        totalTokens += response.usage?.total_tokens || 0;
+        
+        // Update final content if we get a text response
+        if (response.choices[0].message.content) {
+          finalContent = response.choices[0].message.content;
         }
       }
-    }
 
-    return {
-      content: agentResponse.content,
-      toolResults,
-      executionTime: Date.now() - startTime,
-      tokensUsed: response.usage?.total_tokens || 0
-    };
+      console.log(`🤖 OpenAI request completed. Total tools executed: ${toolResults.length}`);
+      
+      return {
+        content: finalContent,
+        toolResults,
+        executionTime: Date.now() - startTime,
+        tokensUsed: totalTokens
+      };
+      
+    } catch (error) {
+      console.error(`❌ OpenAI request failed:`, error);
+      
+      // Return error response instead of throwing
+      return {
+        content: `I apologize, but I encountered a connection error while processing your request. The error was: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or check your network connection.`,
+        toolResults: [],
+        executionTime: Date.now() - startTime,
+        tokensUsed: 0
+      };
+    }
   }
 
   private async processOllamaRequest(systemPrompt: string, userPrompt: string, model: string): Promise<AgentResponse> {
@@ -2187,6 +2408,83 @@ Remember:
       console.log('🔄 Falling back to OpenAI...');
       return this.processOpenAIRequest(systemPrompt, userPrompt, getValidOpenAIModel(this.context.llmModel));
     }
+  }
+
+  // Process parameters to enable tool chaining
+  private processParametersForChaining(
+    originalParams: any, 
+    previousResults: ToolResult[], 
+    toolContext: Map<string, any>
+  ): any {
+    if (!originalParams || typeof originalParams !== 'object') {
+      return originalParams;
+    }
+    
+    const processedParams = { ...originalParams };
+    
+    // **CRITICAL: Handle missing projectId for create_document tool chaining**
+    // When OpenAI suggests create_document, it often doesn't provide projectId at all
+    // We need to detect this and automatically inject the last created project ID
+    
+    // First, check if we're dealing with a create_document call that's missing projectId
+    if (!processedParams.hasOwnProperty('projectId') || processedParams.projectId === null || processedParams.projectId === undefined) {
+      const lastProjectId = toolContext.get('lastProjectId');
+      if (lastProjectId) {
+        processedParams.projectId = lastProjectId;
+        console.log(`🔗 Auto-chaining: Injected projectId = ${lastProjectId} for tool that needs it`);
+      }
+    }
+    
+    // Handle common chaining patterns for all parameters
+    Object.keys(processedParams).forEach(key => {
+      const value = processedParams[key];
+      
+      // If parameter is null/undefined and we have a chaining value, use it
+      if ((value === null || value === undefined)) {
+        if (key === 'projectId') {
+          const lastProjectId = toolContext.get('lastProjectId');
+          if (lastProjectId) {
+            processedParams[key] = lastProjectId;
+            console.log(`🔗 Chaining: Set ${key} = ${lastProjectId} from previous create_project`);
+          }
+        } else if (key === 'documentId') {
+          const lastDocumentId = toolContext.get('lastDocumentId');
+          if (lastDocumentId) {
+            processedParams[key] = lastDocumentId;
+            console.log(`🔗 Chaining: Set ${key} = ${lastDocumentId} from previous create_document`);
+          }
+        }
+      }
+    });
+    
+    // Handle string templates that reference previous results
+    Object.keys(processedParams).forEach(key => {
+      const value = processedParams[key];
+      
+      if (typeof value === 'string' && value.includes('{{')) {
+        let processedValue = value;
+        
+        // Replace {{lastProjectId}} with actual project ID
+        if (processedValue.includes('{{lastProjectId}}')) {
+          const lastProjectId = toolContext.get('lastProjectId');
+          if (lastProjectId) {
+            processedValue = processedValue.replace('{{lastProjectId}}', lastProjectId.toString());
+          }
+        }
+        
+        // Replace {{lastDocumentId}} with actual document ID
+        if (processedValue.includes('{{lastDocumentId}}')) {
+          const lastDocumentId = toolContext.get('lastDocumentId');
+          if (lastDocumentId) {
+            processedValue = processedValue.replace('{{lastDocumentId}}', lastDocumentId.toString());
+          }
+        }
+        
+        processedParams[key] = processedValue;
+      }
+    });
+    
+    return processedParams;
   }
 
   // Get current context summary
