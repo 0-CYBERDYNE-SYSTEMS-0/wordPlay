@@ -113,12 +113,10 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             <SelectContent>
               {llmProvider === 'openai' ? (
                 <>
-                  <SelectItem value="gpt-4.1">gpt-4.1</SelectItem>
-                  <SelectItem value="gpt-4.1-mini">gpt-4.1-mini</SelectItem>
-                  <SelectItem value="gpt-4.1-nano">gpt-4.1-nano</SelectItem>
-                  <SelectItem value="gpt-4o">gpt-4o</SelectItem>
-                  <SelectItem value="04-mini-low">04-mini-low</SelectItem>
-                  <SelectItem value="04-mini">04-mini</SelectItem>
+                  <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
+                  <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                  <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
+                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
                 </>
               ) : (
                 ollamaModels.map(model => (

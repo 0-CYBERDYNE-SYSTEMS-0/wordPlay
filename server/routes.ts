@@ -289,9 +289,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const { content, command } = commandSchema.parse(req.body);
+      
+      // Detect if this is a complex editing request that should use the agent
+      const isComplexEdit = detectComplexEditingRequest(command);
+      
+      if (isComplexEdit) {
+        // Route to agent for targeted editing
+        const { createAgent } = await import("./ai-agent");
+        const agent = createAgent(1);
+        
+        // Update agent context with current content
+        await agent.updateContext({
+          currentDocument: {
+            id: 1, // Temporary - should get from request context
+            content: content,
+            title: "Current Document"
+          },
+          editorState: {
+            title: "Current Document",
+            content: content,
+            hasUnsavedChanges: false,
+            wordCount: content.trim().split(/\s+/).filter(Boolean).length
+          }
+        });
+        
+        // Process the request with the agent for targeted editing
+        const agentResponse = await agent.processRequest(`${command} while preserving the rest of the document. Current content: "${content}"`);
+        
+        // Extract the result from agent tools
+        if (agentResponse.toolResults && agentResponse.toolResults.length > 0) {
+          const editResult = agentResponse.toolResults.find(r => 
+            r.success && r.data && 
+            (r.tool === 'edit_current_document' || r.tool === 'replace_current_content' || r.tool === 'edit_text_with_pattern' || r.tool === 'improve_current_text')
+          );
+          
+          if (editResult && editResult.data?.content) {
+            return res.json({
+              result: editResult.data.content,
+              message: editResult.message || "Text edited successfully using agent tools",
+              method: "agent_targeted_edit",
+              tool_used: editResult.tool
+            });
+          }
+        }
+        
+        // Fallback if agent tools didn't work
+        console.warn("Agent tools didn't provide expected edit result, falling back to basic processing");
+      }
+      
+      // Default behavior for simple commands
       const result = await processTextCommand(content, command);
       res.json(result);
     } catch (error) {
+      console.error("Error in process-command:", error);
       res.status(400).json({ message: "Failed to process command" });
     }
   });
@@ -746,4 +796,27 @@ function assessUserExperience(finalSynthesis: any, allToolExecutions: any[], sug
   } else {
     return 'POOR';
   }
+}
+
+// Helper function to detect complex editing requests
+function detectComplexEditingRequest(command: string): boolean {
+  const complexEditPatterns = [
+    /rewrite\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /edit\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /replace\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /translate\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /change\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /modify\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /improve\s+(the\s+)?(first|second|third|fourth|fifth|\d+(?:st|nd|rd|th)?)\s+paragraph/i,
+    /rewrite.*paragraph.*\d+/i,
+    /edit.*paragraph.*\d+/i,
+    /in\s+(spanish|español|french|français|german|deutsch|italian|italiano|portuguese|português)/i,
+    /translate.*to\s+(spanish|español|french|français|german|deutsch|italian|italiano|portuguese|português)/i,
+    /find\s+and\s+replace/i,
+    /replace\s+all\s+(instances|occurrences)/i,
+    /fix\s+(spelling|grammar)\s+mistakes/i,
+    /correct\s+(spelling|grammar)/i
+  ];
+  
+  return complexEditPatterns.some(pattern => pattern.test(command));
 }

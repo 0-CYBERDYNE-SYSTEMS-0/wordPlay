@@ -86,15 +86,15 @@ const defaultSettings: AppSettings = {
   theme: 'system',
   fontSize: 'medium',
   fontFamily: 'serif',
-  autosaveInterval: 1000,
+  autosaveInterval: 30000,
   wordWrapEnabled: true,
   lineHeight: 'normal',
   editorWidth: 'normal',
-  showLineNumbers: true,
+  showLineNumbers: false,
   
   // AI Settings
   llmProvider: 'openai',
-  llmModel: '04-mini',
+  llmModel: 'gpt-4.1-mini',
   ollamaUrl: 'http://localhost:11434',
   
   // Reasoning Model Settings

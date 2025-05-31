@@ -46,6 +46,14 @@ interface AgentContext {
   autonomyLevel: 'conservative' | 'moderate' | 'aggressive';
   reflectionEnabled: boolean;
   learningEnabled: boolean;
+  
+  // NEW: Current editor state for real-time editing
+  editorState?: {
+    title: string;
+    content: string;
+    hasUnsavedChanges: boolean;
+    wordCount: number;
+  };
 }
 
 // NEW: Execution tracking for long-horizon tasks
@@ -105,21 +113,19 @@ interface AgentResponse {
 // Define valid OpenAI models to prevent 404 errors
 const VALID_OPENAI_MODELS = [
   'gpt-4.1',
-  'gpt-4.1-mini', 
+  'gpt-4.1-mini',
   'gpt-4.1-nano',
-  'gpt-4o',
-  '04-mini-low',
-  '04-mini'
+  'gpt-4o'
 ];
 
 // Validate model based on provider
 function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
   if (!model) {
-    return provider === 'openai' ? '04-mini' : 'qwen3:4b';
+    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:4b';
   }
 
   if (provider === 'openai') {
-    return VALID_OPENAI_MODELS.includes(model) ? model : '04-mini';
+    return VALID_OPENAI_MODELS.includes(model) ? model : 'gpt-4.1-mini';
   } else {
     // For Ollama, we'll trust the model name since it should come from actual installed models
     return model;
@@ -381,6 +387,183 @@ export const agentTools: AgentTool[] = [
     }
   },
 
+  // NEW: Direct Editor Manipulation Tools
+  {
+    name: "edit_current_document",
+    description: "Directly edit the current document in the editor interface",
+    parameters: { 
+      operation: "replace|append|prepend|insert", 
+      content: "string", 
+      description: "string?" 
+    },
+    execute: async (params, context) => {
+      return { 
+        success: true, 
+        data: { 
+          operation: params.operation, 
+          content: params.content,
+          description: params.description || `${params.operation} operation completed`
+        }, 
+        message: `Editor operation: ${params.operation}` 
+      };
+    }
+  },
+
+  {
+    name: "replace_current_content",
+    description: "Replace the entire content of the current document in the editor",
+    parameters: { content: "string", reason: "string?" },
+    execute: async (params, context) => {
+      // Also update the database if we have current document ID
+      if (context.currentDocument?.id) {
+        const wordCount = countWords(params.content);
+        await storage.updateDocument(context.currentDocument.id, {
+          content: params.content,
+          wordCount
+        });
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          operation: "replace", 
+          content: params.content,
+          reason: params.reason || "Content replaced by agent"
+        }, 
+        message: "Replaced current document content" 
+      };
+    }
+  },
+
+  {
+    name: "edit_text_with_pattern",
+    description: "Find and replace text patterns in the current document using regex. Can target specific paragraphs by number or content patterns.",
+    parameters: { 
+      pattern: "string", 
+      replacement: "string", 
+      description: "string?",
+      currentContent: "string?",
+      targetParagraph: "number?",
+      searchInParagraph: "string?"
+    },
+    execute: async (params, context) => {
+      // Use current document content or provided content
+      const textToEdit = params.currentContent || context.editorState?.content || context.currentDocument?.content || "";
+      
+      if (!textToEdit.trim()) {
+        return { success: false, error: "No content to edit" };
+      }
+      
+      let finalPattern = params.pattern;
+      let finalText = textToEdit;
+      
+      // Handle paragraph-specific editing
+      if (params.targetParagraph || params.searchInParagraph) {
+        const paragraphs = textToEdit.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
+        let targetIndex = -1;
+        
+        if (params.targetParagraph && params.targetParagraph > 0 && params.targetParagraph <= paragraphs.length) {
+          targetIndex = params.targetParagraph - 1;
+        } else if (params.searchInParagraph) {
+          targetIndex = paragraphs.findIndex((p: string) => 
+            p.toLowerCase().includes(params.searchInParagraph.toLowerCase())
+          );
+        }
+        
+        if (targetIndex >= 0) {
+          // Apply pattern only to the target paragraph
+          const originalParagraph = paragraphs[targetIndex];
+          const updatedParagraph = originalParagraph.replace(new RegExp(params.pattern, 'g'), params.replacement);
+          paragraphs[targetIndex] = updatedParagraph;
+          finalText = paragraphs.join('\n\n');
+          
+          // Update database if we have current document ID
+          if (context.currentDocument?.id) {
+            const wordCount = countWords(finalText);
+            await storage.updateDocument(context.currentDocument.id, {
+              content: finalText,
+              wordCount
+            });
+          }
+          
+          return { 
+            success: true, 
+            data: { 
+              operation: "replace", 
+              content: finalText,
+              count: originalParagraph !== updatedParagraph ? 1 : 0,
+              description: params.description || `Edited paragraph ${targetIndex + 1}: ${params.pattern} → ${params.replacement}`
+            }, 
+            message: `Paragraph ${targetIndex + 1} editing completed` 
+          };
+        } else {
+          return { success: false, error: "Could not find the target paragraph" };
+        }
+      }
+      
+      // Default: apply pattern to entire text
+      const result = replaceText(finalText, params.pattern, params.replacement);
+      
+      // Also update the database if we have current document ID and changes were made
+      if (context.currentDocument?.id && result.count > 0) {
+        const wordCount = countWords(result.result);
+        await storage.updateDocument(context.currentDocument.id, {
+          content: result.result,
+          wordCount
+        });
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          operation: "replace", 
+          content: result.result,
+          count: result.count,
+          description: params.description || `Replaced ${result.count} instances of "${params.pattern}"`
+        }, 
+        message: `Text pattern editing completed: ${result.count} replacements` 
+      };
+    }
+  },
+
+  {
+    name: "improve_current_text",
+    description: "Improve the current document content using AI",
+    parameters: { 
+      instruction: "string", 
+      section: "string?",
+      currentContent: "string?" 
+    },
+    execute: async (params, context) => {
+      const textToImprove = params.currentContent || context.currentDocument?.content || "";
+      
+      if (!textToImprove.trim()) {
+        return { success: false, error: "No content to improve" };
+      }
+      
+      const improvedResult = await processTextCommand(textToImprove, params.instruction);
+      
+      // Also update the database if we have current document ID
+      if (context.currentDocument?.id) {
+        const wordCount = countWords(improvedResult.result);
+        await storage.updateDocument(context.currentDocument.id, {
+          content: improvedResult.result,
+          wordCount
+        });
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          operation: "replace", 
+          content: improvedResult.result,
+          description: `Improved text: ${params.instruction}`
+        }, 
+        message: improvedResult.message || "Text improvement completed" 
+      };
+    }
+  },
+
   // NEW: Advanced autonomous operation tools
   {
     name: "reflect_on_progress",
@@ -538,7 +721,70 @@ export const agentTools: AgentTool[] = [
         message: "Continuous improvement analysis not yet implemented in tool context" 
       };
     }
-  }
+  },
+
+  {
+    name: "edit_specific_paragraph",
+    description: "Edit a specific paragraph by number or content match while preserving all other paragraphs",
+    parameters: { 
+      paragraphNumber: "number?", 
+      searchText: "string?",
+      newContent: "string", 
+      operation: "replace|translate|improve|rewrite",
+      currentContent: "string?" 
+    },
+    execute: async (params, context) => {
+      const textToEdit = params.currentContent || context.editorState?.content || context.currentDocument?.content || "";
+      
+      if (!textToEdit.trim()) {
+        return { success: false, error: "No content to edit" };
+      }
+      
+      // Split into paragraphs
+      const paragraphs = textToEdit.split(/\n\s*\n/).filter((p: string) => p.trim().length > 0);
+      
+      let targetParagraphIndex = -1;
+      
+      // Find target paragraph by number or search text
+      if (params.paragraphNumber && params.paragraphNumber > 0 && params.paragraphNumber <= paragraphs.length) {
+        targetParagraphIndex = params.paragraphNumber - 1;
+      } else if (params.searchText) {
+        targetParagraphIndex = paragraphs.findIndex((p: string) => 
+          p.toLowerCase().includes(params.searchText.toLowerCase())
+        );
+      }
+      
+      if (targetParagraphIndex === -1) {
+        return { success: false, error: "Could not find the target paragraph" };
+      }
+      
+      // Replace the specific paragraph
+      paragraphs[targetParagraphIndex] = params.newContent;
+      
+      // Rejoin paragraphs
+      const result = paragraphs.join('\n\n');
+      
+      // Update database if we have current document ID
+      if (context.currentDocument?.id) {
+        const wordCount = countWords(result);
+        await storage.updateDocument(context.currentDocument.id, {
+          content: result,
+          wordCount
+        });
+      }
+      
+      return { 
+        success: true, 
+        data: { 
+          operation: "replace", 
+          content: result,
+          targetParagraph: targetParagraphIndex + 1,
+          description: `${params.operation} paragraph ${targetParagraphIndex + 1}`
+        }, 
+        message: `Successfully edited paragraph ${targetParagraphIndex + 1}` 
+      };
+    }
+  },
 ];
 
 // Main agent class
@@ -865,7 +1111,15 @@ Respond with JSON:
       } : null,
       documentCount: this.context.projectDocuments.length,
       sourceCount: this.context.projectSources.length,
-      availableTools: this.getAvailableTools()
+      availableTools: this.getAvailableTools(),
+      editorState: this.context.editorState ? {
+        title: this.context.editorState.title,
+        currentWordCount: this.context.editorState.wordCount,
+        hasUnsavedChanges: this.context.editorState.hasUnsavedChanges,
+        contentPreview: this.context.editorState.content.length > 100 ? 
+          this.context.editorState.content.substring(0, 100) + "..." : 
+          this.context.editorState.content
+      } : null
     };
 
     return `You are an intelligent AI writing assistant with access to powerful tools. Your goal is to help users with their writing projects by using tools strategically.
@@ -901,34 +1155,47 @@ INTELLIGENT TOOL USAGE PATTERNS:
 - **Content Creation**: analyze current content → generate_text → update_document → provide explanation
 - **Text Processing**: search_in_text → replace_in_text → update_document → explain changes
 - **Project Management**: list_projects → get_project → list_documents → provide overview
+- **Direct Editor Operations**: 
+  * Use edit_current_document for simple append/prepend operations
+  * Use replace_current_content for complete document rewrites
+  * Use edit_text_with_pattern for find-and-replace operations with regex
+  * Use improve_current_text for AI-powered content improvement
+- **Advanced Text Editing**:
+  * Combine search_in_text + replace_in_text for precise text manipulation
+  * Use analyze_document_structure before making structural changes
+  * Chain generate_text + edit_current_document for content expansion
+
+**EDITOR-AWARE CAPABILITIES:**
+You can directly manipulate the user's editor content in real-time. When users ask you to:
+- "Edit this text..." → Use edit_text_with_pattern or improve_current_text
+- "Replace all instances of..." → Use edit_text_with_pattern with regex
+- "Rewrite this document..." → Use replace_current_content
+- "Add content..." → Use edit_current_document with append operation
+- "Fix grammar/style..." → Use improve_current_text with specific instructions
 
 Remember: Your responses should be detailed, insightful, and specifically tailored to help the user with their writing and research needs.`;
   }
 
   // Update agent context with current app state
-  async updateContext(newContext: Partial<AgentContext>) {
-    // Merge new context with existing context
+  async updateContext(newContext: Partial<AgentContext>): Promise<void> {
+    // Update basic context
     Object.assign(this.context, newContext);
     
-    // Load current project data if project ID provided
-    if (newContext.currentProject?.id) {
+    // Update current document reference if editorState is provided
+    if (newContext.editorState && this.context.currentDocument) {
+      this.context.currentDocument.content = newContext.editorState.content;
+      this.context.currentDocument.title = newContext.editorState.title;
+    }
+    
+    // Refresh project data if needed
+    if (newContext.currentProject) {
       try {
-        const { storage } = await import("./storage");
-        
-        this.context.currentProject = newContext.currentProject;
+        this.context.allProjects = await storage.getProjects(this.context.userId);
         this.context.projectDocuments = await storage.getDocuments(newContext.currentProject.id);
         this.context.projectSources = await storage.getSources(newContext.currentProject.id);
       } catch (error) {
-        console.error("Error loading project context:", error);
+        console.warn('Failed to refresh project data:', error);
       }
-    }
-    
-    // Load all projects for the user
-    try {
-      const { storage } = await import("./storage");
-      this.context.allProjects = await storage.getProjects(this.context.userId);
-    } catch (error) {
-      console.error("Error loading user projects:", error);
     }
   }
 
@@ -938,24 +1205,39 @@ Remember: Your responses should be detailed, insightful, and specifically tailor
     if (!tool) {
       return {
         success: false,
-        error: `Tool '${toolName}' not found. Available tools: ${this.getAvailableTools().join(', ')}`
+        error: `Tool '${toolName}' not found. Available tools: ${this.getAvailableTools().join(', ')}`,
+        tool: toolName,
+        executionTime: 0
       };
     }
 
+    const startTime = Date.now();
+    
     try {
       // Record the execution attempt
       this.recordExecutionStep(`Executing tool: ${toolName}`, toolName, parameters, null, `Tool execution with parameters: ${JSON.stringify(parameters)}`);
       
       const result = await tool.execute(parameters, this.context);
+      const executionTime = Date.now() - startTime;
+      
+      // Ensure the result always includes the tool name and execution time
+      const enhancedResult: ToolResult = {
+        ...result,
+        tool: toolName,
+        executionTime
+      };
       
       // Record the execution result
-      this.recordExecutionStep(`Tool completed: ${toolName}`, toolName, parameters, result, result.success ? 'Tool executed successfully' : `Tool failed: ${result.error}`);
+      this.recordExecutionStep(`Tool completed: ${toolName}`, toolName, parameters, enhancedResult, enhancedResult.success ? 'Tool executed successfully' : `Tool failed: ${enhancedResult.error}`);
       
-      return result;
+      return enhancedResult;
     } catch (error: any) {
-      const errorResult = {
+      const executionTime = Date.now() - startTime;
+      const errorResult: ToolResult = {
         success: false,
-        error: `Error executing tool '${toolName}': ${error.message}`
+        error: `Error executing tool '${toolName}': ${error.message}`,
+        tool: toolName,
+        executionTime
       };
       
       // Record the execution error

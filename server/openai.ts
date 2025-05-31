@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
-// the newest OpenAI model is "04-mini" which is available and excels at diverse tasks
-export const DEFAULT_MODEL = "04-mini";
+// the newest OpenAI model is "gpt-4.1-mini" which is available and excels at diverse tasks
+export const DEFAULT_MODEL = "gpt-4.1-mini";
 const DEFAULT_PROVIDER = "openai";
 
 const openai = new OpenAI({ 

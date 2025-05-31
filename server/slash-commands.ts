@@ -1,40 +1,63 @@
 import OpenAI from "openai";
-import { DEFAULT_MODEL } from "./openai";
 
-// Call Ollama API directly
+const DEFAULT_MODEL = "gpt-4o-mini";
+
+// Helper function to call Ollama API
 async function callOllama(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
   try {
-    // Combine system and user prompts for Ollama
-    const fullPrompt = `${systemPrompt}\n\nUser: ${userPrompt}\n\nAssistant:`;
-    
-    const res = await fetch("http://localhost:11434/api/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        model, 
-        prompt: fullPrompt,
+    const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+    const response = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: model,
+        prompt: `System: ${systemPrompt}\n\nUser: ${userPrompt}`,
         stream: false,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9
-        }
-      })
+      }),
     });
-    
-    if (!res.ok) {
-      throw new Error(`Ollama server error: ${res.status} ${res.statusText}`);
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.statusText}`);
     }
-    
-    const data = await res.json();
-    if (!data.response) {
-      throw new Error('No response from Ollama server');
-    }
-    
-    return data.response.trim();
-  } catch (err: any) {
-    console.error("Ollama fetch error:", err);
-    throw new Error(`Ollama error: ${err.message}`);
+
+    const data = await response.json();
+    return data.response || "";
+  } catch (error) {
+    console.error("Error calling Ollama:", error);
+    throw error;
   }
+}
+
+// Helper function to parse command parameters
+function parseCommand(command: string): { baseCommand: string; parameter?: string } {
+  const parts = command.split(':');
+  return {
+    baseCommand: parts[0],
+    parameter: parts[1]
+  };
+}
+
+// Helper function to analyze content for smart defaults
+function analyzeContentContext(content: string, selectionInfo: any): {
+  length: 'short' | 'medium' | 'long';
+  complexity: 'simple' | 'moderate' | 'complex';
+  tone: 'formal' | 'casual' | 'academic' | 'neutral';
+  hasSelection: boolean;
+} {
+  const text = selectionInfo.selectedText || content;
+  const wordCount = text.trim().split(/\s+/).length;
+  
+  return {
+    length: wordCount < 50 ? 'short' : wordCount < 200 ? 'medium' : 'long',
+    complexity: /\b(furthermore|consequently|nevertheless|however)\b/i.test(text) ? 'complex' : 
+               /\b(and|but|so|then)\b/i.test(text) ? 'moderate' : 'simple',
+    tone: /\b(research|study|analysis|methodology)\b/i.test(text) ? 'academic' :
+          /\b(I think|maybe|kinda|pretty)\b/i.test(text) ? 'casual' :
+          /\b(shall|pursuant|hereby|therefore)\b/i.test(text) ? 'formal' : 'neutral',
+    hasSelection: Boolean(selectionInfo.selectedText)
+  };
 }
 
 // Define the AI commands handlers for each slash command type
@@ -57,6 +80,12 @@ export async function executeSlashCommand(
   replaceSelection?: boolean;
   replaceEntireContent?: boolean;
 }> {
+  // Parse command and parameter
+  const { baseCommand, parameter } = parseCommand(command);
+  
+  // Analyze content for smart defaults
+  const context = analyzeContentContext(content, selectionInfo);
+  
   // Use the provided LLM provider and model, or default to OpenAI
   const openai = new OpenAI({ 
     apiKey: process.env.OPENAI_API_KEY || "default_key" 
@@ -66,7 +95,7 @@ export async function executeSlashCommand(
   const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
   
   // The context is either the selected text (if any) or the entire content
-  const context = selectionInfo.selectedText || content;
+  const textContext = selectionInfo.selectedText || content;
   
   // Default response
   let defaultResponse = {
@@ -81,7 +110,7 @@ export async function executeSlashCommand(
     let systemPrompt = "";
     let userPrompt = "";
     
-    switch (command) {
+    switch (baseCommand) {
       case 'continue':
         systemPrompt = `You are an AI writing assistant. Continue the text in a seamless way 
         that matches the style and content of what came before. Be creative, coherent, and maintain
@@ -90,38 +119,101 @@ export async function executeSlashCommand(
         break;
         
       case 'improve':
-        systemPrompt = `You are an expert editor. Improve the writing while maintaining the core message.
-        Enhance clarity, flow, and readability. Fix any grammatical issues, awkward phrasing,
-        or structural problems. Make it more compelling while preserving the writer's voice.`;
-        userPrompt = context;
+        if (parameter) {
+          switch (parameter) {
+            case 'clarity':
+              systemPrompt = `You are an expert editor focused on clarity. Rewrite the text to make it clearer and easier to understand. Eliminate ambiguity, simplify complex sentences, and ensure every idea is expressed precisely.`;
+              break;
+            case 'engagement':
+              systemPrompt = `You are an expert editor focused on engagement. Rewrite the text to make it more compelling, interesting, and engaging for readers. Add vivid language, vary sentence structure, and create stronger hooks.`;
+              break;
+            case 'flow':
+              systemPrompt = `You are an expert editor focused on flow and structure. Rewrite the text to improve logical flow, smooth transitions between ideas, and overall coherence. Ensure ideas build naturally from one to the next.`;
+              break;
+            case 'word-choice':
+              systemPrompt = `You are an expert editor focused on word choice and style. Rewrite the text using more precise, elegant, and impactful vocabulary. Replace weak words with stronger alternatives while maintaining the original meaning.`;
+              break;
+            default:
+              systemPrompt = `You are an expert editor. Improve the writing while maintaining the core message. Based on the content's ${context.complexity} complexity and ${context.tone} tone, enhance clarity, flow, and readability. Fix any grammatical issues, awkward phrasing, or structural problems.`;
+          }
+        } else {
+          // Smart default based on content analysis
+          systemPrompt = `You are an expert editor. Improve the writing while maintaining the core message. Based on the content's ${context.complexity} complexity and ${context.tone} tone, enhance clarity, flow, and readability. Fix any grammatical issues, awkward phrasing, or structural problems.`;
+        }
+        userPrompt = textContext;
         break;
         
       case 'summarize':
+        const summaryLength = context.length === 'short' ? '2-3 sentences' : 
+                            context.length === 'medium' ? '1 paragraph' : '2-3 paragraphs';
         systemPrompt = `You are a master of concise communication. Create a clear, comprehensive summary
-        of the text that captures all key points in about 1/3 the length of the original. 
-        Focus on the main ideas and eliminate redundancy while keeping the essence intact.`;
-        userPrompt = context;
+        of the text in approximately ${summaryLength}. Capture all key points while eliminating redundancy 
+        and maintaining the essence intact.`;
+        userPrompt = textContext;
         break;
         
       case 'expand':
-        systemPrompt = `You are an expert writer who excels at elaboration. Expand upon the given text
-        by adding more detail, examples, evidence, or context. Develop the ideas more fully while
-        maintaining coherence with the original content. Add at least twice as much content.`;
-        userPrompt = context;
+        if (parameter) {
+          switch (parameter) {
+            case 'examples':
+              systemPrompt = `You are an expert writer who excels at illustration. Expand the text by adding concrete examples, case studies, or real-world illustrations that support and clarify the main points.`;
+              break;
+            case 'detail':
+              systemPrompt = `You are an expert writer who excels at elaboration. Expand the text by adding more specific details, explanations, and depth to each point while maintaining coherence.`;
+              break;
+            case 'context':
+              systemPrompt = `You are an expert writer who excels at contextualization. Expand the text by adding background information, historical context, or broader implications to help readers understand the bigger picture.`;
+              break;
+            case 'analysis':
+              systemPrompt = `You are an expert analyst and writer. Expand the text by adding deeper analysis, critical thinking, implications, and connections between ideas.`;
+              break;
+            default:
+              systemPrompt = `You are an expert writer who excels at elaboration. Expand upon the given text by adding more detail, examples, evidence, or context. Develop the ideas more fully while maintaining coherence with the original content.`;
+          }
+        } else {
+          // Smart default based on content analysis
+          const expandStyle = context.tone === 'academic' ? 'analysis and evidence' :
+                            context.complexity === 'simple' ? 'examples and details' : 'context and depth';
+          systemPrompt = `You are an expert writer who excels at elaboration. Expand upon the given text by adding ${expandStyle}. Develop the ideas more fully while maintaining coherence with the original content.`;
+        }
+        userPrompt = textContext;
         break;
         
       case 'list':
         systemPrompt = `You are an organizational expert. Transform the content into a well-structured
         list format with clear headings and bullet points. Maintain all important information
         but reorganize it for easier reading and reference. Add appropriate introductory text.`;
-        userPrompt = context;
+        userPrompt = textContext;
         break;
-        
+
       case 'rewrite':
-        systemPrompt = `You are a versatile writer. Completely rewrite the text in a fresh way while
-        preserving all the key information and overall message. Change sentence structures,
-        word choices, and flow, but keep the meaning intact. Make it feel new but familiar.`;
-        userPrompt = context;
+        if (parameter) {
+          switch (parameter) {
+            case 'simpler':
+              systemPrompt = `You are a clarity specialist. Rewrite the text using simpler language, shorter sentences, and clearer structure. Make it accessible to a broader audience while preserving all key information.`;
+              break;
+            case 'formal':
+              systemPrompt = `You are a professional writing expert. Rewrite the text in a more formal, professional tone suitable for business or academic contexts. Use sophisticated vocabulary and formal structure.`;
+              break;
+            case 'engaging':
+              systemPrompt = `You are a creative writing expert. Rewrite the text to be more engaging, compelling, and interesting. Use vivid language, varied sentence structure, and techniques that capture reader attention.`;
+              break;
+            case 'different-angle':
+              systemPrompt = `You are a creative perspective specialist. Rewrite the text from a completely different angle or viewpoint while preserving the core information. Change the approach, structure, or perspective to offer fresh insights.`;
+              break;
+            default:
+              systemPrompt = `You are a versatile writer. Completely rewrite the text in a fresh way while preserving all the key information and overall message. Change sentence structures, word choices, and flow, but keep the meaning intact.`;
+          }
+        } else {
+          // Smart default based on content analysis
+          systemPrompt = `You are a versatile writer. Completely rewrite the text in a fresh way while preserving all the key information and overall message. Based on the content's ${context.tone} tone, make it more ${context.complexity === 'complex' ? 'accessible' : 'sophisticated'} while keeping the meaning intact.`;
+        }
+        userPrompt = textContext;
+        break;
+
+      case 'simplify':
+        systemPrompt = `You are a clarity specialist. Simplify the text to make it easier to understand for a general audience. Use simpler vocabulary, shorter sentences, and clearer explanations. Break down complex concepts into digestible parts while preserving all important information.`;
+        userPrompt = textContext;
         break;
         
       case 'suggest':
@@ -130,19 +222,61 @@ export async function executeSlashCommand(
         numbered suggestions with a brief explanation of each. Be specific and insightful.`;
         userPrompt = content;
         break;
+
+      case 'outline':
+        systemPrompt = `You are an organizational expert. Create a comprehensive, well-structured outline from the content. Use hierarchical headings (I, II, III with A, B, C subpoints) to organize the main ideas and supporting points. Make it suitable for planning or restructuring the content.`;
+        userPrompt = textContext;
+        break;
+
+      case 'format':
+        systemPrompt = `You are a formatting specialist. Improve the structure and formatting of the text. Add appropriate headings, subheadings, bullet points, numbered lists, and paragraph breaks to make the content more readable and professionally presented. Maintain all content while enhancing its visual organization.`;
+        userPrompt = textContext;
+        break;
         
       case 'tone':
-        systemPrompt = `You are a tone specialist. Rewrite the text to improve its tone, making it more
-        professional, engaging, and appropriate for the apparent context. Adjust formality,
-        warmth, authority, and other tone aspects while preserving the core message.`;
-        userPrompt = context;
+        if (parameter) {
+          switch (parameter) {
+            case 'professional':
+              systemPrompt = `You are a business writing expert. Rewrite the text in a professional, business-appropriate tone. Use formal language, clear structure, and authoritative voice suitable for workplace communication.`;
+              break;
+            case 'casual':
+              systemPrompt = `You are a conversational writing expert. Rewrite the text in a casual, friendly tone as if speaking to a friend. Use conversational language, contractions, and a relaxed approach while maintaining clarity.`;
+              break;
+            case 'academic':
+              systemPrompt = `You are an academic writing expert. Rewrite the text in a scholarly, academic tone. Use formal vocabulary, precise language, and analytical approach suitable for academic or research contexts.`;
+              break;
+            case 'friendly':
+              systemPrompt = `You are a warm communication expert. Rewrite the text in a friendly, approachable tone. Use warm language, inclusive expressions, and a welcoming voice that builds connection with readers.`;
+              break;
+            case 'authoritative':
+              systemPrompt = `You are an expert in authoritative communication. Rewrite the text with confidence and authority. Use decisive language, strong statements, and expert positioning to establish credibility and leadership.`;
+              break;
+            default:
+              systemPrompt = `You are a tone specialist. Rewrite the text to improve its tone, making it more professional, engaging, and appropriate for the apparent context. Adjust formality, warmth, authority, and other tone aspects while preserving the core message.`;
+          }
+        } else {
+          // Smart default based on content analysis
+          const suggestedTone = context.tone === 'casual' ? 'more professional' :
+                              context.tone === 'formal' ? 'more approachable' : 'more engaging';
+          systemPrompt = `You are a tone specialist. Rewrite the text to make it ${suggestedTone} while preserving the core message. Adjust formality, warmth, and authority as appropriate.`;
+        }
+        userPrompt = textContext;
         break;
         
       case 'fix':
         systemPrompt = `You are a grammar and clarity expert. Fix any grammatical errors, spelling mistakes,
         punctuation problems, or clarity issues in the text. Make minimal changes necessary to
         ensure correctness and readability. Focus only on errors, not style preferences.`;
-        userPrompt = context;
+        userPrompt = textContext;
+        break;
+
+      case 'translate':
+        if (parameter && parameter !== 'other') {
+          systemPrompt = `You are a professional translator. Translate the text accurately into ${parameter}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural in the target language.`;
+        } else {
+          systemPrompt = `You are a professional translator. Translate the text into Spanish (or ask the user to specify a language if the intent is unclear). Maintain the original meaning, tone, and style while ensuring the translation sounds natural.`;
+        }
+        userPrompt = textContext;
         break;
         
       default:
@@ -184,21 +318,20 @@ export async function executeSlashCommand(
     }
     
     // Determine if we should replace the entire content or just the selection
-    const replaceEntireContent = command === 'continue' || command === 'list' || 
-                                command === 'suggest' || 
+    const replaceEntireContent = ['continue', 'list', 'suggest', 'outline', 'format'].includes(baseCommand) || 
                                 (!selectionInfo.selectedText && 
-                                 (command === 'summarize' || command === 'improve'));
+                                 ['summarize', 'improve'].includes(baseCommand));
     
     if (replaceEntireContent) {
       // For commands like continue, we want to add to the existing content
-      if (command === 'continue') {
+      if (baseCommand === 'continue') {
         return {
           result: generatedText,
           message: `Extended your writing with new content.`,
           replaceSelection: false,
           replaceEntireContent: false // We'll handle this special case separately
         };
-      } else if (command === 'suggest') {
+      } else if (baseCommand === 'suggest') {
         return {
           result: generatedText,
           message: `Generated new ideas based on your content.`,
@@ -206,18 +339,20 @@ export async function executeSlashCommand(
           replaceEntireContent: false // We'll handle this special case separately
         };
       } else {
+        const action = parameter ? `${baseCommand} (${parameter})` : baseCommand;
         return {
           result: generatedText,
-          message: `Applied ${command} to your text.`,
+          message: `Applied ${action} to your text.`,
           replaceSelection: false,
           replaceEntireContent: true
         };
       }
     } else {
       // For commands operating on selections
+      const action = parameter ? `${baseCommand} (${parameter})` : baseCommand;
       return {
         result: generatedText,
-        message: `Applied ${command} to the selected text.`,
+        message: `Applied ${action} to the selected text.`,
         replaceSelection: true,
         replaceEntireContent: false
       };
@@ -226,7 +361,7 @@ export async function executeSlashCommand(
     console.error(`Error executing slash command ${command}:`, error);
     return {
       ...defaultResponse,
-      message: `Error executing ${command}: ${error.message || "Unknown error"}`
+      message: `Error executing ${baseCommand}: ${error.message || "Unknown error"}`
     };
   }
 }

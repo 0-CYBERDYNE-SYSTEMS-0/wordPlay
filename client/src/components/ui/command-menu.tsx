@@ -16,7 +16,11 @@ import {
   Wand2, 
   FileText, 
   Lightbulb,
-  Pencil
+  Pencil,
+  Zap,
+  TreePine,
+  Layout,
+  Globe
 } from 'lucide-react';
 
 interface SlashCommandMenuProps {
@@ -33,71 +37,142 @@ export interface SlashCommand {
   description: string;
   icon: React.ReactNode;
   action: string;
+  category: string;
+  hasParameters?: boolean;
+  parameters?: string[];
+  shortcut?: string;
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  // Creation Commands
   {
     id: 'continue',
     title: 'Continue writing',
     description: 'Continue the text with AI assistance',
     icon: <Type className="h-4 w-4" />,
-    action: 'continue'
-  },
-  {
-    id: 'improve',
-    title: 'Improve writing',
-    description: 'Enhance clarity and readability',
-    icon: <Sparkles className="h-4 w-4" />,
-    action: 'improve'
-  },
-  {
-    id: 'summarize',
-    title: 'Summarize',
-    description: 'Create a concise summary',
-    icon: <FileText className="h-4 w-4" />,
-    action: 'summarize'
-  },
-  {
-    id: 'expand',
-    title: 'Expand',
-    description: 'Elaborate on the current text',
-    icon: <Wand2 className="h-4 w-4" />,
-    action: 'expand'
-  },
-  {
-    id: 'list',
-    title: 'Create list',
-    description: 'Generate a list from the content',
-    icon: <List className="h-4 w-4" />,
-    action: 'list'
-  },
-  {
-    id: 'rewrite',
-    title: 'Rewrite',
-    description: 'Rewrite the selected text',
-    icon: <Pencil className="h-4 w-4" />,
-    action: 'rewrite'
+    action: 'continue',
+    category: 'creation',
+    shortcut: '1'
   },
   {
     id: 'suggest',
     title: 'Ideas',
     description: 'Get new ideas related to your content',
     icon: <Lightbulb className="h-4 w-4" />,
-    action: 'suggest'
+    action: 'suggest',
+    category: 'creation',
+    shortcut: '2'
+  },
+
+  // Enhancement Commands
+  {
+    id: 'improve',
+    title: 'Improve writing',
+    description: 'Enhance clarity and readability',
+    icon: <Sparkles className="h-4 w-4" />,
+    action: 'improve',
+    category: 'enhancement',
+    hasParameters: true,
+    parameters: ['clarity', 'engagement', 'flow', 'word-choice'],
+    shortcut: '3'
+  },
+  {
+    id: 'expand',
+    title: 'Expand',
+    description: 'Elaborate on the current text',
+    icon: <Wand2 className="h-4 w-4" />,
+    action: 'expand',
+    category: 'enhancement',
+    hasParameters: true,
+    parameters: ['examples', 'detail', 'context', 'analysis'],
+    shortcut: '4'
+  },
+  {
+    id: 'rewrite',
+    title: 'Rewrite',
+    description: 'Rewrite the selected text',
+    icon: <Pencil className="h-4 w-4" />,
+    action: 'rewrite',
+    category: 'enhancement',
+    hasParameters: true,
+    parameters: ['simpler', 'formal', 'engaging', 'different-angle'],
+    shortcut: '5'
+  },
+  {
+    id: 'simplify',
+    title: 'Simplify',
+    description: 'Make text easier to understand',
+    icon: <Zap className="h-4 w-4" />,
+    action: 'simplify',
+    category: 'enhancement',
+    shortcut: '6'
+  },
+
+  // Organization Commands
+  {
+    id: 'summarize',
+    title: 'Summarize',
+    description: 'Create a concise summary',
+    icon: <FileText className="h-4 w-4" />,
+    action: 'summarize',
+    category: 'organization',
+    shortcut: '7'
+  },
+  {
+    id: 'list',
+    title: 'Create list',
+    description: 'Generate a list from the content',
+    icon: <List className="h-4 w-4" />,
+    action: 'list',
+    category: 'organization',
+    shortcut: '8'
+  },
+  {
+    id: 'outline',
+    title: 'Create outline',
+    description: 'Generate structured outline',
+    icon: <TreePine className="h-4 w-4" />,
+    action: 'outline',
+    category: 'organization',
+    shortcut: '9'
+  },
+  {
+    id: 'format',
+    title: 'Format',
+    description: 'Add proper formatting and structure',
+    icon: <Layout className="h-4 w-4" />,
+    action: 'format',
+    category: 'organization'
+  },
+
+  // Utility Commands
+  {
+    id: 'fix',
+    title: 'Fix grammar',
+    description: 'Correct grammar and spelling',
+    icon: <CheckSquare className="h-4 w-4" />,
+    action: 'fix',
+    category: 'utility'
   },
   {
     id: 'tone',
     title: 'Change tone',
     description: 'Adjust the tone of the text',
     icon: <MessageSquare className="h-4 w-4" />,
-    action: 'tone'
+    action: 'tone',
+    category: 'utility',
+    hasParameters: true,
+    parameters: ['professional', 'casual', 'academic', 'friendly', 'authoritative']
   },
   {
-    id: 'fix',
-    title: 'Fix grammar',
-    description: 'Correct grammar and spelling',
-    icon: <CheckSquare className="h-4 w-4" />,
-    action: 'fix'
+    id: 'translate',
+    title: 'Translate',
+    description: 'Translate text to another language',
+    icon: <Globe className="h-4 w-4" />,
+    action: 'translate',
+    category: 'utility',
+    hasParameters: true,
+    parameters: ['spanish', 'french', 'german', 'italian', 'portuguese', 'other']
   }
 ];
 

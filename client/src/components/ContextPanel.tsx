@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Document } from "@shared/schema";
-import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code, Lightbulb } from "lucide-react";
+import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code, Lightbulb, ExternalLink, Folder } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { countWords, calculateReadingTime, extractStructure } from "@/lib/document-processor";
@@ -14,6 +14,15 @@ interface ContextPanelProps {
   activeTab: "editor" | "search" | "command" | "style";
   onClose: () => void;
   aiSuggestions?: string;
+}
+
+interface SavedSource {
+  id: number;
+  type: string;
+  name: string;
+  content?: string;
+  url?: string;
+  createdAt: string;
 }
 
 export default function ContextPanel({
@@ -190,6 +199,20 @@ export default function ContextPanel({
     }
   };
 
+  // Get current project ID from document data
+  const projectId = documentData?.projectId;
+
+  // Fetch saved sources for research context
+  const sourcesQuery = useQuery({
+    queryKey: ["sources", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const res = await apiRequest("GET", `/api/projects/${projectId}/sources`);
+      return res.json() as Promise<SavedSource[]>;
+    },
+    enabled: !!projectId && activeTab === "search"
+  });
+
   return (
     <div className="w-full h-full bg-white dark:bg-gray-800 flex flex-col">
       <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
@@ -280,7 +303,43 @@ export default function ContextPanel({
                 <li>• Save important sources</li>
                 <li>• Extract content</li>
               </ul>
+            </div>
+
+            {/* Saved Sources */}
+            {sourcesQuery.data && sourcesQuery.data.length > 0 && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
+                <h3 className="font-medium text-xs mb-2 flex items-center text-blue-800 dark:text-blue-200">
+                  <Folder className="h-3 w-3 mr-1" />
+                  Saved Sources ({sourcesQuery.data.length})
+                </h3>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {sourcesQuery.data.slice(0, 5).map((source) => (
+                    <div key={source.id} className="text-xs text-blue-700 dark:text-blue-300">
+                      <div className="font-medium truncate">{source.name}</div>
+                      <div className="text-blue-600 dark:text-blue-400 flex items-center">
+                        {source.type}
+                        {source.url && (
+                          <a 
+                            href={source.url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="ml-1"
+                            title="Open source"
+                          >
+                            <ExternalLink className="h-2 w-2" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {sourcesQuery.data.length > 5 && (
+                    <div className="text-xs text-blue-600 dark:text-blue-400">
+                      +{sourcesQuery.data.length - 5} more sources
+                    </div>
+                  )}
+                </div>
               </div>
+            )}
             
             {/* Search History */}
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">

@@ -1,7 +1,7 @@
-import { useState, useRef } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock, BarChart2, Sparkles, PanelRightOpen } from "lucide-react";
+import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock, BarChart2, Sparkles, PanelRightOpen, Folder, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,15 @@ interface SearchResponse {
   results: SearchResult[];
   summary?: string;
   error?: string;
+}
+
+interface SavedSource {
+  id: number;
+  type: string;
+  name: string;
+  content?: string;
+  url?: string;
+  createdAt: string;
 }
 
 // Helper function to safely extract hostname from URL
@@ -72,6 +81,31 @@ export default function WebSearch({
   const [sources, setSources] = useState<{id: number; name: string; url: string}[]>([]);
   const [selectedSource, setSelectedSource] = useState<number | null>(null);
   const [sourceContent, setSourceContent] = useState("");
+  
+  // Fetch saved sources for the current project
+  const sourcesQuery = useQuery({
+    queryKey: ["sources", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const res = await apiRequest("GET", `/api/projects/${projectId}/sources`);
+      return res.json() as Promise<SavedSource[]>;
+    },
+    enabled: !!projectId
+  });
+
+  // Load existing research notes when component mounts or project changes
+  useEffect(() => {
+    if (sourcesQuery.data) {
+      // Find the most recent "notes" type source and load it into research notes
+      const notesSource = sourcesQuery.data
+        .filter(source => source.type === "notes")
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      
+      if (notesSource?.content) {
+        setResearchNotes(notesSource.content);
+      }
+    }
+  }, [sourcesQuery.data]);
   
   // Search mutation
   const searchMutation = useMutation({
@@ -132,13 +166,12 @@ export default function WebSearch({
       return res.json();
     },
     onSuccess: (data) => {
-      // Update sources list with the new source
-      setSources(prev => [...prev, data]);
-      
       toast({
         title: "Source added",
         description: "Research source has been saved to help with your writing."
       });
+      // Refresh the sources list to show the newly added source
+      sourcesQuery.refetch();
     },
     onError: (error) => {
       toast({
@@ -235,6 +268,8 @@ export default function WebSearch({
         title: "Research notes saved",
         description: "Your notes have been saved to the project."
       });
+      // Refresh the sources list to show the newly saved notes
+      sourcesQuery.refetch();
     },
     onError: (error) => {
       toast({
@@ -537,7 +572,7 @@ export default function WebSearch({
                       <div className="flex items-center">
                         <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         Saving...
                       </div>
@@ -550,8 +585,84 @@ export default function WebSearch({
                   </Button>
                 </div>
               </div>
+
+              {/* Saved Sources Section */}
+              {sourcesQuery.data && sourcesQuery.data.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium mb-4 flex items-center">
+                    <Folder className="h-5 w-5 mr-2" />
+                    Saved Sources ({sourcesQuery.data.length})
+                  </h3>
+                  <div className="space-y-3">
+                    {sourcesQuery.data.map((source) => (
+                      <div key={source.id} className="border dark:border-gray-700 rounded-lg p-3 hover:shadow-sm transition-shadow">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <h4 className="font-medium text-sm">{source.name}</h4>
+                            <p className="text-xs text-gray-500 mt-1">
+                              {source.type} • {new Date(source.createdAt).toLocaleDateString()}
+                            </p>
+                            {source.url && (
+                              <a 
+                                href={source.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-xs text-blue-500 hover:underline flex items-center mt-1"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                {source.url}
+                              </a>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {source.content && (
+                              <button
+                                onClick={() => {
+                                  setResearchNotes(prev => 
+                                    prev + `\n\n## ${source.name}\n\n${source.content}\n\n---\n`
+                                  );
+                                  toast({
+                                    title: "Content added",
+                                    description: "Source content added to research notes."
+                                  });
+                                }}
+                                className="text-xs text-green-600 dark:text-green-400 hover:underline"
+                                title="Add to notes"
+                              >
+                                Add to Notes
+                              </button>
+                            )}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await apiRequest("DELETE", `/api/sources/${source.id}`);
+                                  sourcesQuery.refetch();
+                                  toast({
+                                    title: "Source deleted",
+                                    description: "Research source has been removed."
+                                  });
+                                } catch (error) {
+                                  toast({
+                                    title: "Failed to delete",
+                                    description: "Could not remove the source.",
+                                    variant: "destructive"
+                                  });
+                                }
+                              }}
+                              className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
+                              title="Delete source"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mt-4">
                 <p>Tips:</p>
                 <ul className="list-disc pl-5 mt-1 space-y-1">
                   <li>Paste quotes or excerpts that support your writing</li>

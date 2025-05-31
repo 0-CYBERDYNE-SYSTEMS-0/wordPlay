@@ -9,6 +9,10 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/providers/SettingsProvider";
 import { ArrowLeft, Download, Upload, RotateCcw, Save, RefreshCw } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Slider } from "@/components/ui/slider";
 
 interface SettingsProps {
   onBack: () => void;
@@ -21,6 +25,33 @@ export default function Settings({ onBack }: SettingsProps) {
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
+  const settingsSchema = z.object({
+    theme: z.enum(['light', 'dark', 'system']),
+    language: z.enum(['en', 'es', 'fr']),
+    autosaveInterval: z.number().min(5000).max(300000),
+    showLineNumbers: z.boolean(),
+    fontSize: z.number().min(10).max(24),
+    contextPanelDefaultOpen: z.boolean(),
+    sidebarDefaultOpen: z.boolean(),
+    llmProvider: z.enum(['openai', 'ollama']),
+    llmModel: z.string(),
+    ollamaUrl: z.string().url().optional().or(z.literal(''))
+  });
+
+  const form = useForm<z.infer<typeof settingsSchema>>({
+    resolver: zodResolver(settingsSchema),
+    defaultValues: {
+      theme: settings.theme,
+      autosaveInterval: settings.autosaveInterval,
+      showLineNumbers: settings.showLineNumbers,
+      contextPanelDefaultOpen: settings.contextPanelDefaultOpen,
+      sidebarDefaultOpen: settings.sidebarDefaultOpen,
+      llmProvider: settings.llmProvider,
+      llmModel: settings.llmModel || 'gpt-4.1-mini',
+      ollamaUrl: settings.ollamaUrl || 'http://localhost:11434'
+    }
+  });
+
   // Default settings
   const defaultSettings = {
     // Editor Settings
@@ -32,7 +63,7 @@ export default function Settings({ onBack }: SettingsProps) {
     
     // AI Settings
     llmProvider: 'openai',
-    llmModel: '04-mini',
+    llmModel: 'gpt-4.1-mini',
     openaiApiKey: '',
     ollamaUrl: 'http://localhost:11434',
     
@@ -367,8 +398,6 @@ export default function Settings({ onBack }: SettingsProps) {
                           <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
                           <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                          <SelectItem value="04-mini-low">04-mini-low</SelectItem>
-                          <SelectItem value="04-mini">04-mini</SelectItem>
                         </>
                       ) : ollamaModels.length > 0 ? (
                         ollamaModels.map(model => (

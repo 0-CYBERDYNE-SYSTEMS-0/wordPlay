@@ -12,9 +12,11 @@ import AIAgent from "@/components/AIAgent";
 import { useDocument } from "@/hooks/use-document";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Project, Document } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const { settings, updateSettings } = useSettings();
+  const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open to use left space
   const [contextPanelOpen, setContextPanelOpen] = useState(true); // Default to open to use right space
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
@@ -291,11 +293,144 @@ export default function Home() {
           llmProvider={settings.llmProvider}
           llmModel={settings.llmModel}
           onToolResult={(result) => {
-            if (result.data && typeof result.data === 'string' && result.success) {
-              if (result.data.includes('\n') || result.data.length > 50) {
-                setContent(prev => prev + '\n\n' + result.data);
-              }
+            if (!result.success) {
+              toast({
+                title: "Tool Error",
+                description: result.error || "Tool execution failed",
+                variant: "destructive"
+              });
+              return;
             }
+
+            // Handle different tool types properly
+            switch (result.tool) {
+              case 'update_document':
+                if (result.data?.content !== undefined) {
+                  setContent(result.data.content);
+                  if (result.data.title) {
+                    setTitle(result.data.title);
+                  }
+                  toast({
+                    title: "Document Updated",
+                    description: "Your document has been updated by the agent",
+                  });
+                }
+                break;
+
+              case 'replace_in_text':
+                if (result.data?.result !== undefined) {
+                  setContent(result.data.result);
+                  toast({
+                    title: "Text Replaced",
+                    description: `Replaced ${result.data.count || 0} instances`,
+                  });
+                }
+                break;
+
+              case 'generate_text':
+                if (result.data && typeof result.data === 'string') {
+                  setContent(prev => prev + '\n\n' + result.data);
+                  toast({
+                    title: "Text Generated",
+                    description: "AI generated content has been added",
+                  });
+                }
+                break;
+
+              case 'process_text_command':
+                if (result.data && typeof result.data === 'string') {
+                  setContent(result.data);
+                  toast({
+                    title: "Text Command Executed",
+                    description: "Your text has been processed",
+                  });
+                }
+                break;
+
+              case 'edit_current_document':
+                // Handle direct editor operations
+                if (result.data?.operation && result.data?.content !== undefined) {
+                  switch (result.data.operation) {
+                    case 'replace':
+                      setContent(result.data.content);
+                      break;
+                    case 'append':
+                      setContent(prev => prev + result.data.content);
+                      break;
+                    case 'prepend':
+                      setContent(prev => result.data.content + prev);
+                      break;
+                    case 'insert':
+                      // For now, just append - could be enhanced with cursor position
+                      setContent(prev => prev + '\n\n' + result.data.content);
+                      break;
+                  }
+                  toast({
+                    title: "Editor Updated",
+                    description: `Content ${result.data.operation}d successfully`,
+                  });
+                }
+                break;
+
+              case 'replace_current_content':
+                if (result.data?.content !== undefined) {
+                  setContent(result.data.content);
+                  toast({
+                    title: "Document Replaced",
+                    description: result.data.reason || "Content replaced by agent",
+                  });
+                }
+                break;
+
+              case 'edit_text_with_pattern':
+                if (result.data?.content !== undefined) {
+                  setContent(result.data.content);
+                  toast({
+                    title: "Pattern Edit Complete",
+                    description: result.data.description || `Replaced ${result.data.count || 0} instances`,
+                  });
+                }
+                break;
+
+              case 'improve_current_text':
+                if (result.data?.content !== undefined) {
+                  setContent(result.data.content);
+                  toast({
+                    title: "Text Improved",
+                    description: result.data.description || "Content improved by AI",
+                  });
+                }
+                break;
+
+              case 'create_document':
+                if (result.data?.title && result.data?.content !== undefined) {
+                  // If creating a new document, update the current editor
+                  setTitle(result.data.title);
+                  setContent(result.data.content);
+                  toast({
+                    title: "Document Created",
+                    description: `Created "${result.data.title}"`,
+                  });
+                }
+                break;
+
+              default:
+                // Fallback for other tools that return useful text content
+                if (result.data && typeof result.data === 'string' && result.data.length > 20) {
+                  setContent(prev => prev + '\n\n' + result.data);
+                  toast({
+                    title: "Agent Result",
+                    description: result.message || "Tool executed successfully",
+                  });
+                }
+                break;
+            }
+          }}
+          editorState={{
+            title,
+            content,
+            hasUnsavedChanges: isDirty,
+            wordCount: content?.length ? content.trim().split(/\s+/).filter(Boolean).length : 0
           }}
         />
       )}

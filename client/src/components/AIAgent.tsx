@@ -13,6 +13,12 @@ interface AIAgentProps {
   llmProvider?: 'openai' | 'ollama';
   llmModel?: string;
   onToolResult?: (result: any) => void;
+  editorState?: {
+    title: string;
+    content: string;
+    hasUnsavedChanges: boolean;
+    wordCount: number;
+  };
 }
 
 interface Message {
@@ -35,7 +41,8 @@ export default function AIAgent({
   currentDocument, 
   llmProvider,
   llmModel,
-  onToolResult 
+  onToolResult,
+  editorState
 }: AIAgentProps) {
   const { toast } = useToast();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -109,7 +116,8 @@ export default function AIAgent({
     currentDocument,
     llmProvider,
     llmModel,
-    userId: 1
+    userId: 1,
+    editorState
   };
 
   // Get available tools
