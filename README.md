@@ -109,6 +109,14 @@ graph TB
 
 ---
 
+<div align="center">
+
+![wordPlay Interface](public/wordplay.png)
+
+</div>
+
+---
+
 ## 🎯 **Core Features Deep Dive**
 
 ### 🤖 **AI Agent System** - _The Brain of wordPlay_

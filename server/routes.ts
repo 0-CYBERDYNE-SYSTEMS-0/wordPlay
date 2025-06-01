@@ -456,6 +456,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // AI Response parsing endpoint for intelligent content handling
+  app.post("/api/ai/parse-response", async (req: Request, res: Response) => {
+    const parsingSchema = z.object({
+      prompt: z.string(),
+      llmProvider: z.enum(['openai', 'ollama']),
+      llmModel: z.string(),
+      maxTokens: z.number().optional().default(1000)
+    });
+    
+    try {
+      const validatedData = parsingSchema.parse(req.body);
+      
+      let result;
+      
+      if (validatedData.llmProvider === 'openai') {
+        // Use OpenAI for parsing
+        result = await generateTextCompletion(
+          validatedData.prompt,
+          {
+            provider: 'openai',
+            model: validatedData.llmModel,
+            maxTokens: validatedData.maxTokens,
+            temperature: 0.1 // Low temperature for consistent parsing
+          }
+        );
+      } else {
+        // Use Ollama for parsing
+        result = await generateTextCompletion(
+          validatedData.prompt,
+          {
+            provider: 'ollama',
+            model: validatedData.llmModel,
+            maxTokens: validatedData.maxTokens,
+            temperature: 0.1 // Low temperature for consistent parsing
+          }
+        );
+      }
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error parsing AI response:", error);
+      res.status(500).json({ 
+        message: "Failed to parse AI response",
+        error: error.message || "Unknown error"
+      });
+    }
+  });
   
   // Text analysis routes
   app.post("/api/text/grep", async (req: Request, res: Response) => {

@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-// UPDATED: Fixed expand command to append instead of replace
+// UPDATED: Enhanced XML-based system prompts for surgical editing
 const DEFAULT_MODEL = "gpt-4o-mini";
 
 // Helper function to call Ollama API
@@ -61,6 +61,28 @@ function analyzeContentContext(content: string, selectionInfo: any): {
   };
 }
 
+// Helper function to create system prompts that leverage existing text processing tools
+function createToolBasedPrompt(instruction: string, textContext: string, selectionInfo: any): string {
+  const hasSelection = Boolean(selectionInfo.selectedText);
+  const operationType = hasSelection ? 'selection' : 'document';
+  
+  return `You are an expert writing assistant with access to powerful text processing tools like grep and sed.
+
+TASK: ${instruction}
+
+TARGET: ${operationType} (${hasSelection ? selectionInfo.selectedText.length + ' characters selected' : 'entire document'})
+
+EXISTING TEXT PROCESSING CAPABILITIES:
+- Use existing grep/sed-like tools for precise text replacement
+- Apply surgical edits without affecting surrounding content  
+- Maintain document structure and formatting
+- Focus on minimal, targeted changes
+
+${hasSelection ? `SELECTED TEXT: "${selectionInfo.selectedText}"` : `DOCUMENT CONTEXT: "${textContext.substring(0, 500)}..."`}
+
+Provide a clear, improved version that applies only the necessary changes. For surgical edits, identify specific patterns to find and replace rather than rewriting entire sections.`;
+}
+
 // Define the AI commands handlers for each slash command type
 export async function executeSlashCommand(
   command: string,
@@ -117,175 +139,302 @@ export async function executeSlashCommand(
     
     switch (baseCommand) {
       case 'continue':
-        systemPrompt = `You are an AI writing assistant. Continue the text in a seamless way 
-        that matches the style and content of what came before. Be creative, coherent, and maintain
-        the same voice and tone. Write at least one substantial paragraph that advances the ideas.`;
-        userPrompt = content;
+        systemPrompt = createToolBasedPrompt(
+          `Continue the text in a seamless way that matches the style and content of what came before. Be creative, coherent, and maintain the same voice and tone. Write at least one substantial paragraph that advances the ideas.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Continue this content:\n\n${content}`;
         break;
         
       case 'improve':
         if (parameter) {
           switch (parameter) {
             case 'clarity':
-              systemPrompt = `You are an expert editor focused on clarity. Rewrite the text to make it clearer and easier to understand. Eliminate ambiguity, simplify complex sentences, and ensure every idea is expressed precisely.`;
+              systemPrompt = createToolBasedPrompt(
+                `You are an expert editor focused on clarity. For the given text, identify specific sentences or phrases that need improvement for clarity. Find unclear expressions, ambiguous language, or overly complex sentences and provide precise replacements. DO NOT rewrite the entire text - only fix specific unclear parts.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'engagement':
-              systemPrompt = `You are an expert editor focused on engagement. Rewrite the text to make it more compelling, interesting, and engaging for readers. Add vivid language, vary sentence structure, and create stronger hooks.`;
+              systemPrompt = createToolBasedPrompt(
+                `You are an expert editor focused on engagement. Identify specific weak or boring sentences/phrases and provide more compelling alternatives. Add vivid language and stronger hooks where needed. Make targeted improvements, not wholesale rewrites.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'flow':
-              systemPrompt = `You are an expert editor focused on flow and structure. Rewrite the text to improve logical flow, smooth transitions between ideas, and overall coherence. Ensure ideas build naturally from one to the next.`;
+              systemPrompt = createToolBasedPrompt(
+                `You are an expert editor focused on flow. Identify specific transition problems, awkward sentence connections, or logical gaps. Provide targeted fixes to improve transitions and coherence. Focus on specific sentences that break the flow.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'word-choice':
-              systemPrompt = `You are an expert editor focused on word choice and style. Rewrite the text using more precise, elegant, and impactful vocabulary. Replace weak words with stronger alternatives while maintaining the original meaning.`;
+              systemPrompt = createToolBasedPrompt(
+                `You are an expert editor focused on word choice. Identify specific weak, imprecise, or inappropriate words/phrases and provide stronger alternatives. Make targeted vocabulary improvements while maintaining the original meaning.`,
+                textContext,
+                selectionInfo
+              );
               break;
             default:
-              systemPrompt = `You are an expert editor. Improve the writing while maintaining the core message. Based on the content's ${context.complexity} complexity and ${context.tone} tone, enhance clarity, flow, and readability. Fix any grammatical issues, awkward phrasing, or structural problems.`;
+              systemPrompt = createToolBasedPrompt(
+                `You are an expert editor. Analyze the text and identify specific sentences or phrases that need improvement for clarity, flow, and readability. Provide targeted fixes rather than rewriting everything. Focus on the most impactful changes.`,
+                textContext,
+                selectionInfo
+              );
           }
         } else {
-          // Smart default based on content analysis
-          systemPrompt = `You are an expert editor. Improve the writing while maintaining the core message. Based on the content's ${context.complexity} complexity and ${context.tone} tone, enhance clarity, flow, and readability. Fix any grammatical issues, awkward phrasing, or structural problems.`;
+          systemPrompt = createToolBasedPrompt(
+            `You are an expert editor. Based on the content's ${context.complexity} complexity and ${context.tone} tone, identify specific problems and provide targeted improvements. Focus on surgical edits rather than wholesale rewrites.`,
+            textContext,
+            selectionInfo
+          );
         }
-        userPrompt = textContext;
+        userPrompt = `Please improve this text with targeted edits:\n\n${textContext}`;
         break;
         
       case 'summarize':
         const summaryLength = context.length === 'short' ? '2-3 sentences' : 
                             context.length === 'medium' ? '1 paragraph' : '2-3 paragraphs';
-        systemPrompt = `You are a master of concise communication. Create a clear, comprehensive summary
-        of the text in approximately ${summaryLength}. Capture all key points while eliminating redundancy 
-        and maintaining the essence intact.`;
-        userPrompt = textContext;
+        systemPrompt = createToolBasedPrompt(
+          `You are a master of concise communication. Create a clear, comprehensive summary of the text in approximately ${summaryLength}. Capture all key points while eliminating redundancy and maintaining the essence intact.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Summarize this text:\n\n${textContext}`;
         break;
         
       case 'expand':
         if (parameter) {
           switch (parameter) {
             case 'examples':
-              systemPrompt = `You are an expert writer who excels at illustration. Generate additional content with concrete examples, case studies, or real-world illustrations that support and clarify the main points from the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
+              systemPrompt = createToolBasedPrompt(
+                `Generate additional content with concrete examples, case studies, or real-world illustrations that support and clarify the main points. This content will be added to the existing text.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'detail':
-              systemPrompt = `You are an expert writer who excels at elaboration. Generate additional content with more specific details, explanations, and depth that expands on the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
+              systemPrompt = createToolBasedPrompt(
+                `Generate additional content with more specific details, explanations, and depth that expands on the given text. This content will be added to the existing text.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'context':
-              systemPrompt = `You are an expert writer who excels at contextualization. Generate additional content with background information, historical context, or broader implications that expands on the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
+              systemPrompt = createToolBasedPrompt(
+                `Generate additional content with background information, historical context, or broader implications. This content will be added to the existing text.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'analysis':
-              systemPrompt = `You are an expert analyst and writer. Generate additional content with deeper analysis, critical thinking, implications, and connections that expand on the ideas in the given text. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content.`;
+              systemPrompt = createToolBasedPrompt(
+                `Generate additional content with deeper analysis, critical thinking, implications, and connections. This content will be added to the existing text.`,
+                textContext,
+                selectionInfo
+              );
               break;
             default:
-              systemPrompt = `You are an expert writer who excels at elaboration. Generate additional content that expands upon the given text by adding more detail, examples, evidence, or context. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content and develops the ideas more fully.`;
+              systemPrompt = createToolBasedPrompt(
+                `Generate additional content that expands upon the given text by adding more detail, examples, evidence, or context. This content will be added to the existing text.`,
+                textContext,
+                selectionInfo
+              );
           }
         } else {
-          // Smart default based on content analysis
           const expandStyle = context.tone === 'academic' ? 'analysis and evidence' :
                             context.complexity === 'simple' ? 'examples and details' : 'context and depth';
-          systemPrompt = `You are an expert writer who excels at elaboration. Generate additional content that expands upon the given text by adding ${expandStyle}. The new content should be written to ADD TO the existing text, not replace it. Write it so it flows naturally after the original content and develops the ideas more fully.`;
+          systemPrompt = createToolBasedPrompt(
+            `Generate additional content that expands upon the given text by adding ${expandStyle}. This content will be added to the existing text.`,
+            textContext,
+            selectionInfo
+          );
         }
-        userPrompt = textContext;
+        userPrompt = `Expand on this content:\n\n${textContext}`;
         break;
         
       case 'list':
-        systemPrompt = `You are an organizational expert. Transform the content into a well-structured
-        list format with clear headings and bullet points. Maintain all important information
-        but reorganize it for easier reading and reference. Add appropriate introductory text.`;
-        userPrompt = textContext;
+        systemPrompt = createToolBasedPrompt(
+          `Transform the content into a well-structured list format with clear headings and bullet points. Maintain all important information but reorganize it for easier reading and reference. Add appropriate introductory text.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Transform this content into a list:\n\n${textContext}`;
         break;
 
       case 'rewrite':
         if (parameter) {
           switch (parameter) {
             case 'simpler':
-              systemPrompt = `You are a clarity specialist. Rewrite the text using simpler language, shorter sentences, and clearer structure. Make it accessible to a broader audience while preserving all key information.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text using simpler language, shorter sentences, and clearer structure. Make it accessible to a broader audience while preserving all key information.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'formal':
-              systemPrompt = `You are a professional writing expert. Rewrite the text in a more formal, professional tone suitable for business or academic contexts. Use sophisticated vocabulary and formal structure.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text in a more formal, professional tone suitable for business or academic contexts. Use sophisticated vocabulary and formal structure.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'engaging':
-              systemPrompt = `You are a creative writing expert. Rewrite the text to be more engaging, compelling, and interesting. Use vivid language, varied sentence structure, and techniques that capture reader attention.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text to be more engaging, compelling, and interesting. Use vivid language, varied sentence structure, and techniques that capture reader attention.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'different-angle':
-              systemPrompt = `You are a creative perspective specialist. Rewrite the text from a completely different angle or viewpoint while preserving the core information. Change the approach, structure, or perspective to offer fresh insights.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text from a completely different angle or viewpoint while preserving the core information. Change the approach, structure, or perspective to offer fresh insights.`,
+                textContext,
+                selectionInfo
+              );
               break;
             default:
-              systemPrompt = `You are a versatile writer. Completely rewrite the text in a fresh way while preserving all the key information and overall message. Change sentence structures, word choices, and flow, but keep the meaning intact.`;
+              systemPrompt = createToolBasedPrompt(
+                `Completely rewrite the text in a fresh way while preserving all the key information and overall message. Change sentence structures, word choices, and flow, but keep the meaning intact.`,
+                textContext,
+                selectionInfo
+              );
           }
         } else {
-          // Smart default based on content analysis
-          systemPrompt = `You are a versatile writer. Completely rewrite the text in a fresh way while preserving all the key information and overall message. Based on the content's ${context.tone} tone, make it more ${context.complexity === 'complex' ? 'accessible' : 'sophisticated'} while keeping the meaning intact.`;
+          systemPrompt = createToolBasedPrompt(
+            `Completely rewrite the text in a fresh way while preserving all the key information and overall message. Based on the content's ${context.tone} tone, make it more ${context.complexity === 'complex' ? 'accessible' : 'sophisticated'} while keeping the meaning intact.`,
+            textContext,
+            selectionInfo
+          );
         }
-        userPrompt = textContext;
+        userPrompt = `Rewrite this content:\n\n${textContext}`;
         break;
 
       case 'simplify':
-        systemPrompt = `You are a clarity specialist. Simplify the text to make it easier to understand for a general audience. Use simpler vocabulary, shorter sentences, and clearer explanations. Break down complex concepts into digestible parts while preserving all important information.`;
-        userPrompt = textContext;
+        systemPrompt = createToolBasedPrompt(
+          `Simplify the text to make it easier to understand for a general audience. Use simpler vocabulary, shorter sentences, and clearer explanations. Break down complex concepts into digestible parts while preserving all important information.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Simplify this content:\n\n${textContext}`;
         break;
         
       case 'suggest':
-        systemPrompt = `You are a creative idea generator. Based on the given text, suggest 3-5 new
-        related ideas, angles, or directions the writer could explore next. Format these as
-        numbered suggestions with a brief explanation of each. Be specific and insightful.`;
-        userPrompt = content;
+        systemPrompt = createToolBasedPrompt(
+          `Based on the given text, suggest 3-5 new related ideas, angles, or directions the writer could explore next. Format these as numbered suggestions with a brief explanation of each. Be specific and insightful.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Generate ideas based on this content:\n\n${content}`;
         break;
 
       case 'outline':
-        systemPrompt = `You are an organizational expert. Create a comprehensive, well-structured outline from the content. Use hierarchical headings (I, II, III with A, B, C subpoints) to organize the main ideas and supporting points. Make it suitable for planning or restructuring the content.`;
-        userPrompt = textContext;
+        systemPrompt = createToolBasedPrompt(
+          `Create a comprehensive, well-structured outline from the content. Use hierarchical headings (I, II, III with A, B, C subpoints) to organize the main ideas and supporting points. Make it suitable for planning or restructuring the content.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Create an outline from this content:\n\n${textContext}`;
         break;
 
       case 'format':
-        systemPrompt = `You are a formatting specialist. Improve the structure and formatting of the text. Add appropriate headings, subheadings, bullet points, numbered lists, and paragraph breaks to make the content more readable and professionally presented. Maintain all content while enhancing its visual organization.`;
-        userPrompt = textContext;
+        systemPrompt = createToolBasedPrompt(
+          `Improve the structure and formatting of the text. Add appropriate headings, subheadings, bullet points, numbered lists, and paragraph breaks to make the content more readable and professionally presented. Maintain all content while enhancing its visual organization.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Improve formatting of this content:\n\n${textContext}`;
         break;
         
       case 'tone':
         if (parameter) {
           switch (parameter) {
             case 'professional':
-              systemPrompt = `You are a business writing expert. Rewrite the text in a professional, business-appropriate tone. Use formal language, clear structure, and authoritative voice suitable for workplace communication.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text in a professional, business-appropriate tone. Use formal language, clear structure, and authoritative voice suitable for workplace communication.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'casual':
-              systemPrompt = `You are a conversational writing expert. Rewrite the text in a casual, friendly tone as if speaking to a friend. Use conversational language, contractions, and a relaxed approach while maintaining clarity.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text in a casual, friendly tone as if speaking to a friend. Use conversational language, contractions, and a relaxed approach while maintaining clarity.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'academic':
-              systemPrompt = `You are an academic writing expert. Rewrite the text in a scholarly, academic tone. Use formal vocabulary, precise language, and analytical approach suitable for academic or research contexts.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text in a scholarly, academic tone. Use formal vocabulary, precise language, and analytical approach suitable for academic or research contexts.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'friendly':
-              systemPrompt = `You are a warm communication expert. Rewrite the text in a friendly, approachable tone. Use warm language, inclusive expressions, and a welcoming voice that builds connection with readers.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text in a friendly, approachable tone. Use warm language, inclusive expressions, and a welcoming voice that builds connection with readers.`,
+                textContext,
+                selectionInfo
+              );
               break;
             case 'authoritative':
-              systemPrompt = `You are an expert in authoritative communication. Rewrite the text with confidence and authority. Use decisive language, strong statements, and expert positioning to establish credibility and leadership.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text with confidence and authority. Use decisive language, strong statements, and expert positioning to establish credibility and leadership.`,
+                textContext,
+                selectionInfo
+              );
               break;
             default:
-              systemPrompt = `You are a tone specialist. Rewrite the text to improve its tone, making it more professional, engaging, and appropriate for the apparent context. Adjust formality, warmth, authority, and other tone aspects while preserving the core message.`;
+              systemPrompt = createToolBasedPrompt(
+                `Rewrite the text to improve its tone, making it more professional, engaging, and appropriate for the apparent context. Adjust formality, warmth, authority, and other tone aspects while preserving the core message.`,
+                textContext,
+                selectionInfo
+              );
           }
         } else {
-          // Smart default based on content analysis
           const suggestedTone = context.tone === 'casual' ? 'more professional' :
                               context.tone === 'formal' ? 'more approachable' : 'more engaging';
-          systemPrompt = `You are a tone specialist. Rewrite the text to make it ${suggestedTone} while preserving the core message. Adjust formality, warmth, and authority as appropriate.`;
+          systemPrompt = createToolBasedPrompt(
+            `Rewrite the text to make it ${suggestedTone} while preserving the core message. Adjust formality, warmth, and authority as appropriate.`,
+            textContext,
+            selectionInfo
+          );
         }
-        userPrompt = textContext;
+        userPrompt = `Adjust tone of this content:\n\n${textContext}`;
         break;
         
       case 'fix':
-        systemPrompt = `You are a grammar and clarity expert. Fix any grammatical errors, spelling mistakes,
-        punctuation problems, or clarity issues in the text. Make minimal changes necessary to
-        ensure correctness and readability. Focus only on errors, not style preferences.`;
-        userPrompt = textContext;
+        systemPrompt = createToolBasedPrompt(
+          `Fix any grammatical errors, spelling mistakes, punctuation problems, or clarity issues in the text. Make minimal changes necessary to ensure correctness and readability. Focus only on errors, not style preferences.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Fix grammar and spelling in this content:\n\n${textContext}`;
         break;
 
       case 'translate':
         if (parameter && parameter !== 'other') {
-          systemPrompt = `You are a professional translator. Translate the text accurately into ${parameter}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural in the target language.`;
+          systemPrompt = createToolBasedPrompt(
+            `Translate the text accurately into ${parameter}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural in the target language.`,
+            textContext,
+            selectionInfo
+          );
         } else {
-          systemPrompt = `You are a professional translator. Translate the text into Spanish (or ask the user to specify a language if the intent is unclear). Maintain the original meaning, tone, and style while ensuring the translation sounds natural.`;
+          systemPrompt = createToolBasedPrompt(
+            `Translate the text into Spanish (or ask the user to specify a language if the intent is unclear). Maintain the original meaning, tone, and style while ensuring the translation sounds natural.`,
+            textContext,
+            selectionInfo
+          );
         }
-        userPrompt = textContext;
+        userPrompt = `Translate this content:\n\n${textContext}`;
         break;
         
       case 'analyze':
-        systemPrompt = `You are a writing analysis expert. Provide a detailed analysis of the text covering:
+        systemPrompt = createToolBasedPrompt(
+          `Provide a detailed analysis of the text covering:
         
 1. **Readability**: Grade level, sentence complexity, accessibility
 2. **Style**: Tone, formality level, voice consistency  
@@ -294,8 +443,11 @@ export async function executeSlashCommand(
 5. **Engagement**: Reader interest, clarity, impact
 6. **Suggestions**: Top 3 specific improvements
 
-Format your analysis clearly with headers and bullet points. Be specific and actionable.`;
-        userPrompt = textContext;
+Format your analysis clearly with headers and bullet points. Be specific and actionable.`,
+          textContext,
+          selectionInfo
+        );
+        userPrompt = `Analyze this content:\n\n${textContext}`;
         break;
         
       default:

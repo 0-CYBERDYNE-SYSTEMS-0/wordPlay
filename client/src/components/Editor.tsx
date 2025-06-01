@@ -416,6 +416,7 @@ export default function Editor({
         llmProvider={llmProvider}
         llmModel={llmModel}
         onSuggestions={onSuggestions}
+        onUndo={handleUndo}
       />
     </div>
   );
