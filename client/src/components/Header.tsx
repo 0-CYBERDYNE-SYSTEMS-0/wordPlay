@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useSettings } from "@/providers/SettingsProvider";
+import { useProcessing } from "@/providers/ProcessingProvider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sun, Moon, Menu, Info, Plus, Keyboard } from "lucide-react";
+import { Sun, Moon, Menu, Info, Plus, Keyboard, Loader2, Brain } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import AIProcessingIndicator from "./AIProcessingIndicator";
 
@@ -15,12 +16,11 @@ interface HeaderProps {
   llmModel: string;
   setLlmModel: (model: string) => void;
   contextPanelOpen: boolean;
-  isAIProcessing?: boolean;
-  aiProcessingMessage?: string;
 }
 
-export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel, contextPanelOpen, isAIProcessing, aiProcessingMessage }: HeaderProps) {
+export default function Header({ toggleSidebar, toggleContextPanel, onNewProject, llmProvider, setLlmProvider, llmModel, setLlmModel, contextPanelOpen }: HeaderProps) {
   const { settings, updateSettings } = useSettings();
+  const { isAnyProcessing, processingState } = useProcessing();
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
 
   useEffect(() => {
@@ -69,18 +69,33 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             <span>New Project</span>
           </Button>
           
-          {/* AI Processing Indicator */}
-          <AIProcessingIndicator 
-            isProcessing={isAIProcessing || false} 
-            message={aiProcessingMessage}
-            className="px-2"
-          />
-          
-          {/* Connection Status Indicator - Only show when AI isn't processing */}
-          {!isAIProcessing && (
-            <div className="flex items-center space-x-1 text-xs">
+          {/* Global AI Processing Indicator - Discrete */}
+          {isAnyProcessing ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-full">
+                    <div className="relative">
+                      <Brain className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                      <Loader2 className="h-2 w-2 text-blue-500 animate-spin absolute -top-0.5 -right-0.5" />
+                    </div>
+                    <div className="flex space-x-0.5">
+                      <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce"></div>
+                      <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{processingState.message || 'AI is processing...'}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            /* Connection Status Indicator - Only show when AI isn't processing */
+            <div className="flex items-center space-x-1 text-xs px-2">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-gray-600 dark:text-gray-400">Connected</span>
+              <span className="text-gray-600 dark:text-gray-400">Ready</span>
             </div>
           )}
           

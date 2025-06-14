@@ -1,0 +1,20 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# AI Agent Architecture
+
+This file explains how AI-driven features and agents are structured within the application:
+
+- Front-end slash commands are the sole AI interface in the editor; commands follow the format `/command-name`.
+- Slash commands trigger background tasks within the AI agent layer, ensuring core business logic remains decoupled.
+- AI parsing selects models based on provider:
+  - Use `qwen3:0.6b` when interfacing with Ollama.
+  - Use `gpt-4.1-nano` when interfacing with OpenAI.
+  (See [LLM_PIPELINE_FLOW.md](mdc:LLM_PIPELINE_FLOW.md) for the full pipeline.)
+- The assistant's intermediate reasoning is rendered in a separate UI panel; only the finalized suggestions are inserted into the document.
+- Style analysis runs on-demand via `/analyze-style` and outputs to the Context Panel under a dedicated section.
+- The application UI comprises three tabs: Editor (slash commands), Research (web search and source management), and Settings.
+- The Context Panel consistently displays document statistics and project sources; AI suggestions appear only when explicitly generated.
+- For common fixes, patterns, and pipeline adjustments, refer to [AGENT_FIXES_SUMMARY.md](mdc:AGENT_FIXES_SUMMARY.md).

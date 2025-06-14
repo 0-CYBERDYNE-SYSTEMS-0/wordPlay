@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Edit, Search, Code, Terminal, Sparkles, BarChart2, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,7 @@ export default function CommandMode({
   onToggleContextPanel
 }: CommandModeProps) {
   const { toast } = useToast();
+  const { processedApiRequest } = useApiProcessing();
   const [command, setCommand] = useState("");
   const [naturalLanguagePrompt, setNaturalLanguagePrompt] = useState("");
   const [isNaturalLanguageMode, setIsNaturalLanguageMode] = useState(true);
@@ -48,11 +50,10 @@ export default function CommandMode({
   // Process command mutation (for technical command mode)
   const processCommandMutation = useMutation({
     mutationFn: async () => {
-      setIsProcessing(true);
-      const res = await apiRequest("POST", "/api/ai/process-command", {
+      const res = await processedApiRequest("POST", "/api/ai/process-command", {
         content,
         command
-      });
+      }, "Processing command...");
       return res.json();
     },
     onSuccess: (data) => {
@@ -79,10 +80,8 @@ export default function CommandMode({
       
       // Clear command input
       setCommand("");
-      setIsProcessing(false);
     },
     onError: (error) => {
-      setIsProcessing(false);
       toast({
         title: "Command failed",
         description: error.message,
@@ -94,12 +93,11 @@ export default function CommandMode({
   // Process natural language prompt (for AI agent mode)
   const processNaturalLanguagePrompt = useMutation({
     mutationFn: async () => {
-      setIsProcessing(true);
-      const res = await apiRequest("POST", "/api/ai/contextual-help", {
+      const res = await processedApiRequest("POST", "/api/ai/contextual-help", {
         content,
         title: "User Prompt",
         prompt: naturalLanguagePrompt
-      });
+      }, "Getting AI assistance...");
       return res.json();
     },
     onSuccess: async (data) => {
@@ -112,10 +110,10 @@ export default function CommandMode({
       // Get the AI's response
       try {
         // Process the natural language command through OpenAI
-        const commandRes = await apiRequest("POST", "/api/ai/process-command", {
+        const commandRes = await processedApiRequest("POST", "/api/ai/process-command", {
           content,
           command: `Based on the user request: "${naturalLanguagePrompt}", determine what changes to make to the text and execute them.`
-        });
+        }, "Processing your request...");
         
         const commandData = await commandRes.json();
         
@@ -149,15 +147,6 @@ export default function CommandMode({
       
       // Clear prompt input
       setNaturalLanguagePrompt("");
-      setIsProcessing(false);
-    },
-    onError: (error) => {
-      setIsProcessing(false);
-      toast({
-        title: "AI Assistant Error",
-        description: error.message,
-        variant: "destructive"
-      });
     }
   });
   

@@ -5,7 +5,7 @@ export interface ParsedAIResponse {
   thinking?: string;         // Goes to Context Panel  
   suggestions?: string[];    // Goes to Context Panel
   metadata?: any;           // Additional info
-  strategy: 'replace' | 'append' | 'targeted-edit' | 'context-only';
+  strategy: 'replace' | 'append' | 'targeted-edit' | 'context-only' | 'insert-at-cursor';
 }
 
 export class AIResponseParser {
@@ -26,7 +26,7 @@ export class AIResponseParser {
   ): Promise<ParsedAIResponse> {
     
     // For complex editing commands, let the existing agent tools handle surgical edits
-    const complexEditCommands = ['improve', 'fix', 'simplify', 'format', 'tone'];
+    const complexEditCommands = ['improve', 'fix', 'format', 'tone'];
     if (complexEditCommands.includes(command)) {
       // Simple strategy: let the agent tools do the heavy lifting
       return {
@@ -35,18 +35,38 @@ export class AIResponseParser {
       };
     }
     
-    // Simple fallback parsing for other commands
-    const thinkMatch = rawResponse.match(/<(?:think|thinkpad)>([\s\S]*?)<\/(?:think|thinkpad)>/i);
-    const thinking = thinkMatch ? thinkMatch[1].trim() : undefined;
+    // Extract all thinking blocks for the Context Panel
+    const thinkingMatches = Array.from(rawResponse.matchAll(/<(?:think|thinkpad|thinking|reasoning)>([\s\S]*?)<\/(?:think|thinkpad|thinking|reasoning)>/gi));
     
-    // Clean up the response
-    let content = rawResponse
-      .replace(/<(?:think|thinkpad)>[\s\S]*?<\/(?:think|thinkpad)>/gi, '')
-      .replace(/<workspace>[\s\S]*?<\/workspace>/gi, '')
-      .replace(/<final_result>([\s\S]*?)<\/final_result>/gi, '$1')
-      .replace(/\*\*Key Adjustments:\*\*[\s\S]*$/, '')
-      .replace(/\*\*Revised Version:\*\*\s*/, '')
-      .trim();
+    // Extract the final output that should go to the editor
+    const finalOutputMatch = rawResponse.match(/<final_output>([\s\S]*?)<\/final_output>/i);
+    
+    // Combine thinking blocks for context panel
+    const thinking = thinkingMatches.length > 0
+      ? thinkingMatches.map(m => m[1].trim()).join('\n\n')
+      : undefined;
+
+    // Get content for the editor
+    let content: string;
+    if (finalOutputMatch) {
+      // If there's a final_output tag, use its content
+      content = finalOutputMatch[1].trim();
+    } else {
+      // Otherwise, remove all special tags and their content
+      content = rawResponse
+        // Remove thinking/reasoning blocks and their tags
+        .replace(/<(?:think|thinkpad|thinking|reasoning)>[\s\S]*?<\/(?:think|thinkpad|thinking|reasoning)>/gi, '')
+        // Remove final_output tags if they exist without content
+        .replace(/<\/?final_output>/gi, '')
+        // Remove any other XML-like tags
+        .replace(/<\/?[^>]+(>|$)/g, '')
+        .trim();
+    }
+
+    // If no content after cleaning, use original response
+    if (!content && rawResponse) {
+      content = rawResponse.trim();
+    }
 
     const strategy = this.getDefaultStrategy(command);
 
@@ -61,20 +81,19 @@ export class AIResponseParser {
   private getDefaultStrategy(command: string): ParsedAIResponse['strategy'] {
     const strategyMap: Record<string, ParsedAIResponse['strategy']> = {
       'continue': 'append',
+      'expand': 'append',
       'suggest': 'context-only',
       'analyze': 'context-only',
       'help': 'context-only',
       'improve': 'targeted-edit',
       'fix': 'targeted-edit',
-      'rewrite': 'replace',
-      'expand': 'targeted-edit',
-      'simplify': 'targeted-edit',
-      'summarize': 'replace',
-      'list': 'replace',
-      'outline': 'replace',
-      'format': 'targeted-edit',
+      'rewrite': 'targeted-edit',
       'tone': 'targeted-edit',
-      'translate': 'replace'
+      'translate': 'targeted-edit',
+      'format': 'targeted-edit',
+      'summarize': 'insert-at-cursor',
+      'list': 'insert-at-cursor',
+      'outline': 'insert-at-cursor'
     };
 
     return strategyMap[command] || 'replace';

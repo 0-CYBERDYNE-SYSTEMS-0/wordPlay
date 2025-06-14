@@ -9,7 +9,7 @@ import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
 import SettingsPanel from "@/components/SettingsPanel";
-import { AIProcessingOverlay } from "@/components/AIProcessingIndicator";
+
 import { useDocument } from "@/hooks/use-document";
 import { useSettings } from "@/providers/SettingsProvider";
 import type { Project, Document } from "@shared/schema";
@@ -32,10 +32,8 @@ export default function Home() {
     contextPanelOpen: true
   });
 
-  // Add state for AI suggestions and processing
+  // Add state for AI suggestions
   const [aiSuggestions, setAiSuggestions] = useState<string>("");
-  const [isAIProcessing, setIsAIProcessing] = useState(false);
-  const [aiProcessingMessage, setAiProcessingMessage] = useState<string>("");
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -196,8 +194,6 @@ export default function Home() {
         llmModel={settings.llmModel}
         setLlmModel={(model) => updateSettings({ llmModel: model })}
         contextPanelOpen={contextPanelOpen}
-        isAIProcessing={isAIProcessing}
-        aiProcessingMessage={aiProcessingMessage}
       />
       
       {/* Main Layout Grid */}
@@ -430,11 +426,7 @@ export default function Home() {
         />
       )}
       
-      {/* Global AI Processing Overlay */}
-      <AIProcessingOverlay 
-        isProcessing={isAIProcessing} 
-        message={aiProcessingMessage || "AI is working on your request..."} 
-      />
+
     </div>
   );
 }

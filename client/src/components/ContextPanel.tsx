@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Document } from "@shared/schema";
 import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code, Lightbulb, ExternalLink, Folder } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -33,6 +34,7 @@ export default function ContextPanel({
   onClose,
   aiSuggestions
 }: ContextPanelProps) {
+  const { startProcessing, stopProcessing } = useApiProcessing();
   const [wordCount, setWordCount] = useState(0);
   const [readingTime, setReadingTime] = useState(0);
   const [paragraphCount, setParagraphCount] = useState(0);
@@ -53,6 +55,7 @@ export default function ContextPanel({
   // Get contextual help from AI
   const contextualHelpMutation = useMutation({
     mutationFn: async (data?: { prompt?: string; content?: string }) => {
+      startProcessing("Getting contextual help...");
       try {
         const payload = {
           content: data?.content || content,
@@ -69,6 +72,8 @@ export default function ContextPanel({
           message: "AI assistant temporarily unavailable",
           suggestions: []
         };
+      } finally {
+        stopProcessing();
       }
     },
     onSuccess: (data) => {
@@ -99,6 +104,7 @@ export default function ContextPanel({
   // Get style metrics when content changes
   const styleAnalysisMutation = useMutation({
     mutationFn: async () => {
+      startProcessing("Analyzing writing style...");
       try {
         const res = await apiRequest("POST", "/api/ai/analyze-style", {
           content
@@ -115,6 +121,8 @@ export default function ContextPanel({
             toneAnalysis: "Neutral"
           }
         };
+      } finally {
+        stopProcessing();
       }
     },
     onSuccess: (data) => {

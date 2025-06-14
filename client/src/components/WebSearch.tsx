@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock, BarChart2, Sparkles, PanelRightOpen, Folder, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export default function WebSearch({
   onToggleContextPanel
 }: WebSearchProps) {
   const { toast } = useToast();
+  const { processedApiRequest } = useApiProcessing();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSource, setSearchSource] = useState("web");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -87,7 +89,7 @@ export default function WebSearch({
     queryKey: ["sources", projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      const res = await apiRequest("GET", `/api/projects/${projectId}/sources`);
+      const res = await processedApiRequest("GET", `/api/projects/${projectId}/sources`, undefined, "Loading sources...");
       return res.json() as Promise<SavedSource[]>;
     },
     enabled: !!projectId
@@ -110,34 +112,22 @@ export default function WebSearch({
   // Search mutation
   const searchMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/search", {
+      const res = await processedApiRequest("POST", "/api/search", {
         query: searchQuery,
         source: searchSource
-      });
-      return res.json() as Promise<SearchResponse>;
+      }, "Searching...");
+      return res.json();
     },
     onSuccess: (data) => {
-      if (data.results && data.results.length > 0) {
-        setResults(data.results);
-        setAiSummary(data.summary || "");
-        setShowResults(true);
-        
-        toast({
-          title: "Research completed",
-          description: `Found ${data.results.length} sources${data.summary ? " with AI analysis" : ""}.`
-        });
-      } else {
+      setResults(data.results || []);
+      setAiSummary(data.summary || "");
+      setShowResults(true);
+      
+      if (data.results?.length === 0) {
         toast({
           title: "No results found",
-          description: "Try a different search query or source."
-        });
-      }
-      
-      if (data.error) {
-        toast({
-          title: "Search notice",
-          description: data.error,
-          variant: "default"
+          description: "Try refining your search query.",
+          variant: "destructive"
         });
       }
     },
@@ -150,70 +140,78 @@ export default function WebSearch({
     }
   });
   
-  // Add source mutation
-  const addSourceMutation = useMutation({
-    mutationFn: async (url: string) => {
-      if (!projectId) {
-        throw new Error("No active project");
-      }
-      
-      const res = await apiRequest("POST", "/api/sources", {
-        projectId,
-        type: "url",
-        name: url,
-        url
-      });
+  // Save source mutation
+  const saveSourceMutation = useMutation({
+    mutationFn: async (source: { name: string; url: string; content: string; type: string }) => {
+      if (!projectId) throw new Error("No project selected");
+      const res = await processedApiRequest("POST", `/api/projects/${projectId}/sources`, source, "Saving source...");
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast({
-        title: "Source added",
-        description: "Research source has been saved to help with your writing."
+        title: "Source saved",
+        description: "The source has been added to your project."
       });
-      // Refresh the sources list to show the newly added source
       sourcesQuery.refetch();
     },
     onError: (error) => {
       toast({
-        title: "Failed to add source",
+        title: "Failed to save source",
         description: error.message,
         variant: "destructive"
       });
     }
   });
   
-  // Scrape webpage mutation
-  const scrapeMutation = useMutation({
+  // Save research notes mutation
+  const saveNotesMutation = useMutation({
     mutationFn: async () => {
-      if (!scrapeUrl.trim()) {
-        throw new Error("Please enter a valid URL");
-      }
-      
-      const res = await apiRequest("POST", "/api/scrape", {
-        url: scrapeUrl
-      });
+      if (!projectId) throw new Error("No project selected");
+      const res = await processedApiRequest("POST", `/api/projects/${projectId}/sources`, {
+        name: "Research Notes",
+        type: "notes",
+        content: researchNotes,
+        url: ""
+      }, "Saving notes...");
       return res.json();
     },
-    onSuccess: (data) => {
-      // Add scraped content to notes with better formatting
-      const wordCount = data.wordCount ? ` (${data.wordCount} words)` : "";
-      const domain = data.domain ? ` from ${data.domain}` : "";
-      
-      setResearchNotes(prev => 
-        prev + `\n\n## ${data.title}${domain}${wordCount}\n\n${data.content.substring(0, 1000)}${data.content.length > 1000 ? "..." : ""}\n\nSource: ${scrapeUrl}\n`
-      );
-      
+    onSuccess: () => {
       toast({
-        title: "Content extracted",
-        description: `${data.wordCount || 0} words extracted and added to research notes.`
+        title: "Notes saved",
+        description: "Your research notes have been saved."
       });
-      
-      // Clear the URL input
-      setScrapeUrl("");
     },
     onError: (error) => {
       toast({
-        title: "Couldn't extract content",
+        title: "Failed to save notes",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Scrape URL mutation
+  const scrapeUrlMutation = useMutation({
+    mutationFn: async () => {
+      const res = await processedApiRequest("POST", "/api/scrape", {
+        url: scrapeUrl
+      }, "Scraping webpage...");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.content) {
+        saveSourceMutation.mutate({
+          name: data.title || scrapeUrl,
+          url: scrapeUrl,
+          content: data.content,
+          type: "webpage"
+        });
+        setScrapeUrl("");
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to scrape URL",
         description: error.message,
         variant: "destructive"
       });
@@ -228,59 +226,13 @@ export default function WebSearch({
     searchMutation.mutate();
   };
   
-  // Handle adding a source
-  const handleAddSource = (url: string) => {
-    if (!projectId) {
-      toast({
-        title: "No active project",
-        description: "Please select a project first.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    addSourceMutation.mutate(url);
-  };
-  
   // Handle scraping a webpage
   const handleScrape = (e: React.FormEvent) => {
     e.preventDefault();
-    scrapeMutation.mutate();
+    scrapeUrlMutation.mutate();
   };
   
   // Save research notes
-  const saveNotesMutation = useMutation({
-    mutationFn: async () => {
-      if (!projectId) {
-        throw new Error("No active project");
-      }
-      
-      const res = await apiRequest("POST", "/api/sources", {
-        projectId,
-        type: "notes",
-        name: "Research Notes",
-        content: researchNotes
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({
-        title: "Research notes saved",
-        description: "Your notes have been saved to the project."
-      });
-      // Refresh the sources list to show the newly saved notes
-      sourcesQuery.refetch();
-    },
-    onError: (error) => {
-      toast({
-        title: "Failed to save notes",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  });
-  
-  // Handle saving notes
   const handleSaveNotes = () => {
     if (!researchNotes.trim()) {
       toast({
@@ -458,8 +410,13 @@ export default function WebSearch({
                             <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
                             <button 
                               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                              onClick={() => handleAddSource(cleanUrl(result.url))}
-                              disabled={addSourceMutation.isPending}
+                              onClick={() => saveSourceMutation.mutate({
+                                name: result.title,
+                                url: result.url,
+                                content: result.snippet,
+                                type: "webpage"
+                              })}
+                              disabled={saveSourceMutation.isPending}
                               title="Save to your sources"
                             >
                               <Save className="h-4 w-4 text-gray-500" />
@@ -483,8 +440,13 @@ export default function WebSearch({
                             <span className="mx-2 text-gray-300">|</span>
                             <button 
                               className="text-xs text-primary dark:text-primary-light hover:underline"
-                              onClick={() => handleAddSource(cleanUrl(result.url))}
-                              disabled={addSourceMutation.isPending}
+                              onClick={() => saveSourceMutation.mutate({
+                                name: result.title,
+                                url: result.url,
+                                content: result.snippet,
+                                type: "webpage"
+                              })}
+                              disabled={saveSourceMutation.isPending}
                             >
                               Add to Sources
                             </button>
@@ -529,9 +491,9 @@ export default function WebSearch({
                   <Button 
                     type="submit"
                     className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
-                    disabled={scrapeMutation.isPending || !scrapeUrl.trim()}
+                    disabled={scrapeUrlMutation.isPending || !scrapeUrl.trim()}
                   >
-                    {scrapeMutation.isPending ? (
+                    {scrapeUrlMutation.isPending ? (
                       <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -635,7 +597,7 @@ export default function WebSearch({
                             <button
                               onClick={async () => {
                                 try {
-                                  await apiRequest("DELETE", `/api/sources/${source.id}`);
+                                  await processedApiRequest("DELETE", `/api/projects/${projectId}/sources/${source.id}`);
                                   sourcesQuery.refetch();
                                   toast({
                                     title: "Source deleted",

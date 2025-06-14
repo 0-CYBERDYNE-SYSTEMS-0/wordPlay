@@ -3,13 +3,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 
 interface UseAISuggestionsProps {
   content: string;
   style?: any;
   enabled?: boolean;
   llmProvider: 'openai' | 'ollama';
-  llmModel: string;
+  llmModel?: string;
 }
 
 interface Suggestion {
@@ -25,6 +26,7 @@ export function useAISuggestions({
   llmModel
 }: UseAISuggestionsProps) {
   const { toast } = useToast();
+  const { processedApiRequest } = useApiProcessing();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
   const [isFetching, setIsFetching] = useState(false);
@@ -49,22 +51,16 @@ export function useAISuggestions({
   // API-based suggestions (now only manual via agent/slash commands)
   const fetchSuggestionsMutation = useMutation({
     mutationFn: async () => {
-      setIsFetching(true);
-      try {
-        const res = await apiRequest("POST", "/api/ai/suggestions", {
-          content: debouncedContent,
-          style,
-          llmProvider,
-          llmModel
-        });
-        const data = await res.json();
-        return data.suggestions;
-      } finally {
-        setIsFetching(false);
-      }
+      const res = await processedApiRequest("POST", "/api/ai/suggestions", {
+        content: debouncedContent,
+        style,
+        llmProvider,
+        llmModel
+      }, "Getting writing suggestions...");
+      return res.json();
     },
     onSuccess: (data) => {
-      setSuggestions(data);
+      setSuggestions(data.suggestions || []);
     },
     onError: (error) => {
       console.error("Error fetching suggestions:", error);
@@ -80,13 +76,13 @@ export function useAISuggestions({
   
   const generateTextCompletion = useMutation({
     mutationFn: async (prompt?: string) => {
-      const res = await apiRequest("POST", "/api/ai/generate", {
+      const res = await processedApiRequest("POST", "/api/ai/generate", {
         content,
         style,
         prompt,
         llmProvider,
         llmModel
-      });
+      }, "Generating text...");
       return res.json();
     },
     onError: (error) => {
@@ -102,10 +98,9 @@ export function useAISuggestions({
     suggestions,
     selectedSuggestion,
     setSelectedSuggestion,
-    isFetching: isFetching || fetchSuggestionsMutation.isPending,
+    isFetching: fetchSuggestionsMutation.isPending,
     generateTextCompletion: (prompt?: string) => generateTextCompletion.mutateAsync(prompt),
     isGenerating: generateTextCompletion.isPending,
-    // Add manual method for when agent/slash commands want suggestions
     fetchSuggestions: () => fetchSuggestionsMutation.mutate()
   };
 }

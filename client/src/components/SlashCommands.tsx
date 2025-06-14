@@ -55,13 +55,24 @@ const SLASH_COMMANDS: SlashCommand[] = [
     shortcut: '1'
   },
   {
+    id: 'expand',
+    title: 'Expand',
+    description: 'Add more detail and examples',
+    icon: <Wand2 className="h-4 w-4" />,
+    action: 'expand',
+    category: 'creation',
+    hasParameters: true,
+    parameters: ['examples', 'detail', 'context', 'analysis'],
+    shortcut: '2'
+  },
+  {
     id: 'suggest',
     title: 'Ideas',
     description: 'Get new ideas related to your content',
     icon: <Lightbulb className="h-4 w-4" />,
     action: 'suggest',
     category: 'creation',
-    shortcut: '2'
+    shortcut: '3'
   },
 
   // Enhancement Commands
@@ -74,17 +85,6 @@ const SLASH_COMMANDS: SlashCommand[] = [
     category: 'enhancement',
     hasParameters: true,
     parameters: ['clarity', 'engagement', 'flow', 'word-choice'],
-    shortcut: '3'
-  },
-  {
-    id: 'expand',
-    title: 'Expand',
-    description: 'Elaborate on the current text',
-    icon: <Wand2 className="h-4 w-4" />,
-    action: 'expand',
-    category: 'enhancement',
-    hasParameters: true,
-    parameters: ['examples', 'detail', 'context', 'analysis'],
     shortcut: '4'
   },
   {
@@ -99,13 +99,24 @@ const SLASH_COMMANDS: SlashCommand[] = [
     shortcut: '5'
   },
   {
-    id: 'simplify',
-    title: 'Simplify',
-    description: 'Make text easier to understand',
-    icon: <Zap className="h-4 w-4" />,
-    action: 'simplify',
+    id: 'fix',
+    title: 'Fix grammar',
+    description: 'Correct grammar and spelling',
+    icon: <CheckSquare className="h-4 w-4" />,
+    action: 'fix',
     category: 'enhancement',
     shortcut: '6'
+  },
+  {
+    id: 'tone',
+    title: 'Change tone',
+    description: 'Adjust the tone of the text',
+    icon: <MessageSquare className="h-4 w-4" />,
+    action: 'tone',
+    category: 'enhancement',
+    hasParameters: true,
+    parameters: ['professional', 'casual', 'academic', 'friendly', 'authoritative'],
+    shortcut: '7'
   },
 
   // Organization Commands
@@ -116,7 +127,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
     icon: <FileText className="h-4 w-4" />,
     action: 'summarize',
     category: 'organization',
-    shortcut: '7'
+    shortcut: '8'
   },
   {
     id: 'list',
@@ -125,7 +136,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
     icon: <List className="h-4 w-4" />,
     action: 'list',
     category: 'organization',
-    shortcut: '8'
+    shortcut: '9'
   },
   {
     id: 'outline',
@@ -133,37 +144,18 @@ const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Generate structured outline',
     icon: <TreePine className="h-4 w-4" />,
     action: 'outline',
-    category: 'organization',
-    shortcut: '9'
+    category: 'organization'
   },
   {
     id: 'format',
-    title: 'Format',
-    description: 'Add proper formatting and structure',
+    title: 'Format text',
+    description: 'Add markdown formatting, headers, bullets, and structure',
     icon: <Layout className="h-4 w-4" />,
     action: 'format',
     category: 'organization'
   },
 
   // Utility Commands
-  {
-    id: 'fix',
-    title: 'Fix grammar',
-    description: 'Correct grammar and spelling',
-    icon: <CheckSquare className="h-4 w-4" />,
-    action: 'fix',
-    category: 'utility'
-  },
-  {
-    id: 'tone',
-    title: 'Change tone',
-    description: 'Adjust the tone of the text',
-    icon: <MessageSquare className="h-4 w-4" />,
-    action: 'tone',
-    category: 'utility',
-    hasParameters: true,
-    parameters: ['professional', 'casual', 'academic', 'friendly', 'authoritative']
-  },
   {
     id: 'translate',
     title: 'Translate',
@@ -173,6 +165,14 @@ const SLASH_COMMANDS: SlashCommand[] = [
     category: 'utility',
     hasParameters: true,
     parameters: ['spanish', 'french', 'german', 'italian', 'portuguese', 'other']
+  },
+  {
+    id: 'analyze',
+    title: 'Analyze Style',
+    description: 'Get detailed style and readability analysis',
+    icon: <Sparkles className="h-4 w-4" />,
+    action: 'analyze',
+    category: 'utility'
   }
 ];
 
@@ -249,25 +249,49 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
       return res.json();
     },
     onSuccess: (data) => {
-      // Handle different command results
-      if (data.replaceEntireContent) {
-        setContent(data.result);
+      // Handle different command results based on new backend flags
+      if (data.contextOnly) {
+        // For context-only commands, don't modify the editor content
+        // This component doesn't have access to context panel, so just show a toast
+        toast({
+          title: 'AI Analysis Complete',
+          description: data.message || 'Results are available in the context panel.'
+        });
+      } else if (data.appendToContent) {
+        setContent(content + '\n\n' + data.result);
+        toast({
+          title: 'Content Added',
+          description: data.message || 'New content has been added to your document.'
+        });
+      } else if (data.insertAtCursor) {
+        // For this simpler component, append to content as fallback
+        setContent(content + '\n\n' + data.result);
+        toast({
+          title: 'Content Inserted',
+          description: data.message || 'New content has been inserted.'
+        });
       } else if (data.replaceSelection && selectionInfo.selectedText) {
         setContent(
           selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
         );
-      } else if (data.command === 'continue') {
-        setContent(content + '\n\n' + data.result);
-      } else if (data.command === 'suggest') {
-        setContent(content + '\n\n--- AI Suggestions ---\n' + data.result);
-      } else {
+        toast({
+          title: 'Selection Updated',
+          description: data.message || 'Selected text has been updated.'
+        });
+      } else if (data.replaceEntireContent) {
         setContent(data.result);
+        toast({
+          title: 'Content Updated',
+          description: data.message || 'Your content has been updated.'
+        });
+      } else {
+        // Fallback for older API responses
+        setContent(data.result);
+        toast({
+          title: 'AI Command Executed',
+          description: data.message || 'Command completed successfully'
+        });
       }
-      
-      toast({
-        title: 'AI Command Executed',
-        description: data.message || 'Command completed successfully'
-      });
     },
     onError: (error) => {
       toast({

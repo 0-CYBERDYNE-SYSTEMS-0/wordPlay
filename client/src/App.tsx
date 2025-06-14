@@ -4,6 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SettingsProvider } from "@/providers/SettingsProvider";
+import { ProcessingProvider } from "@/providers/ProcessingProvider";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Settings from "@/pages/Settings";
@@ -24,10 +25,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-        </TooltipProvider>
+        <ProcessingProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+          </TooltipProvider>
+        </ProcessingProvider>
       </SettingsProvider>
     </QueryClientProvider>
   );

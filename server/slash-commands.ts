@@ -31,13 +31,33 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
   }
 }
 
-// Helper function to parse command parameters
-function parseCommand(command: string): { baseCommand: string; parameter?: string } {
+// Helper function to parse command parameters - UPDATED to handle custom input
+function parseCommand(command: string): { 
+  baseCommand: string; 
+  parameter?: string; 
+  customInput?: string; 
+} {
   const parts = command.split(':');
-  return {
-    baseCommand: parts[0],
-    parameter: parts[1]
-  };
+  
+  if (parts.length >= 3 && parts[1] === 'custom') {
+    // Format: command:custom:user_input
+    return {
+      baseCommand: parts[0],
+      parameter: 'custom',
+      customInput: parts.slice(2).join(':') // Rejoin in case there were colons in the input
+    };
+  } else if (parts.length >= 2) {
+    // Format: command:parameter
+    return {
+      baseCommand: parts[0],
+      parameter: parts[1]
+    };
+  } else {
+    // Format: command
+    return {
+      baseCommand: parts[0]
+    };
+  }
 }
 
 // Helper function to analyze content for smart defaults
@@ -61,16 +81,27 @@ function analyzeContentContext(content: string, selectionInfo: any): {
   };
 }
 
-// Helper function to create system prompts that leverage existing text processing tools
-function createToolBasedPrompt(instruction: string, textContext: string, selectionInfo: any): string {
+// Helper function to create system prompts that leverage existing text processing tools - UPDATED
+function createToolBasedPrompt(instruction: string, textContext: string, selectionInfo: any, customGuidance?: string): string {
   const hasSelection = Boolean(selectionInfo.selectedText);
   const operationType = hasSelection ? 'selection' : 'document';
   
+  // Incorporate custom guidance if provided
+  const enhancedInstruction = customGuidance 
+    ? `${instruction}\n\nUSER GUIDANCE: ${customGuidance}`
+    : instruction;
+  
   return `You are an expert writing assistant with access to powerful text processing tools like grep and sed.
 
-TASK: ${instruction}
+TASK: ${enhancedInstruction}
 
 TARGET: ${operationType} (${hasSelection ? selectionInfo.selectedText.length + ' characters selected' : 'entire document'})
+
+CRITICAL INSTRUCTION:
+- ALL final output that should appear in the editor MUST be wrapped in <final_output> tags
+- Everything else (analysis, thinking, suggestions) will appear in the context panel
+- For surgical edits, wrap ONLY the specific text changes in <final_output> tags
+- Never include XML tags or technical markers in the final output content itself
 
 EXISTING TEXT PROCESSING CAPABILITIES:
 - Use existing grep/sed-like tools for precise text replacement
@@ -80,7 +111,123 @@ EXISTING TEXT PROCESSING CAPABILITIES:
 
 ${hasSelection ? `SELECTED TEXT: "${selectionInfo.selectedText}"` : `DOCUMENT CONTEXT: "${textContext.substring(0, 500)}..."`}
 
-Provide a clear, improved version that applies only the necessary changes. For surgical edits, identify specific patterns to find and replace rather than rewriting entire sections.`;
+${customGuidance ? `Follow the user's specific guidance while applying the task. The guidance takes priority over default behaviors.` : `Provide a clear, improved version that applies only the necessary changes. For surgical edits, identify specific patterns to find and replace rather than rewriting entire sections.`}`;
+}
+
+// NEW: Enhanced style and context analysis function
+async function analyzeContentAndContext(content: string, includeContext: boolean = false): Promise<{
+  styleAnalysis: {
+    tone: string;
+    formality: string;
+    complexity: string;
+    writingStyle: string;
+    vocabulary: string;
+    structure: string;
+  };
+  contextSummary?: string;
+  researchContext?: string;
+}> {
+  
+  // Basic style analysis based on content patterns
+  const wordCount = content.trim().split(/\s+/).length;
+  const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+  const avgSentenceLength = sentences.length > 0 ? wordCount / sentences.length : 0;
+  
+  // Analyze vocabulary complexity
+  const complexWords = content.match(/\b\w{8,}\b/g) || [];
+  const complexityRatio = complexWords.length / wordCount;
+  
+  // Analyze tone indicators
+  const academicWords = /\b(research|study|analysis|methodology|hypothesis|evidence|conclusion|furthermore|moreover|therefore)\b/gi;
+  const casualWords = /\b(really|pretty|kinda|maybe|I think|you know|awesome|cool)\b/gi;
+  const formalWords = /\b(shall|pursuant|hereby|therefore|consequently|nevertheless|furthermore)\b/gi;
+  
+  const academicCount = (content.match(academicWords) || []).length;
+  const casualCount = (content.match(casualWords) || []).length;
+  const formalCount = (content.match(formalWords) || []).length;
+  
+  // Determine style characteristics
+  const styleAnalysis = {
+    tone: academicCount > casualCount && academicCount > formalCount ? 'academic' :
+          casualCount > formalCount ? 'casual' :
+          formalCount > 0 ? 'formal' : 'neutral',
+    formality: avgSentenceLength > 20 ? 'highly formal' :
+              avgSentenceLength > 15 ? 'formal' :
+              avgSentenceLength > 10 ? 'moderate' : 'casual',
+    complexity: complexityRatio > 0.15 ? 'high' :
+               complexityRatio > 0.08 ? 'moderate' : 'accessible',
+    writingStyle: content.includes('\n\n## ') || content.includes('# ') ? 'structured/academic' :
+                 content.includes('\n- ') || content.includes('\n* ') ? 'list-based' :
+                 sentences.length > 0 && avgSentenceLength > 25 ? 'verbose/descriptive' :
+                 'narrative/flowing',
+    vocabulary: complexityRatio > 0.12 ? 'sophisticated' :
+               complexityRatio > 0.06 ? 'standard' : 'simple',
+    structure: content.includes('\n\n') ? 'well-paragraphed' :
+              content.includes('\n') ? 'line-broken' : 'continuous'
+  };
+  
+  // If context is requested, we would fetch from database here
+  // For now, return the style analysis
+  return {
+    styleAnalysis,
+    contextSummary: includeContext ? 'Context integration available' : undefined,
+    researchContext: includeContext ? 'Research sources can be integrated' : undefined
+  };
+}
+
+// Helper function to create context-aware prompts for smart continuation
+function createSmartContinuationPrompt(
+  content: string, 
+  selectionInfo: any, 
+  styleAnalysis: any,
+  customGuidance?: string,
+  contextSummary?: string,
+  researchContext?: string
+): string {
+  const hasSelection = Boolean(selectionInfo.selectedText);
+  const operationType = hasSelection ? 'selection' : 'document';
+  
+  const baseInstruction = customGuidance 
+    ? `Continue the text following this specific guidance: ${customGuidance}`
+    : `Continue the text intelligently using comprehensive style analysis and available context`;
+
+  return `You are an expert writing assistant with advanced style analysis and context integration capabilities.
+
+<thinkpad>
+SMART CONTINUATION TASK: ${baseInstruction}
+
+STYLE ANALYSIS RESULTS:
+- Tone: ${styleAnalysis.tone}
+- Formality: ${styleAnalysis.formality}  
+- Complexity: ${styleAnalysis.complexity}
+- Writing Style: ${styleAnalysis.writingStyle}
+- Vocabulary Level: ${styleAnalysis.vocabulary}
+- Structure Pattern: ${styleAnalysis.structure}
+
+TARGET: ${operationType} (${hasSelection ? selectionInfo.selectedText.length + ' characters selected' : 'entire document'})
+
+${contextSummary ? `CONTEXT SUMMARY: ${contextSummary}` : ''}
+${researchContext ? `RESEARCH CONTEXT: ${researchContext}` : ''}
+
+CONTINUATION STRATEGY:
+1. Maintain the detected ${styleAnalysis.tone} tone and ${styleAnalysis.formality} formality level
+2. Match the ${styleAnalysis.writingStyle} writing style
+3. Use ${styleAnalysis.vocabulary} vocabulary consistent with the existing text
+4. Follow the ${styleAnalysis.structure} structural pattern
+5. Ensure seamless flow and natural progression of ideas
+${customGuidance ? `6. Incorporate the specific guidance: ${customGuidance}` : ''}
+${contextSummary ? `7. Integrate relevant context where appropriate` : ''}
+</thinkpad>
+
+<workspace>
+CURRENT TEXT: "${content.length > 1000 ? content.substring(content.length - 1000) + '...' : content}"
+
+LAST PARAGRAPH: "${content.split('\n\n').slice(-1)[0] || content.substring(Math.max(0, content.length - 200))}"
+</workspace>
+
+<final_result>
+Continue the text naturally, maintaining the established style, tone, and flow. Write 1-3 paragraphs that advance the ideas seamlessly. Match the sophistication level, sentence structure, and vocabulary patterns of the existing content.
+</final_result>`;
 }
 
 // Define the AI commands handlers for each slash command type
@@ -96,19 +243,28 @@ export async function executeSlashCommand(
   },
   style: any = {},
   llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel: string = DEFAULT_MODEL
+  llmModel: string = DEFAULT_MODEL,
+  includeContext: boolean = false // NEW: Flag to include context analysis
 ): Promise<{
   result: string;
   message: string;
   replaceSelection?: boolean;
   replaceEntireContent?: boolean;
   appendToContent?: boolean;
+  contextOnly?: boolean;
+  insertAtCursor?: boolean;
 }> {
-  // Parse command and parameter
-  const { baseCommand, parameter } = parseCommand(command);
+  // Parse command, parameter, and custom input - UPDATED
+  const { baseCommand, parameter, customInput } = parseCommand(command);
   
   // Analyze content for smart defaults
   const context = analyzeContentContext(content, selectionInfo);
+  
+  // Enhanced context analysis for smart commands (if needed in future)
+  let enhancedContext: any = null;
+  if (includeContext) {
+    enhancedContext = await analyzeContentAndContext(content, includeContext);
+  }
   
   // Use the provided LLM provider and model, or default to OpenAI
   const openai = new OpenAI({ 
@@ -135,20 +291,34 @@ export async function executeSlashCommand(
     let systemPrompt = "";
     let userPrompt = "";
     
-    console.log(`Executing slash command: ${baseCommand}`);
+    console.log(`Executing slash command: ${baseCommand}${parameter ? `:${parameter}` : ''}${customInput ? ` with custom input: "${customInput}"` : ''}${enhancedContext ? ' [with enhanced context]' : ''}`);
     
     switch (baseCommand) {
       case 'continue':
+        const continueInstruction = customInput 
+          ? `Continue the text in a seamless way following this specific guidance: ${customInput}`
+          : `Continue the text in a seamless way that matches the style and content of what came before. Be creative, coherent, and maintain the same voice and tone. Write at least one substantial paragraph that advances the ideas.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `Continue the text in a seamless way that matches the style and content of what came before. Be creative, coherent, and maintain the same voice and tone. Write at least one substantial paragraph that advances the ideas.`,
+          continueInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Continue this content:\n\n${content}`;
         break;
+
+
         
       case 'improve':
-        if (parameter) {
+        if (customInput) {
+          systemPrompt = createToolBasedPrompt(
+            `You are an expert editor. Improve the text according to this specific guidance: ${customInput}. Make targeted improvements rather than wholesale rewrites.`,
+            textContext,
+            selectionInfo,
+            customInput
+          );
+        } else if (parameter && parameter !== 'custom') {
           switch (parameter) {
             case 'clarity':
               systemPrompt = createToolBasedPrompt(
@@ -198,16 +368,28 @@ export async function executeSlashCommand(
       case 'summarize':
         const summaryLength = context.length === 'short' ? '2-3 sentences' : 
                             context.length === 'medium' ? '1 paragraph' : '2-3 paragraphs';
+        const summaryInstruction = customInput
+          ? `Create a summary following this guidance: ${customInput}`
+          : `Create a clear, comprehensive summary of the text in approximately ${summaryLength}. Capture all key points while eliminating redundancy and maintaining the essence intact.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `You are a master of concise communication. Create a clear, comprehensive summary of the text in approximately ${summaryLength}. Capture all key points while eliminating redundancy and maintaining the essence intact.`,
+          summaryInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Summarize this text:\n\n${textContext}`;
         break;
         
       case 'expand':
-        if (parameter) {
+        if (customInput) {
+          systemPrompt = createToolBasedPrompt(
+            `Generate additional content that expands upon the given text following this specific guidance: ${customInput}. This content will be added to the existing text.`,
+            textContext,
+            selectionInfo,
+            customInput
+          );
+        } else if (parameter && parameter !== 'custom') {
           switch (parameter) {
             case 'examples':
               systemPrompt = createToolBasedPrompt(
@@ -257,16 +439,28 @@ export async function executeSlashCommand(
         break;
         
       case 'list':
+        const listInstruction = customInput
+          ? `Transform the content into a list format following this guidance: ${customInput}`
+          : `Transform the content into a well-structured list format with clear headings and bullet points. Maintain all important information but reorganize it for easier reading and reference. Add appropriate introductory text.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `Transform the content into a well-structured list format with clear headings and bullet points. Maintain all important information but reorganize it for easier reading and reference. Add appropriate introductory text.`,
+          listInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Transform this content into a list:\n\n${textContext}`;
         break;
 
       case 'rewrite':
-        if (parameter) {
+        if (customInput) {
+          systemPrompt = createToolBasedPrompt(
+            `Rewrite the text according to this specific guidance: ${customInput}. Preserve all key information while following the guidance.`,
+            textContext,
+            selectionInfo,
+            customInput
+          );
+        } else if (parameter && parameter !== 'custom') {
           switch (parameter) {
             case 'simpler':
               systemPrompt = createToolBasedPrompt(
@@ -313,44 +507,59 @@ export async function executeSlashCommand(
         userPrompt = `Rewrite this content:\n\n${textContext}`;
         break;
 
-      case 'simplify':
-        systemPrompt = createToolBasedPrompt(
-          `Simplify the text to make it easier to understand for a general audience. Use simpler vocabulary, shorter sentences, and clearer explanations. Break down complex concepts into digestible parts while preserving all important information.`,
-          textContext,
-          selectionInfo
-        );
-        userPrompt = `Simplify this content:\n\n${textContext}`;
-        break;
+
         
       case 'suggest':
+        const suggestInstruction = customInput
+          ? `Based on the given text, suggest new ideas, angles, or directions following this guidance: ${customInput}. Format as numbered suggestions with brief explanations.`
+          : `Based on the given text, suggest 3-5 new related ideas, angles, or directions the writer could explore next. Format these as numbered suggestions with a brief explanation of each. Be specific and insightful.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `Based on the given text, suggest 3-5 new related ideas, angles, or directions the writer could explore next. Format these as numbered suggestions with a brief explanation of each. Be specific and insightful.`,
+          suggestInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Generate ideas based on this content:\n\n${content}`;
         break;
 
       case 'outline':
+        const outlineInstruction = customInput
+          ? `Create an outline from the content following this guidance: ${customInput}`
+          : `Create a comprehensive, well-structured outline from the content. Use hierarchical headings (I, II, III with A, B, C subpoints) to organize the main ideas and supporting points. Make it suitable for planning or restructuring the content.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `Create a comprehensive, well-structured outline from the content. Use hierarchical headings (I, II, III with A, B, C subpoints) to organize the main ideas and supporting points. Make it suitable for planning or restructuring the content.`,
+          outlineInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Create an outline from this content:\n\n${textContext}`;
         break;
 
       case 'format':
+        const formatInstruction = customInput
+          ? `Improve the structure and formatting of the text following this guidance: ${customInput}`
+          : `Improve the structure and formatting of the text. Add appropriate headings, subheadings, bullet points, numbered lists, and paragraph breaks to make the content more readable and professionally presented. Maintain all content while enhancing its visual organization.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `Improve the structure and formatting of the text. Add appropriate headings, subheadings, bullet points, numbered lists, and paragraph breaks to make the content more readable and professionally presented. Maintain all content while enhancing its visual organization.`,
+          formatInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Improve formatting of this content:\n\n${textContext}`;
         break;
         
       case 'tone':
-        if (parameter) {
+        if (customInput) {
+          systemPrompt = createToolBasedPrompt(
+            `Rewrite the text to match this specific tone: ${customInput}. Adjust formality, warmth, authority, and other tone aspects while preserving the core message.`,
+            textContext,
+            selectionInfo,
+            customInput
+          );
+        } else if (parameter && parameter !== 'custom') {
           switch (parameter) {
             case 'professional':
               systemPrompt = createToolBasedPrompt(
@@ -407,16 +616,28 @@ export async function executeSlashCommand(
         break;
         
       case 'fix':
+        const fixInstruction = customInput
+          ? `Fix any issues in the text focusing on: ${customInput}. Make minimal changes necessary to address the specified concerns.`
+          : `Fix any grammatical errors, spelling mistakes, punctuation problems, or clarity issues in the text. Make minimal changes necessary to ensure correctness and readability. Focus only on errors, not style preferences.`;
+        
         systemPrompt = createToolBasedPrompt(
-          `Fix any grammatical errors, spelling mistakes, punctuation problems, or clarity issues in the text. Make minimal changes necessary to ensure correctness and readability. Focus only on errors, not style preferences.`,
+          fixInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Fix grammar and spelling in this content:\n\n${textContext}`;
         break;
 
       case 'translate':
-        if (parameter && parameter !== 'other') {
+        if (customInput) {
+          systemPrompt = createToolBasedPrompt(
+            `Translate the text according to this guidance: ${customInput}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural.`,
+            textContext,
+            selectionInfo,
+            customInput
+          );
+        } else if (parameter && parameter !== 'custom' && parameter !== 'other') {
           systemPrompt = createToolBasedPrompt(
             `Translate the text accurately into ${parameter}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural in the target language.`,
             textContext,
@@ -433,8 +654,9 @@ export async function executeSlashCommand(
         break;
         
       case 'analyze':
-        systemPrompt = createToolBasedPrompt(
-          `Provide a detailed analysis of the text covering:
+        const analyzeInstruction = customInput
+          ? `Provide a detailed analysis of the text focusing on: ${customInput}. Be specific and actionable in your analysis.`
+          : `Provide a detailed analysis of the text covering:
         
 1. **Readability**: Grade level, sentence complexity, accessibility
 2. **Style**: Tone, formality level, voice consistency  
@@ -443,11 +665,29 @@ export async function executeSlashCommand(
 5. **Engagement**: Reader interest, clarity, impact
 6. **Suggestions**: Top 3 specific improvements
 
-Format your analysis clearly with headers and bullet points. Be specific and actionable.`,
+Format your analysis clearly with headers and bullet points. Be specific and actionable.`;
+        
+        systemPrompt = createToolBasedPrompt(
+          analyzeInstruction,
           textContext,
-          selectionInfo
+          selectionInfo,
+          customInput
         );
         userPrompt = `Analyze this content:\n\n${textContext}`;
+        break;
+
+      case 'research':
+        if (customInput) {
+          // For research commands, the custom input becomes the search query
+          // This would need integration with your research functionality
+          systemPrompt = `Research the following topic: ${customInput}. Provide comprehensive information with reliable sources.`;
+          userPrompt = `Research query: ${customInput}`;
+        } else {
+          return {
+            ...defaultResponse,
+            message: "Please specify what topic to research."
+          };
+        }
         break;
         
       default:
@@ -457,6 +697,11 @@ Format your analysis clearly with headers and bullet points. Be specific and act
     // Add style context if available
     if (style && Object.keys(style).length > 0) {
       systemPrompt += `\n\nStyle information: ${JSON.stringify(style)}`;
+    }
+    
+    // NEW: Add enhanced context information if available
+    if (enhancedContext) {
+      systemPrompt += `\n\nEnhanced Context: Style analysis completed with ${enhancedContext.styleAnalysis.tone} tone, ${enhancedContext.styleAnalysis.formality} formality, and ${enhancedContext.styleAnalysis.complexity} complexity.`;
     }
     
     // Make the API call based on provider
@@ -488,58 +733,103 @@ Format your analysis clearly with headers and bullet points. Be specific and act
       generatedText = response.choices[0].message.content?.trim() || "";
     }
     
-    // Determine if we should replace the entire content or just the selection
-    const replaceEntireContent = ['list', 'suggest', 'outline', 'format', 'analyze'].includes(baseCommand) || 
-                                (!selectionInfo.selectedText && 
-                                 ['summarize', 'improve'].includes(baseCommand));
+    // Determine the correct edit strategy based on command semantics
+    const action = customInput ? `${baseCommand} (custom)` : 
+                  parameter && parameter !== 'custom' ? `${baseCommand} (${parameter})` : baseCommand;
     
-    // Handle append operations first (expand and continue)
-    if (baseCommand === 'expand' || baseCommand === 'continue') {
-      const action = parameter ? `${baseCommand} (${parameter})` : baseCommand;
+    // APPEND commands: Add content at cursor position or end of document
+    if (['continue', 'expand'].includes(baseCommand)) {
+              let message = '';
+        if (baseCommand === 'expand') {
+          message = `Expanded your content with additional detail.`;
+        } else {
+          message = `Extended your writing with new content.`;
+        }
+      
       return {
         result: generatedText,
-        message: baseCommand === 'expand' 
-          ? `Expanded your content with additional ${parameter || 'information'}.`
-          : `Extended your writing with new content.`,
+        message,
         replaceSelection: false,
         replaceEntireContent: false,
         appendToContent: true
       };
     }
     
-    if (replaceEntireContent) {
-      // For commands that should be handled as suggestions/insights
+    // CONTEXT-ONLY commands: Show only in context panel, don't modify document
+    if (['suggest', 'analyze'].includes(baseCommand)) {
+      let message = '';
       if (baseCommand === 'suggest') {
-        return {
-          result: generatedText,
-          message: `Generated new ideas based on your content.`,
-          replaceSelection: false,
-          replaceEntireContent: false // We'll handle this special case separately
-        };
+        message = customInput 
+          ? `Generated targeted ideas based on your guidance.`
+          : `Generated new ideas based on your content.`;
       } else if (baseCommand === 'analyze') {
+        message = customInput
+          ? `Generated focused analysis based on your criteria.`
+          : `Generated detailed style analysis of your content.`;
+      }
+      
+      return {
+        result: generatedText,
+        message,
+        replaceSelection: false,
+        replaceEntireContent: false,
+        appendToContent: false,
+        contextOnly: true // Special flag for context-only commands
+      };
+    }
+    
+    // INSERT commands: Insert at cursor position (or append if no cursor position)
+    if (['summarize', 'list', 'outline'].includes(baseCommand)) {
+      return {
+        result: generatedText,
+        message: `Generated ${baseCommand} and inserted at cursor position.`,
+        replaceSelection: false,
+        replaceEntireContent: false,
+        appendToContent: false,
+        insertAtCursor: true // Special flag for cursor insertion
+      };
+    }
+    
+    // SELECTION-ONLY commands: Only work on selected text, require selection
+    if (['improve', 'fix', 'tone', 'rewrite', 'translate', 'format'].includes(baseCommand)) {
+      if (selectionInfo.selectedText) {
         return {
           result: generatedText,
-          message: `Generated detailed style analysis of your content.`,
-          replaceSelection: false,
-          replaceEntireContent: false // We'll handle this special case separately
+          message: `Applied ${action} to the selected text.`,
+          replaceSelection: true,
+          replaceEntireContent: false,
+          appendToContent: false
         };
       } else {
-        const action = parameter ? `${baseCommand} (${parameter})` : baseCommand;
+        // For these commands, if no selection, work on entire document but warn user
         return {
           result: generatedText,
-          message: `Applied ${action} to your text.`,
+          message: `Applied ${action} to the entire document (no text was selected).`,
           replaceSelection: false,
-          replaceEntireContent: true
+          replaceEntireContent: true,
+          appendToContent: false
         };
       }
-    } else {
-      // For commands operating on selections
-      const action = parameter ? `${baseCommand} (${parameter})` : baseCommand;
+    }
+    
+
+    
+    // DEFAULT: Replace selection if available, otherwise entire content
+    if (selectionInfo.selectedText) {
       return {
         result: generatedText,
         message: `Applied ${action} to the selected text.`,
         replaceSelection: true,
-        replaceEntireContent: false
+        replaceEntireContent: false,
+        appendToContent: false
+      };
+    } else {
+      return {
+        result: generatedText,
+        message: `Applied ${action} to your text.`,
+        replaceSelection: false,
+        replaceEntireContent: true,
+        appendToContent: false
       };
     }
   } catch (error: any) {

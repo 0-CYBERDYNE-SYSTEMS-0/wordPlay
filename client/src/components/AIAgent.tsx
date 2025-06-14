@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Bot, Send, Wrench, Loader2, User, Copy, CheckCircle, AlertCircle, ChevronRight, ChevronDown, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,7 @@ export default function AIAgent({
   editorState
 }: AIAgentProps) {
   const { toast } = useToast();
+  const { startProcessing, stopProcessing } = useApiProcessing();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(true);
@@ -148,11 +150,16 @@ export default function AIAgent({
   // Send request to agent
   const agentMutation = useMutation({
     mutationFn: async (request: string) => {
-      const res = await apiRequest("POST", "/api/agent/intelligent-request", {
-        request,
-        context: agentContext
-      });
-      return res.json();
+      startProcessing("Agent is analyzing your request...");
+      try {
+        const res = await apiRequest("POST", "/api/agent/intelligent-request", {
+          request,
+          context: agentContext
+        });
+        return res.json();
+      } finally {
+        stopProcessing();
+      }
     },
     onSuccess: (data) => {
       // Add agent response with intelligent synthesis
@@ -238,12 +245,17 @@ export default function AIAgent({
   // Execute individual tool
   const toolMutation = useMutation({
     mutationFn: async ({ toolName, parameters }: { toolName: string; parameters: any }) => {
-      const res = await apiRequest("POST", "/api/agent/tool", {
-        toolName,
-        parameters,
-        context: agentContext
-      });
-      return res.json();
+      startProcessing(`Executing ${toolName}...`);
+      try {
+        const res = await apiRequest("POST", "/api/agent/tool", {
+          toolName,
+          parameters,
+          context: agentContext
+        });
+        return res.json();
+      } finally {
+        stopProcessing();
+      }
     },
     onSuccess: (data, variables) => {
       const toolMessage: Message = {

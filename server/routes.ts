@@ -429,7 +429,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }),
       style: z.any().optional(),
       llmProvider: z.enum(['openai', 'ollama']).optional(),
-      llmModel: z.string().optional()
+      llmModel: z.string().optional(),
+      includeContext: z.boolean().optional()
     });
     
     try {
@@ -444,7 +445,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.selectionInfo, 
         validatedData.style,
         validatedData.llmProvider,
-        validatedData.llmModel
+        validatedData.llmModel,
+        validatedData.includeContext || false
       );
       
       res.json(result);

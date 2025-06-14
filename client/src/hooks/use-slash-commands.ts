@@ -98,33 +98,52 @@ export function useSlashCommands({
       }
     },
     onSuccess: (data) => {
-      if (data.replaceEntireContent) {
-        // Replace the entire content with the result
-        setContent(data.result);
+      // Handle different command results based on new backend flags
+      if (data.contextOnly) {
+        // For context-only commands, don't modify the editor content
+        // This hook doesn't have access to context panel, so just show a toast
+        toast({
+          title: 'AI Analysis Complete',
+          description: data.message || 'Analysis complete - results available in context panel.',
+        });
       } else if (data.appendToContent) {
         // Append content for expand and continue commands
-        const separator = data.command?.includes('expand') ? '\n\n' : '\n\n';
-        setContent(content + separator + data.result);
+        setContent(content + '\n\n' + data.result);
+        toast({
+          title: 'Content Added',
+          description: data.message || 'New content has been added to your document.',
+        });
+      } else if (data.insertAtCursor) {
+        // For this hook without cursor access, append to content as fallback
+        setContent(content + '\n\n' + data.result);
+        toast({
+          title: 'Content Inserted',
+          description: data.message || 'New content has been inserted.',
+        });
       } else if (data.replaceSelection && selectionInfo.selectedText) {
         // Replace just the selection
         setContent(
           selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
         );
-      } else if (data.command === 'continue') {
-        // For continue, append the text (fallback)
-        setContent(content + '\n\n' + data.result);
-      } else if (data.command === 'suggest') {
-        // For suggest, show as a toast or append with a separator
-        setContent(content + '\n\n--- AI Suggestions ---\n' + data.result);
-      } else {
-        // Default case, just use the result
+        toast({
+          title: 'Selection Updated',
+          description: data.message || 'Selected text has been updated.',
+        });
+      } else if (data.replaceEntireContent) {
+        // Replace the entire content with the result
         setContent(data.result);
+        toast({
+          title: 'Content Updated',
+          description: data.message || 'Your content has been updated.',
+        });
+      } else {
+        // Fallback for older API responses
+        setContent(data.result);
+        toast({
+          title: 'Command executed',
+          description: data.message || 'AI has processed your request.',
+        });
       }
-
-      toast({
-        title: 'Command executed',
-        description: data.message || 'AI has processed your request.',
-      });
     },
     onError: (error: any) => {
       toast({

@@ -1,0 +1,20 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+# Coding Conventions
+
+This file outlines the code style, naming conventions, and best practices across the project:
+
+- Use TypeScript consistently across both client and server for type safety.
+- File and folder names should follow kebab-case (e.g., `user-profile.tsx`).
+- React component files should be PascalCase (e.g., `UserProfile.tsx`).
+- Hooks should follow an `use` prefix in camelCase (e.g., `useFetchData`).
+- Default exports only when a module has a single primary export; otherwise, use named exports.
+- Keep modules focused on a single responsibility and avoid tight coupling.
+- Expose AI-driven features via front-end slash commands; avoid mixing AI logic into core business modules.
+- Avoid placeholder or simulated code; ensure all implementations are real and testable.
+- Reuse shared utilities from `shared/` to prevent duplication.
+- Follow the DRY principle and maintain clear separation of concerns.
+- Commit messages should be concise, reference issue IDs when applicable, and use imperative mood.
