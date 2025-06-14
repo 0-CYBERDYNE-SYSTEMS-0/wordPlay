@@ -8,6 +8,7 @@ import { useUndoRedo } from "@/hooks/use-undo-redo";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
 import { GuidedHint } from "@/components/HelpTooltip";
 import { useSettings } from "@/providers/SettingsProvider";
+import RichMarkdownEditor from "@/components/RichMarkdownEditor";
 
 interface EditorProps {
   title: string;
@@ -393,38 +394,21 @@ export default function Editor({
           />
         </div>
         
-        {/* Content Editor - Full height and width with larger text in full screen */}
-        <div className={isFullScreen ? "flex-1 px-24 pb-16 overflow-hidden" : "flex-1 px-12 pb-8 overflow-hidden"}>
-          <GuidedHint
-            hint="💡 Type '/' anywhere to open AI commands, or just start writing and let AI assist you!"
-            showHint={showGettingStartedHint && settings.userExperienceMode === 'simple'}
-            onDismiss={() => setShowGettingStartedHint(false)}
-          >
-            <textarea
-              ref={editorRef}
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value);
-                // Hide hint once user starts typing
-                if (e.target.value.length > 10) {
-                  setShowGettingStartedHint(false);
-                }
-              }}
-              placeholder={settings.userExperienceMode === 'simple' 
-                ? "Start writing your ideas here... Type '/' for AI assistance!" 
-                : "Start writing..."
-              }
-              className={`w-full h-full border-none resize-none outline-none text-gray-700 dark:text-gray-300 bg-transparent transition-colors leading-relaxed placeholder-gray-400 dark:placeholder-gray-500 ${
-                isFullScreen ? 'text-xl' : 'text-lg'
-              }`}
-              style={{ 
-                fontFamily: 'Georgia, "Times New Roman", serif',
-                fontSize: isFullScreen ? '20px' : '18px',
-                lineHeight: isFullScreen ? '1.9' : '1.8'
-              }}
-              onKeyDown={handleKeyDown}
-            />
-          </GuidedHint>
+        {/* Rich Markdown Editor */}
+        <div className="flex-1 overflow-hidden">
+          <RichMarkdownEditor
+            content={content}
+            setContent={setContent}
+            placeholder={settings.userExperienceMode === 'simple' 
+              ? "Start writing your ideas here... Type '/' for AI assistance!" 
+              : "Start writing..."
+            }
+            isFullScreen={isFullScreen}
+            showGettingStartedHint={showGettingStartedHint && settings.userExperienceMode === 'simple'}
+            onHideHint={() => setShowGettingStartedHint(false)}
+            onKeyDown={handleKeyDown}
+            editorRef={editorRef}
+          />
         </div>
       </div>
       
