@@ -6,6 +6,8 @@ import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, 
 import { useAISuggestions } from "@/hooks/use-ai-suggestions";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
+import { GuidedHint } from "@/components/HelpTooltip";
+import { useSettings } from "@/providers/SettingsProvider";
 
 interface EditorProps {
   title: string;
@@ -45,7 +47,11 @@ export default function Editor({
   onSuggestions
 }: EditorProps) {
   const { toast } = useToast();
+  const { settings } = useSettings();
   const [hasFocus, setHasFocus] = useState(false);
+  const [showGettingStartedHint, setShowGettingStartedHint] = useState(
+    settings.userExperienceMode === 'simple' && settings.hasCompletedOnboarding && content.length < 50
+  );
   const editorRef = useRef<HTMLTextAreaElement>(null);
   
   // State for slash commands popup
@@ -280,17 +286,19 @@ export default function Editor({
               {renderSaveStatus()}
             </div>
             
-            {/* Context Panel Toggle */}
-            <Button
-              onClick={onToggleContextPanel}
-              variant="ghost"
-              size="sm"
-              className={`flex items-center ${contextPanelOpen ? 'bg-primary/10 text-primary' : ''}`}
-              title="Toggle document insights"
-            >
-              <Info className="h-4 w-4 mr-1" />
-              Insights
-            </Button>
+            {/* Context Panel Toggle - Only in advanced mode */}
+            {settings.userExperienceMode === 'advanced' && (
+              <Button
+                onClick={onToggleContextPanel}
+                variant="ghost"
+                size="sm"
+                className={`flex items-center ${contextPanelOpen ? 'bg-primary/10 text-primary' : ''}`}
+                title="Toggle document insights"
+              >
+                <Info className="h-4 w-4 mr-1" />
+                Insights
+              </Button>
+            )}
 
             {/* Undo/Redo Buttons */}
             <div className="flex items-center space-x-1">
@@ -387,21 +395,36 @@ export default function Editor({
         
         {/* Content Editor - Full height and width with larger text in full screen */}
         <div className={isFullScreen ? "flex-1 px-24 pb-16 overflow-hidden" : "flex-1 px-12 pb-8 overflow-hidden"}>
-          <textarea
-            ref={editorRef}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Start writing..."
-            className={`w-full h-full border-none resize-none outline-none text-gray-700 dark:text-gray-300 bg-transparent transition-colors leading-relaxed placeholder-gray-400 dark:placeholder-gray-500 ${
-              isFullScreen ? 'text-xl' : 'text-lg'
-            }`}
-            style={{ 
-              fontFamily: 'Georgia, "Times New Roman", serif',
-              fontSize: isFullScreen ? '20px' : '18px',
-              lineHeight: isFullScreen ? '1.9' : '1.8'
-            }}
-            onKeyDown={handleKeyDown}
-          />
+          <GuidedHint
+            hint="💡 Type '/' anywhere to open AI commands, or just start writing and let AI assist you!"
+            showHint={showGettingStartedHint && settings.userExperienceMode === 'simple'}
+            onDismiss={() => setShowGettingStartedHint(false)}
+          >
+            <textarea
+              ref={editorRef}
+              value={content}
+              onChange={(e) => {
+                setContent(e.target.value);
+                // Hide hint once user starts typing
+                if (e.target.value.length > 10) {
+                  setShowGettingStartedHint(false);
+                }
+              }}
+              placeholder={settings.userExperienceMode === 'simple' 
+                ? "Start writing your ideas here... Type '/' for AI assistance!" 
+                : "Start writing..."
+              }
+              className={`w-full h-full border-none resize-none outline-none text-gray-700 dark:text-gray-300 bg-transparent transition-colors leading-relaxed placeholder-gray-400 dark:placeholder-gray-500 ${
+                isFullScreen ? 'text-xl' : 'text-lg'
+              }`}
+              style={{ 
+                fontFamily: 'Georgia, "Times New Roman", serif',
+                fontSize: isFullScreen ? '20px' : '18px',
+                lineHeight: isFullScreen ? '1.9' : '1.8'
+              }}
+              onKeyDown={handleKeyDown}
+            />
+          </GuidedHint>
         </div>
       </div>
       

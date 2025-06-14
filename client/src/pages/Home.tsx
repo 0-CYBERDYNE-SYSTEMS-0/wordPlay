@@ -9,6 +9,7 @@ import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
 import SettingsPanel from "@/components/SettingsPanel";
+import WelcomeModal from "@/components/WelcomeModal";
 
 import { useDocument } from "@/hooks/use-document";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -21,6 +22,7 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open to use left space
   const [contextPanelOpen, setContextPanelOpen] = useState(true); // Default to open to use right space
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
+  const [welcomeModalOpen, setWelcomeModalOpen] = useState(!settings.hasCompletedOnboarding);
   const [activeTab, setActiveTab] = useState<"editor" | "research" | "settings">("editor");
   const [activeProjectId, setActiveProjectId] = useState<number | null>(1); // Default project
   const [activeDocumentId, setActiveDocumentId] = useState<number | null>(1); // Default document
@@ -210,6 +212,7 @@ export default function Home() {
               onSelectDocument={handleSelectDocument}
               onChangeTab={setActiveTab}
               onClose={() => setSidebarOpen(false)}
+              userExperienceMode={settings.userExperienceMode}
             />
           </div>
         )}
@@ -252,7 +255,7 @@ export default function Home() {
         </main>
 
         {/* Right Context Panel */}
-        {contextPanelOpen && (
+        {contextPanelOpen && settings.userExperienceMode === 'advanced' && (
           <div className="context-container">
             <ContextPanel 
               title={title || ""}
@@ -267,6 +270,19 @@ export default function Home() {
       </div>
 
       {/* Modals */}
+      <WelcomeModal
+        isOpen={welcomeModalOpen}
+        onClose={() => setWelcomeModalOpen(false)}
+        onComplete={(userType) => {
+          // Adjust default layout based on user type
+          if (userType === 'simple') {
+            setSidebarOpen(false);
+            setContextPanelOpen(false);
+            setActiveTab('editor');
+          }
+        }}
+      />
+      
       <NewProjectModal
         isOpen={newProjectModalOpen}
         onClose={() => setNewProjectModalOpen(false)}
@@ -276,8 +292,8 @@ export default function Home() {
         }}
       />
       
-      {/* AI Agent - floating, minimized by default */}
-      {(
+      {/* AI Agent - floating, minimized by default - only in advanced mode */}
+      {settings.userExperienceMode === 'advanced' && (
         <AIAgent
           currentProject={activeProject}
           currentDocument={documentData}

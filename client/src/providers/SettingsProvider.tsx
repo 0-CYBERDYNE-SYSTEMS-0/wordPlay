@@ -2,6 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export interface AppSettings {
+  // User Experience Settings
+  userExperienceMode: 'simple' | 'advanced';
+  hasCompletedOnboarding: boolean;
+  
   // Editor Settings
   theme: 'light' | 'dark' | 'system';
   fontSize: 'small' | 'medium' | 'large';
@@ -82,6 +86,10 @@ interface SettingsContextType {
 }
 
 const defaultSettings: AppSettings = {
+  // User Experience Settings
+  userExperienceMode: 'simple',
+  hasCompletedOnboarding: false,
+  
   // Editor Settings
   theme: 'system',
   fontSize: 'medium',

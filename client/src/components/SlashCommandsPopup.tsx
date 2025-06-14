@@ -22,6 +22,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { useApiProcessing } from '@/hooks/use-api-processing';
 import AIProcessingIndicator from './AIProcessingIndicator';
 import { createAIResponseParser, type ParsedAIResponse } from '@/lib/aiResponseParser';
+import { useSettings } from '@/providers/SettingsProvider';
 
 interface SlashCommandsPopupProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export interface SlashCommand {
   shortcut?: string;
 }
 
-export const SLASH_COMMANDS: SlashCommand[] = [
+export const ALL_SLASH_COMMANDS: SlashCommand[] = [
   // Creation Commands
   {
     id: 'continue',
@@ -225,6 +226,73 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   }
 ];
 
+// Simple mode commands - essential features only
+export const SIMPLE_SLASH_COMMANDS: SlashCommand[] = [
+  {
+    id: 'continue',
+    title: 'Continue writing',
+    description: 'Continue the text with AI assistance',
+    icon: <Type className="h-4 w-4" />,
+    action: 'continue',
+    category: 'creation',
+    shortcut: '1'
+  },
+  {
+    id: 'improve',
+    title: 'Improve writing',
+    description: 'Enhance clarity and readability',
+    icon: <Sparkles className="h-4 w-4" />,
+    action: 'improve',
+    category: 'enhancement',
+    shortcut: '2'
+  },
+  {
+    id: 'fix',
+    title: 'Fix grammar',
+    description: 'Correct grammar and spelling',
+    icon: <CheckSquare className="h-4 w-4" />,
+    action: 'fix',
+    category: 'utility',
+    shortcut: '3'
+  },
+  {
+    id: 'summarize',
+    title: 'Summarize',
+    description: 'Create a concise summary',
+    icon: <FileText className="h-4 w-4" />,
+    action: 'summarize',
+    category: 'organization',
+    shortcut: '4'
+  },
+  {
+    id: 'rewrite',
+    title: 'Rewrite',
+    description: 'Rewrite the selected text',
+    icon: <Pencil className="h-4 w-4" />,
+    action: 'rewrite',
+    category: 'enhancement',
+    shortcut: '5'
+  },
+  {
+    id: 'undo',
+    title: 'Undo last change',
+    description: 'Revert the last AI modification',
+    icon: <Undo className="h-4 w-4" />,
+    action: 'undo',
+    category: 'utility',
+    shortcut: 'z'
+  },
+  {
+    id: 'help',
+    title: 'Help',
+    description: 'Show all available commands and examples',
+    icon: <Lightbulb className="h-4 w-4" />,
+    action: 'help',
+    category: 'utility',
+    shortcut: '?'
+  }
+];
+
 export default function SlashCommandsPopup({ 
   isOpen, 
   onClose, 
@@ -239,6 +307,7 @@ export default function SlashCommandsPopup({
 }: SlashCommandsPopupProps) {
   const { toast } = useToast();
   const { startProcessing, stopProcessing, updateMessage } = useApiProcessing();
+  const { settings } = useSettings();
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [filterText, setFilterText] = useState('');
@@ -251,6 +320,9 @@ export default function SlashCommandsPopup({
     documentLength: 0,
     contextType: 'document' as 'document' | 'selection'
   });
+  
+  // Use appropriate command set based on user experience mode
+  const SLASH_COMMANDS = settings.userExperienceMode === 'simple' ? SIMPLE_SLASH_COMMANDS : ALL_SLASH_COMMANDS;
   
   // Filter and sort commands based on filter text
   const filteredCommands = filterText

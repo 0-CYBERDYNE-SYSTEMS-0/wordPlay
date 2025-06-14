@@ -22,6 +22,7 @@ interface SidebarProps {
   onSelectDocument: (documentId: number) => void;
   onChangeTab: (tab: "editor" | "research" | "settings") => void;
   onClose: () => void;
+  userExperienceMode: 'simple' | 'advanced';
 }
 
 export default function Sidebar({
@@ -32,7 +33,8 @@ export default function Sidebar({
   onSelectProject,
   onSelectDocument,
   onChangeTab,
-  onClose
+  onClose,
+  userExperienceMode
 }: SidebarProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -575,28 +577,33 @@ export default function Sidebar({
               <Edit2 className="h-4 w-4 mr-2" />
               <span>Editor</span>
             </div>
-            <div 
-              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "research"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
-              }`}
-              onClick={() => onChangeTab("research")}
-            >
-              <Search className="h-4 w-4 mr-2" />
-              <span>Research</span>
-            </div>
-            <div 
-              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "settings"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
-              }`}
-              onClick={() => onChangeTab("settings")}
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              <span>Settings</span>
-            </div>
+            
+            {userExperienceMode === 'advanced' && (
+              <>
+                <div 
+                  className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                    activeTab === "research"
+                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                      : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                  onClick={() => onChangeTab("research")}
+                >
+                  <Search className="h-4 w-4 mr-2" />
+                  <span>Research</span>
+                </div>
+                <div 
+                  className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                    activeTab === "settings"
+                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                      : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                  }`}
+                  onClick={() => onChangeTab("settings")}
+                >
+                  <Settings className="h-4 w-4 mr-2" />
+                  <span>Settings</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

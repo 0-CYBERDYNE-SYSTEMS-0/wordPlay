@@ -3,7 +3,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useProcessing } from "@/providers/ProcessingProvider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sun, Moon, Menu, Info, Plus, Keyboard, Loader2, Brain } from "lucide-react";
+import { Sun, Moon, Menu, Info, Plus, Keyboard, Loader2, Brain, Settings, Zap } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import AIProcessingIndicator from "./AIProcessingIndicator";
 
@@ -42,6 +42,11 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
     // System theme - show based on current system preference
     const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
     return isDarkSystem ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />;
+  };
+
+  const toggleUserMode = () => {
+    const newMode = settings.userExperienceMode === 'simple' ? 'advanced' : 'simple';
+    updateSettings({ userExperienceMode: newMode });
   };
 
   return (
@@ -99,18 +104,20 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             </div>
           )}
           
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={toggleContextPanel} aria-label="Toggle context panel">
-                  <Info className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Toggle Context Panel</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {settings.userExperienceMode === 'advanced' && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={toggleContextPanel} aria-label="Toggle context panel">
+                    <Info className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Toggle Context Panel</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           
           <TooltipProvider>
             <Tooltip>
@@ -124,35 +131,68 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* User Experience Mode Toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant={settings.userExperienceMode === 'advanced' ? "default" : "outline"} 
+                  size="sm" 
+                  onClick={toggleUserMode} 
+                  className="flex items-center space-x-1"
+                >
+                  {settings.userExperienceMode === 'simple' ? (
+                    <>
+                      <Zap className="h-4 w-4" />
+                      <span className="hidden sm:inline">Simple</span>
+                    </>
+                  ) : (
+                    <>
+                      <Settings className="h-4 w-4" />
+                      <span className="hidden sm:inline">Advanced</span>
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Switch to {settings.userExperienceMode === 'simple' ? 'Advanced' : 'Simple'} Mode</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           
-          <Select value={llmProvider} onValueChange={v => setLlmProvider(v as 'openai' | 'ollama')}>
-            <SelectTrigger className="w-28">
-              <SelectValue placeholder="Provider" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="ollama">Ollama</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={llmModel} onValueChange={setLlmModel}>
-            <SelectTrigger className="w-32">
-              <SelectValue placeholder="Model" />
-            </SelectTrigger>
-            <SelectContent>
-              {llmProvider === 'openai' ? (
-                <>
-                  <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
-                  <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
-                  <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
-                  <SelectItem value="gpt-4o">GPT-4o</SelectItem>
-                </>
-              ) : (
-                ollamaModels.map(model => (
-                  <SelectItem key={model} value={model}>{model}</SelectItem>
-                ))
-              )}
-            </SelectContent>
-          </Select>
+          {settings.userExperienceMode === 'advanced' && (
+            <>
+              <Select value={llmProvider} onValueChange={v => setLlmProvider(v as 'openai' | 'ollama')}>
+                <SelectTrigger className="w-28">
+                  <SelectValue placeholder="Provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="ollama">Ollama</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={llmModel} onValueChange={setLlmModel}>
+                <SelectTrigger className="w-32">
+                  <SelectValue placeholder="Model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {llmProvider === 'openai' ? (
+                    <>
+                      <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
+                      <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                      <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
+                      <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                    </>
+                  ) : (
+                    ollamaModels.map(model => (
+                      <SelectItem key={model} value={model}>{model}</SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </>
+          )}
           
           <div className="flex items-center space-x-1 ml-2">
             <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white">
