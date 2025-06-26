@@ -14,8 +14,14 @@ export default function Chart({ config, className = '', style }: ChartProps) {
   useEffect(() => {
     if (!chartRef.current) return;
 
-    // Initialize chart
-    chartInstance.current = echarts.init(chartRef.current);
+    // Initialize chart with high-quality rendering options
+    chartInstance.current = echarts.init(chartRef.current, null, {
+      devicePixelRatio: window.devicePixelRatio || 2, // High DPI support
+      renderer: 'canvas', // Use canvas for better performance and quality
+      useDirtyRect: true, // Performance optimization
+      width: 'auto',
+      height: 'auto'
+    });
     
     return () => {
       if (chartInstance.current) {
@@ -65,7 +71,11 @@ export default function Chart({ config, className = '', style }: ChartProps) {
       className={`chart-container ${className}`}
       style={{ 
         width: '100%', 
-        height: '400px', 
+        minHeight: '500px', // Increased default height
+        height: '500px',
+        background: 'transparent',
+        borderRadius: '12px',
+        overflow: 'hidden',
         ...style 
       }}
     />

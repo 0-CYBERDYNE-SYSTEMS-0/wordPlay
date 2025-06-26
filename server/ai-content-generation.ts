@@ -88,37 +88,60 @@ export async function generateChart(request: ChartGenerationRequest): Promise<st
     throw new Error('OpenAI client not initialized');
   }
 
-  const systemPrompt = `You are an expert at creating responsive ECharts configurations from text data.
-  Analyze the provided text and create a complete ECharts configuration object that is perfectly responsive and accessible.
+  const systemPrompt = `You are an expert at creating stunning, Apple-quality ECharts visualizations that rival the best data visualizations from Apple's investor presentations and cutting-edge JavaScript libraries.
+
+  CREATE PREMIUM, FUTURISTIC VISUALIZATIONS:
   
-  CRITICAL REQUIREMENTS:
-  - ALWAYS ensure adequate padding and margins (minimum 60px on all sides)
-  - ALL text must be fully visible without collision or truncation
-  - Use responsive font sizes that scale appropriately (minimum 12px)
-  - Ensure proper spacing between elements (labels, titles, legends)
-  - Test for mobile responsiveness (charts should work on 320px+ screens)
-  - Use contrasting colors for accessibility
-  - Position legends intelligently to avoid overlapping with chart content
-  - Include proper tooltips with clear formatting
-  - Ensure axis labels have enough space and don't overlap
-  - Add containLabel: true to grid for automatic padding calculation
+  🎨 APPLE-STYLE DESIGN SYSTEM:
+  - Use premium color palettes: gradients, subtle shadows, glass-morphism effects
+  - Implement smooth animations and micro-interactions
+  - Clean, minimal typography with San Francisco Pro-style fonts
+  - Sophisticated spacing and alignment following Apple's design principles
+  - High contrast ratios for accessibility while maintaining elegance
   
-  RESPONSIVE DESIGN RULES:
-  - Grid padding: minimum { top: 60, right: 60, bottom: 60, left: 60 }
-  - Font sizes: title: 16px+, labels: 12px+, legends: 12px+
-  - Legend position: consider 'bottom' for wide legends, 'right' for short ones
-  - Axis label rotation: use when labels are long to prevent overlap
-  - Color palette: use high-contrast, colorblind-friendly colors
+  🔮 FUTURISTIC VISUAL ELEMENTS:
+  - Gradient fills and subtle shadows for depth
+  - Smooth line curves with proper easing
+  - Glass-morphism backgrounds with transparency
+  - Sophisticated color schemes (prefer blues, teals, purples for tech feel)
+  - Premium animation easing curves
   
-  DATA EXTRACTION:
-  - Extract numerical data and relationships from the text accurately
-  - Choose the most appropriate chart type if 'auto' is selected
-  - Create meaningful categories and data series
-  - Handle missing or incomplete data gracefully
+  📊 TECHNICAL EXCELLENCE:
+  - Ultra-high resolution support (devicePixelRatio: 2+)
+  - Perfect responsive behavior across all screen sizes
+  - Grid system: { top: 80, right: 80, bottom: 80, left: 100, containLabel: true }
+  - Typography scale: title: 24px, subtitle: 16px, labels: 14px, legends: 13px
+  - Smooth animations: animationDuration: 1000, animationEasing: 'cubicOut'
   
-  Chart types available: bar, line, pie, scatter
+  🎯 APPLE-QUALITY SPECIFICATIONS:
+  - Use sophisticated gradients: linear and radial gradients for series
+  - Implement subtle drop shadows and glows
+  - Premium color palettes: ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#00C7BE', '#FF2D92']
+  - Glass-morphism effects with backgroundColor: 'rgba(255,255,255,0.1)'
+  - Smooth line styles with shadowBlur for depth
+  - Professional tooltip styling with rounded corners and shadows
   
-  Return only the JSON configuration, no additional text or code blocks.`;
+  💎 CUTTING-EDGE JS FEATURES:
+  - Rich animations with staggered transitions
+  - Sophisticated hover states and interactions
+  - Progressive data loading animations
+  - Multi-dimensional visual hierarchy
+  - Advanced legend positioning with intelligent overflow handling
+  
+  📱 EXPORT-READY QUALITY:
+  - High DPI rendering for crisp exports
+  - Print-optimized color schemes
+  - Professional presentation-ready styling
+  - Scalable vector-quality output
+  
+  CHART TYPE SELECTION (when auto):
+  - Line charts: for trends, time series, continuous data
+  - Bar charts: for comparisons, categorical data
+  - Pie charts: for parts of a whole (limit to 6 categories max)
+  - Scatter plots: for correlations, relationships
+  - Area charts: for cumulative data, stacked values
+  
+  Return ONLY the complete JSON configuration with no code blocks or additional text.`;
 
   const userPrompt = `Create an ECharts configuration for a ${request.chartType} chart from this data:\n\n${request.text}`;
 
@@ -155,25 +178,39 @@ export async function generateImage(request: ImageGenerationRequest): Promise<st
   }
 
   const stylePrompts = {
-    realistic: 'photorealistic, high quality, detailed, professional photography style',
-    artistic: 'artistic style, creative, stylized, beautiful artwork, expressive',
-    diagram: 'clean diagram style, technical illustration, minimal, vector graphics, clear and simple',
-    icon: 'simple icon style, flat design, minimal, vector-like, clean symbols, modern'
+    realistic: 'ultra-high quality photorealistic style, 8K resolution, professional DSLR photography, perfect lighting, sharp details, cinematic composition, award-winning photography',
+    artistic: 'stunning artistic masterpiece, premium digital art, gallery-quality illustration, rich colors, sophisticated composition, professional artwork, high-end design',
+    diagram: 'pristine technical diagram, ultra-clean vector illustration, Apple-style minimalism, perfect geometric precision, professional technical documentation quality, crisp lines',
+    icon: 'premium icon design, ultra-modern flat design, Apple-quality vector graphics, pixel-perfect clarity, sophisticated minimalism, high-end brand quality'
   };
 
-  // Enhanced prompt with better descriptions for Gemini 2.0 Flash
-  const enhancedPrompt = `Create a high-quality image that visually represents and complements this content: "${request.prompt}". 
+  // Ultra-enhanced prompt for premium quality results
+  const enhancedPrompt = `Create an exceptionally high-quality, large-format image (1792x1024 or larger) that professionally represents: "${request.prompt}". 
 
-  Style requirements: ${stylePrompts[request.style]}
+  🎯 PREMIUM QUALITY SPECIFICATIONS:
+  ${stylePrompts[request.style]}
   
-  The image should:
-  - Directly relate to and enhance the meaning of the provided text
-  - Be visually appealing and professionally composed
-  - Support the narrative or concepts described in the text
-  - Use appropriate visual metaphors that connect to the content
-  - Be suitable for accompanying written content in a document
+  📐 COMPOSITION REQUIREMENTS:
+  - Ultra-high resolution and crisp details
+  - Professional composition with rule of thirds
+  - Balanced visual hierarchy and sophisticated layout
+  - Premium color palette with excellent contrast
+  - Export-ready quality suitable for presentations
   
-  Make it high quality, well-composed, and contextually relevant.`;
+  🎨 VISUAL EXCELLENCE:
+  - Cutting-edge modern aesthetic
+  - Perfect lighting and shadows
+  - Rich, vibrant colors with professional color grading
+  - Sharp focus and exceptional clarity
+  - Sophisticated depth and dimension
+  
+  📱 EXPORT OPTIMIZATION:
+  - High DPI rendering for crisp display on all devices
+  - Scalable quality that looks perfect when resized
+  - Professional presentation-ready output
+  - Print-quality resolution and color accuracy
+  
+  Create something that would be impressive in an Apple keynote or Fortune 500 presentation.`;
 
   try {
     const model = gemini.getGenerativeModel({ 

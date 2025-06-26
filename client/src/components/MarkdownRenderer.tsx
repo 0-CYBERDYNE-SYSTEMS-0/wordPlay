@@ -114,11 +114,21 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
                 console.log('📏 Chart config length:', chartConfig.length);
                 
                 return (
-                  <div className="my-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
-                    <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">
-                      Interactive Chart
+                  <div className="my-8 p-6 rounded-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl border border-gray-100 dark:border-gray-700 group">
+                    <div className="mb-4 text-base font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      Interactive Visualization
                     </div>
-                    <Chart config={chartConfig} />
+                    <div className="bg-white/50 dark:bg-black/20 rounded-xl p-2 backdrop-blur-sm">
+                      <Chart 
+                        config={chartConfig} 
+                        style={{ 
+                          minHeight: '600px',
+                          height: '600px',
+                          background: 'transparent'
+                        }}
+                      />
+                    </div>
                   </div>
                 );
               } catch (error) {
@@ -177,18 +187,28 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
             </a>
           ),
           
-          // Enhanced images
+          // Ultra-enhanced premium images
           img: ({ src, alt, ...props }) => (
-            <div className="my-6 text-center">
-              <img 
-                src={src} 
-                alt={alt}
-                className="max-w-full h-auto rounded-lg shadow-md mx-auto border border-gray-200 dark:border-gray-700"
-                loading="lazy"
-                {...props}
-              />
+            <div className="my-8 text-center group">
+              <div className="relative inline-block rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 p-2">
+                <img 
+                  src={src} 
+                  alt={alt}
+                  className="max-w-full h-auto rounded-xl mx-auto transition-all duration-300 group-hover:scale-[1.02] group-hover:shadow-3xl"
+                  style={{
+                    maxHeight: '70vh',
+                    minHeight: '400px',
+                    objectFit: 'contain',
+                    imageRendering: 'high-quality'
+                  }}
+                  loading="lazy"
+                  {...props}
+                />
+                {/* Subtle glass-morphism overlay for premium feel */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent pointer-events-none rounded-xl"></div>
+              </div>
               {alt && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 italic">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4 italic font-medium">
                   {alt}
                 </p>
               )}
