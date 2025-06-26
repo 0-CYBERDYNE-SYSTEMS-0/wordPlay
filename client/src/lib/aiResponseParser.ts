@@ -25,50 +25,112 @@ export class AIResponseParser {
     selectionInfo: any
   ): Promise<ParsedAIResponse> {
     
-    // For complex editing commands, let the existing agent tools handle surgical edits
-    const complexEditCommands = ['improve', 'fix', 'format', 'tone'];
-    if (complexEditCommands.includes(command)) {
-      // Simple strategy: let the agent tools do the heavy lifting
-      return {
-        content: rawResponse.trim(),
-        strategy: 'targeted-edit'
-      };
-    }
+    // Improved XML parsing with better tag handling
+    console.log('Parsing AI response for command:', command);
+    console.log('Raw response length:', rawResponse.length);
     
-    // Extract all thinking blocks for the Context Panel
-    const thinkingMatches = Array.from(rawResponse.matchAll(/<(?:think|thinkpad|thinking|reasoning)>([\s\S]*?)<\/(?:think|thinkpad|thinking|reasoning)>/gi));
+    // Extract all thinking blocks for the Context Panel (multiple patterns)
+    const thinkingPatterns = [
+      /<thinking>([\s\S]*?)<\/thinking>/gi,
+      /<think>([\s\S]*?)<\/think>/gi,
+      /<thinkpad>([\s\S]*?)<\/thinkpad>/gi,
+      /<reasoning>([\s\S]*?)<\/reasoning>/gi
+    ];
     
-    // Extract the final output that should go to the editor
-    const finalOutputMatch = rawResponse.match(/<final_output>([\s\S]*?)<\/final_output>/i);
+    let allThinkingContent: string[] = [];
+    let cleanedResponse = rawResponse;
     
-    // Combine thinking blocks for context panel
-    const thinking = thinkingMatches.length > 0
-      ? thinkingMatches.map(m => m[1].trim()).join('\n\n')
-      : undefined;
-
-    // Get content for the editor
+    // Extract and remove all thinking blocks
+    thinkingPatterns.forEach(pattern => {
+      const matches = Array.from(cleanedResponse.matchAll(pattern));
+      matches.forEach(match => {
+        allThinkingContent.push(match[1].trim());
+      });
+      // Remove the thinking blocks from the response
+      cleanedResponse = cleanedResponse.replace(pattern, '');
+    });
+    
+    // Extract final output content
+    const finalOutputMatch = cleanedResponse.match(/<final_output>([\s\S]*?)<\/final_output>/i);
+    
     let content: string;
     if (finalOutputMatch) {
-      // If there's a final_output tag, use its content
+      // Use content from final_output tags
       content = finalOutputMatch[1].trim();
+      console.log('Found final_output tag, extracted content length:', content.length);
     } else {
-      // Otherwise, remove all special tags and their content
-      content = rawResponse
-        // Remove thinking/reasoning blocks and their tags
-        .replace(/<(?:think|thinkpad|thinking|reasoning)>[\s\S]*?<\/(?:think|thinkpad|thinking|reasoning)>/gi, '')
-        // Remove final_output tags if they exist without content
+      // No final_output tag, clean the response of any remaining XML
+      content = cleanedResponse
+        // Remove any remaining final_output tags (opening/closing without content)
         .replace(/<\/?final_output>/gi, '')
-        // Remove any other XML-like tags
-        .replace(/<\/?[^>]+(>|$)/g, '')
+        // Remove any other XML-like tags but preserve content
+        .replace(/<\/?[a-zA-Z][^>]*>/g, '')
+        // Clean up extra whitespace
+        .replace(/\n\s*\n\s*\n/g, '\n\n')
+        .trim();
+      console.log('No final_output tag, cleaned content length:', content.length);
+    }
+
+    // Combine thinking content for context panel
+    const thinking = allThinkingContent.length > 0
+      ? allThinkingContent.join('\n\n---\n\n')
+      : undefined;
+
+    // If still no content after all cleaning, check for complex edit commands
+    const complexEditCommands = ['improve', 'fix', 'format', 'tone'];
+    if (!content && complexEditCommands.includes(command)) {
+      // For complex edits, use the raw response but clean it
+      content = rawResponse
+        .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+        .replace(/<think>[\s\S]*?<\/think>/gi, '')
+        .replace(/<thinkpad>[\s\S]*?<\/thinkpad>/gi, '')
+        .replace(/<reasoning>[\s\S]*?<\/reasoning>/gi, '')
+        .replace(/<\/?final_output>/gi, '')
+        .replace(/<\/?[a-zA-Z][^>]*>/g, '')
         .trim();
     }
 
-    // If no content after cleaning, use original response
-    if (!content && rawResponse) {
-      content = rawResponse.trim();
+    // Final fallback - if still no content, something went wrong
+    if (!content) {
+      console.warn('No content extracted, using cleaned response as fallback');
+      content = cleanedResponse.trim() || rawResponse.trim();
+      
+      // If still no content after all attempts, provide a helpful error message
+      if (!content) {
+        console.error('AI response parsing failed completely - no content found');
+        content = `**Error**: The AI response could not be processed. This might be due to:
+- Network connectivity issues
+- AI service temporarily unavailable  
+- Malformed response from the AI
+
+Please try the command again. If the problem persists, try:
+- Selecting less text
+- Using a simpler command like /fix or /improve
+- Checking your internet connection`;
+        
+        // Override strategy to context-only for error messages
+        const errorResponse: ParsedAIResponse = {
+          content: '',
+          thinking: content,
+          strategy: 'context-only',
+          suggestions: [content]
+        };
+        return errorResponse;
+      }
+    }
+
+    // Safety check for excessively long content
+    const MAX_CONTENT_LENGTH = 50000; // ~10k words
+    if (content.length > MAX_CONTENT_LENGTH) {
+      console.warn(`Content length ${content.length} exceeds maximum, truncating`);
+      content = content.substring(0, MAX_CONTENT_LENGTH) + '\n\n[Content truncated due to length - please try with smaller sections]';
     }
 
     const strategy = this.getDefaultStrategy(command);
+    
+    console.log('Final parsed content length:', content.length);
+    console.log('Thinking content length:', thinking?.length || 0);
+    console.log('Strategy:', strategy);
 
     return {
       content,

@@ -237,6 +237,7 @@ export default function Home() {
               isFullScreen={isFullScreen}
               onToggleFullScreen={toggleFullScreen}
               onSuggestions={handleAiSuggestions}
+              activeProjectId={activeProjectId}
             />
           )}
           {activeTab === "research" && (
@@ -255,7 +256,7 @@ export default function Home() {
         </main>
 
         {/* Right Context Panel */}
-        {contextPanelOpen && settings.userExperienceMode === 'advanced' && (
+        {contextPanelOpen && (
           <div className="context-container">
             <ContextPanel 
               title={title || ""}

@@ -14,7 +14,13 @@ import {
   Layout,
   Globe,
   BarChart2,
-  Undo
+  Undo,
+  Table,
+  Image,
+  TrendingUp,
+  Database,
+  AlertTriangle,
+  CheckCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -23,6 +29,26 @@ import { useApiProcessing } from '@/hooks/use-api-processing';
 import AIProcessingIndicator from './AIProcessingIndicator';
 import { createAIResponseParser, type ParsedAIResponse } from '@/lib/aiResponseParser';
 import { useSettings } from '@/providers/SettingsProvider';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface SlashCommandsPopupProps {
   isOpen: boolean;
@@ -35,6 +61,7 @@ interface SlashCommandsPopupProps {
   llmModel: string;
   onSuggestions?: (suggestions: string) => void;
   onUndo?: () => void;
+  activeProjectId?: number | null;
 }
 
 export interface SlashCommand {
@@ -226,6 +253,43 @@ export const ALL_SLASH_COMMANDS: SlashCommand[] = [
   }
 ];
 
+// Expert mode commands - AI content generation
+export const EXPERT_SLASH_COMMANDS: SlashCommand[] = [
+  ...ALL_SLASH_COMMANDS,
+  {
+    id: 'table',
+    title: 'Create table',
+    description: 'Convert selected text into a formatted table',
+    icon: <Table className="h-4 w-4" />,
+    action: 'table',
+    category: 'creation',
+    hasParameters: true,
+    parameters: ['replace', 'augment'],
+    shortcut: 't'
+  },
+  {
+    id: 'chart',
+    title: 'Create chart',
+    description: 'Generate data visualization from text or data',
+    icon: <TrendingUp className="h-4 w-4" />,
+    action: 'chart',
+    category: 'creation',
+    hasParameters: true,
+    parameters: ['bar', 'line', 'pie', 'scatter', 'auto'],
+    shortcut: 'c'
+  },
+  {
+    id: 'image',
+    title: 'Generate image',
+    description: 'Create AI-generated image using Gemini 2.0 Flash',
+    icon: <Image className="h-4 w-4" />,
+    action: 'image',
+    category: 'creation',
+    hasParameters: true,
+    parameters: ['realistic', 'artistic', 'diagram', 'icon']
+  }
+];
+
 // Simple mode commands - essential features only
 export const SIMPLE_SLASH_COMMANDS: SlashCommand[] = [
   {
@@ -274,6 +338,17 @@ export const SIMPLE_SLASH_COMMANDS: SlashCommand[] = [
     shortcut: '5'
   },
   {
+    id: 'table',
+    title: 'Create table',
+    description: 'Convert selected text into a formatted table',
+    icon: <Table className="h-4 w-4" />,
+    action: 'table',
+    category: 'creation',
+    hasParameters: true,
+    parameters: ['replace', 'augment'],
+    shortcut: 't'
+  },
+  {
     id: 'undo',
     title: 'Undo last change',
     description: 'Revert the last AI modification',
@@ -303,7 +378,8 @@ export default function SlashCommandsPopup({
   llmProvider,
   llmModel,
   onSuggestions,
-  onUndo
+  onUndo,
+  activeProjectId
 }: SlashCommandsPopupProps) {
   const { toast } = useToast();
   const { startProcessing, stopProcessing, updateMessage } = useApiProcessing();
@@ -311,7 +387,6 @@ export default function SlashCommandsPopup({
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [filterText, setFilterText] = useState('');
-  const [processingMessage, setProcessingMessage] = useState('');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [contextInfo, setContextInfo] = useState({
@@ -320,9 +395,79 @@ export default function SlashCommandsPopup({
     documentLength: 0,
     contextType: 'document' as 'document' | 'selection'
   });
+  const [includeResearchContext, setIncludeResearchContext] = useState(false);
+  const [confirmationDialog, setConfirmationDialog] = useState<{
+    isOpen: boolean;
+    command: string;
+    commandTitle: string;
+    message: string;
+  }>({
+    isOpen: false,
+    command: '',
+    commandTitle: '',
+    message: ''
+  });
+  
+  const [inputDialog, setInputDialog] = useState<{
+    isOpen: boolean;
+    command: string;
+    title: string;
+    placeholder: string;
+    value: string;
+  }>({
+    isOpen: false,
+    command: '',
+    title: '',
+    placeholder: '',
+    value: ''
+  });
   
   // Use appropriate command set based on user experience mode
-  const SLASH_COMMANDS = settings.userExperienceMode === 'simple' ? SIMPLE_SLASH_COMMANDS : ALL_SLASH_COMMANDS;
+  const SLASH_COMMANDS = settings.userExperienceMode === 'simple' ? SIMPLE_SLASH_COMMANDS : 
+                         settings.userExperienceMode === 'expert' ? EXPERT_SLASH_COMMANDS : 
+                         ALL_SLASH_COMMANDS;
+  
+  // Get operation type and visual indicator for commands
+  const getCommandOperationType = (commandAction: string) => {
+    const operationTypes = {
+      // Context-only operations (don't modify document)
+      'suggest': { type: 'Context Only', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+      'analyze': { type: 'Context Only', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+      'help': { type: 'Context Only', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+      
+      // Append operations (add to document)
+      'continue': { type: 'Adds Content', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+      'expand': { type: 'Adds Content', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+      
+      // Insert operations (insert at cursor)
+      'summarize': { type: 'Inserts at Cursor', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+      'list': { type: 'Inserts at Cursor', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+      'outline': { type: 'Inserts at Cursor', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+      
+      // Modify operations (changes selection or document)
+      'improve': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
+                  color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
+                  bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
+      'fix': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
+              color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
+              bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
+      'rewrite': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
+                  color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
+                  bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
+      'tone': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
+               color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
+               bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
+      'translate': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
+                    color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
+                    bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
+      'format': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
+                 color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
+                 bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' }
+    };
+    
+    return operationTypes[commandAction as keyof typeof operationTypes] || 
+           { type: 'Modifies Content', color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-900/20' };
+  };
   
   // Filter and sort commands based on filter text
   const filteredCommands = filterText
@@ -449,8 +594,95 @@ export default function SlashCommandsPopup({
     return helpText;
   };
 
-  // Mutation for executing commands
+  // Check if command requires input prompt
+  const checkForInputPrompt = (command: string) => {
+    const inputCommands = {
+      'research': {
+        title: 'Research Topic',
+        placeholder: 'Enter the topic you want to research (e.g., "artificial intelligence", "climate change")'
+      },
+      'translate': {
+        title: 'Translation Language',
+        placeholder: 'Enter target language (e.g., "Spanish", "French", "German") or leave blank for Spanish'
+      }
+    };
+    
+    if (inputCommands[command as keyof typeof inputCommands]) {
+      const config = inputCommands[command as keyof typeof inputCommands];
+      setInputDialog({
+        isOpen: true,
+        command,
+        title: config.title,
+        placeholder: config.placeholder,
+        value: ''
+      });
+      return true; // Needs input
+    }
+    return false; // No input needed
+  };
+
+  // Check if command requires confirmation for whole-document operation
+  const checkForConfirmation = (command: string, selectionInfo: any) => {
+    const destructiveCommands = ['improve', 'fix', 'tone', 'rewrite', 'translate', 'format'];
+    const commandTitles = {
+      'improve': 'Improve Writing',
+      'fix': 'Fix Grammar',
+      'tone': 'Change Tone', 
+      'rewrite': 'Rewrite',
+      'translate': 'Translate',
+      'format': 'Format Text'
+    };
+    
+    if (destructiveCommands.includes(command) && !selectionInfo.selectedText) {
+      const wordCount = Math.round(content.length / 250);
+      setConfirmationDialog({
+        isOpen: true,
+        command,
+        commandTitle: commandTitles[command as keyof typeof commandTitles] || command,
+        message: `You're about to apply "${commandTitles[command as keyof typeof commandTitles]}" to your entire document (~${wordCount} words). This will replace all your content. Are you sure?`
+      });
+      return true; // Needs confirmation
+    }
+    return false; // No confirmation needed
+  };
+
+  // Main command execution function  
   const executeCommand = async (command: string) => {
+    const selectionInfo = getSelectionInfo();
+    
+    // Check if this command needs input prompt first
+    if (checkForInputPrompt(command)) {
+      return; // Will show input dialog, don't proceed yet
+    }
+    
+    // Check if this command needs confirmation for whole-document operation
+    if (checkForConfirmation(command, selectionInfo)) {
+      return; // Will show confirmation dialog, don't proceed yet
+    }
+    
+    // Execute directly if no input or confirmation needed
+    await executeCommandConfirmed(command);
+  };
+
+  // Execute command with custom input
+  const executeCommandWithInput = async (command: string, customInput: string) => {
+    const commandWithInput = customInput.trim() 
+      ? `${command}:custom:${customInput.trim()}`
+      : command;
+    
+    const selectionInfo = getSelectionInfo();
+    
+    // Check if this command still needs confirmation for whole-document operation
+    if (checkForConfirmation(command, selectionInfo)) {
+      return; // Will show confirmation dialog, don't proceed yet
+    }
+    
+    // Execute with the custom input
+    await executeCommandConfirmed(commandWithInput);
+  };
+
+  // Execute command after confirmation (or directly if no confirmation needed)
+  const executeCommandConfirmed = async (command: string) => {
     const selectionInfo = getSelectionInfo();
     
     // Set specific processing message based on command
@@ -465,12 +697,14 @@ export default function SlashCommandsPopup({
       'fix': 'Fixing grammar and spelling...',
       'tone': 'Adjusting tone...',
       'translate': 'Translating text...',
-      'analyze': 'Analyzing writing style...'
+      'analyze': 'Analyzing writing style...',
+      'table': 'Creating data table...',
+      'chart': 'Generating visualization...',
+      'image': 'Creating image with Gemini 2.0 Flash...'
     };
     
     const message = messages[command as keyof typeof messages] || 'Processing your request...';
     startProcessing(message);
-    setProcessingMessage(message);
     
     try {
       // Handle help command locally without API call
@@ -518,7 +752,10 @@ export default function SlashCommandsPopup({
         selectionInfo,
         style: null, // You can add style information here if needed
         llmProvider,
-        llmModel
+        llmModel,
+        includeContext: includeResearchContext,
+        projectId: activeProjectId,
+        userId: 1 // Using default user ID as per app convention
       });
       
       const data = await res.json();
@@ -545,11 +782,53 @@ export default function SlashCommandsPopup({
       
     } catch (error: any) {
       console.error('Error executing command:', error);
+      
+      // Enhanced error handling with better user feedback
+      let errorTitle = 'Command Failed';
+      let errorDescription = 'Failed to execute command';
+      let showRetry = false;
+      
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorTitle = 'Network Error';
+        errorDescription = 'Unable to connect to the AI service. Please check your internet connection and try again.';
+        showRetry = true;
+      } else if (error.status === 429) {
+        errorTitle = 'Rate Limited';
+        errorDescription = 'Too many requests. Please wait a moment before trying again.';
+        showRetry = true;
+      } else if (error.status === 500) {
+        errorTitle = 'Server Error';
+        errorDescription = 'The AI service is temporarily unavailable. Please try again in a few moments.';
+        showRetry = true;
+      } else if (error.message?.includes('timeout')) {
+        errorTitle = 'Request Timeout';
+        errorDescription = 'The AI service took too long to respond. Try breaking your content into smaller sections.';
+        showRetry = true;
+      } else if (error.message?.includes('parse')) {
+        errorTitle = 'AI Response Error';
+        errorDescription = 'The AI response was malformed. This usually resolves by trying again.';
+        showRetry = true;
+      } else if (error.message) {
+        errorDescription = error.message;
+      }
+      
       toast({
-        title: 'Command Failed',
-        description: error.message || 'Failed to execute command',
-        variant: 'destructive'
+        title: errorTitle,
+        description: errorDescription + (showRetry ? '\n\nTip: Try the command again or select less text.' : ''),
+        variant: 'destructive',
+        duration: showRetry ? 8000 : 5000 // Longer duration for retryable errors
       });
+      
+      // For certain errors, suggest alternative approaches
+      if (command === 'continue' && error.message?.includes('context')) {
+        setTimeout(() => {
+          toast({
+            title: 'Alternative Suggestion',
+            description: 'Try selecting the last paragraph and using /improve or /expand instead.',
+            variant: 'default'
+          });
+        }, 2000);
+      }
     } finally {
       stopProcessing();
     }
@@ -592,7 +871,7 @@ export default function SlashCommandsPopup({
         case 'Enter':
           e.preventDefault();
           const selectedCommand = filteredCommands[selectedIndex];
-          if (selectedCommand && !processingMessage) {
+          if (selectedCommand) {
             onClose();
             executeCommand(selectedCommand.action);
           }
@@ -612,14 +891,14 @@ export default function SlashCommandsPopup({
             const num = parseInt(e.key);
             if (num >= 1 && num <= 9) {
               const commandWithShortcut = SLASH_COMMANDS.find(cmd => cmd.shortcut === e.key);
-              if (commandWithShortcut && !processingMessage) {
+              if (commandWithShortcut) {
                 e.preventDefault();
                 onClose();
                 executeCommand(commandWithShortcut.action);
               }
             }
             // Handle ? for help
-            if (e.key === '?' && !processingMessage) {
+            if (e.key === '?') {
               e.preventDefault();
               onClose();
               executeCommand('help');
@@ -631,7 +910,7 @@ export default function SlashCommandsPopup({
     
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, selectedIndex, processingMessage, filterText, filteredCommands]);
+  }, [isOpen, onClose, selectedIndex, filterText, filteredCommands]);
   
   // Apply parsed result based on strategy
   const applyParsedResult = async (parsed: ParsedAIResponse, command: string, selectionInfo: any) => {
@@ -666,6 +945,10 @@ export default function SlashCommandsPopup({
             description: 'New content has been added to your document.'
           });
         }
+        // Send thinking to context panel
+        if (parsed.thinking && onSuggestions) {
+          onSuggestions(parsed.thinking);
+        }
         break;
         
       case 'replace':
@@ -682,6 +965,10 @@ export default function SlashCommandsPopup({
             title: 'Content Updated',
             description: 'Your content has been updated.'
           });
+        }
+        // Send thinking to context panel
+        if (parsed.thinking && onSuggestions) {
+          onSuggestions(parsed.thinking);
         }
         break;
         
@@ -700,11 +987,53 @@ export default function SlashCommandsPopup({
             description: 'Your content has been improved with targeted edits using existing text processing tools.'
           });
         }
+        // Send thinking to context panel for targeted edits too
+        if (parsed.thinking && onSuggestions) {
+          onSuggestions(parsed.thinking);
+        }
+        break;
+        
+      case 'insert-at-cursor':
+        // Insert content at current cursor position
+        if (parsed.content) {
+          const cursorPosition = selectionInfo.selectedText 
+            ? selectionInfo.selectionEnd  // If there's a selection, insert after it
+            : selectionInfo.selectionStart; // Otherwise, insert at cursor
+          
+          const newContent = 
+            content.substring(0, cursorPosition) + 
+            '\n\n' + parsed.content + '\n\n' + 
+            content.substring(cursorPosition);
+          
+          setContent(newContent);
+          
+          // Update cursor position to after inserted content
+          setTimeout(() => {
+            if (editorRef.current) {
+              const newCursorPos = cursorPosition + parsed.content.length + 4; // +4 for newlines
+              editorRef.current.setSelectionRange(newCursorPos, newCursorPos);
+              editorRef.current.focus();
+            }
+          }, 10);
+          
+          toast({
+            title: 'Content Inserted',
+            description: 'Content has been inserted at cursor position.'
+          });
+        }
+        // Send thinking to context panel
+        if (parsed.thinking && onSuggestions) {
+          onSuggestions(parsed.thinking);
+        }
         break;
     }
     
-    // Always send thinking to Context Panel if available and not already sent
-    if (parsed.thinking && onSuggestions && parsed.strategy !== 'context-only' && parsed.strategy !== 'targeted-edit') {
+    // Send thinking to Context Panel for any remaining strategies not handled above
+    if (parsed.thinking && onSuggestions && 
+        parsed.strategy !== 'context-only' && 
+        parsed.strategy !== 'targeted-edit' && 
+        parsed.strategy !== 'append' && 
+        parsed.strategy !== 'replace') {
       onSuggestions(parsed.thinking);
     }
   };
@@ -727,18 +1056,64 @@ export default function SlashCommandsPopup({
               </div>
             )}
           </div>
-          {/* Context indicator */}
-          <div className="mt-2 flex items-center gap-2">
-            <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-              contextInfo.contextType === 'selection' 
-                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-            }`}>
-              {contextInfo.contextType === 'selection' 
-                ? `Applying to selection (${contextInfo.selectionLength} chars)`
-                : `Applying to document (${Math.round(contextInfo.documentLength / 250)} words)`
-              }
+          {/* Enhanced Context indicator */}
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className={`px-2 py-1 rounded-full text-xs font-medium ${
+                contextInfo.contextType === 'selection' 
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+              }`}>
+                {contextInfo.contextType === 'selection' 
+                  ? `Applying to selection (${contextInfo.selectionLength} chars)`
+                  : `Applying to document (${Math.round(contextInfo.documentLength / 250)} words)`
+                }
+              </div>
             </div>
+            
+            {/* Warning for whole-document operations */}
+            {contextInfo.contextType === 'document' && contextInfo.documentLength > 500 && (
+              <div className="flex items-start gap-2 p-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md">
+                <AlertTriangle className="h-3 w-3 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-orange-800 dark:text-orange-200">
+                  <strong>No text selected.</strong> Commands like improve, fix, rewrite will modify your entire document.
+                  <div className="mt-1 text-orange-600 dark:text-orange-300">
+                    Tip: Select specific text first for targeted changes.
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Success indicator for selections */}
+            {contextInfo.contextType === 'selection' && (
+              <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
+                <CheckCircle className="h-3 w-3" />
+                <span>Commands will only modify the selected text</span>
+              </div>
+            )}
+          </div>
+          
+          {/* Research context toggle */}
+          <div className="mt-2 flex items-center justify-between">
+            <label htmlFor="research-toggle" className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
+              <Database className="h-3 w-3" />
+              <span>Include research context</span>
+            </label>
+            <button
+              id="research-toggle"
+              onClick={() => setIncludeResearchContext(!includeResearchContext)}
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                includeResearchContext 
+                  ? 'bg-blue-600 dark:bg-blue-500' 
+                  : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            >
+              <span
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                  includeResearchContext ? 'translate-x-3.5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
           </div>
         </div>
         <div ref={scrollContainerRef} className="max-h-64 overflow-y-auto p-1">
@@ -764,7 +1139,6 @@ export default function SlashCommandsPopup({
                   ? 'bg-gray-100 dark:bg-gray-700'
                   : 'hover:bg-gray-100 dark:hover:bg-gray-700'
               }`}
-              disabled={!!processingMessage}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
                 {cmd.icon}
@@ -772,11 +1146,21 @@ export default function SlashCommandsPopup({
               <div className="flex-1">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">{cmd.title}</span>
-                  {cmd.shortcut && (
-                    <kbd className="ml-2 text-xs text-gray-500 dark:text-gray-400">
-                      {cmd.shortcut}
-                    </kbd>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const opType = getCommandOperationType(cmd.action);
+                      return (
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opType.bg} ${opType.color}`}>
+                          {opType.type}
+                        </span>
+                      );
+                    })()}
+                    {cmd.shortcut && (
+                      <kbd className="text-xs text-gray-500 dark:text-gray-400">
+                        {cmd.shortcut}
+                      </kbd>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   {cmd.description}
@@ -796,16 +1180,98 @@ export default function SlashCommandsPopup({
         </div>
       </div>
       
-      {/* Loading overlay */}
-      {processingMessage && (
-        <div className="fixed bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-md shadow-lg flex items-center z-50">
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span>{processingMessage}</span>
-        </div>
-      )}
+      {/* Input Dialog for Commands Requiring Parameters */}
+      <Dialog 
+        open={inputDialog.isOpen} 
+        onOpenChange={(open) => setInputDialog(prev => ({ ...prev, isOpen: open }))}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{inputDialog.title}</DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 dark:text-gray-400">
+              {inputDialog.placeholder}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Input
+              value={inputDialog.value}
+              onChange={(e) => setInputDialog(prev => ({ ...prev, value: e.target.value }))}
+              placeholder={inputDialog.command === 'research' ? 'Research topic...' : 'Target language...'}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const command = inputDialog.command;
+                  const value = inputDialog.value;
+                  setInputDialog(prev => ({ ...prev, isOpen: false }));
+                  onClose(); // Close the slash command menu
+                  executeCommandWithInput(command, value);
+                }
+              }}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setInputDialog(prev => ({ ...prev, isOpen: false }))}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                const command = inputDialog.command;
+                const value = inputDialog.value;
+                setInputDialog(prev => ({ ...prev, isOpen: false }));
+                onClose(); // Close the slash command menu
+                executeCommandWithInput(command, value);
+              }}
+            >
+              Execute Command
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Confirmation Dialog for Destructive Operations */}
+      <AlertDialog 
+        open={confirmationDialog.isOpen} 
+        onOpenChange={(open) => setConfirmationDialog(prev => ({ ...prev, isOpen: open }))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              Confirm Whole Document Operation
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-gray-600 dark:text-gray-400">
+              {confirmationDialog.message}
+              <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md">
+                <p className="text-xs text-orange-800 dark:text-orange-200">
+                  <strong>Tip:</strong> Select specific text first to apply commands only to that selection, 
+                  or use /undo after the operation to revert changes.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={async () => {
+                const command = confirmationDialog.command;
+                setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
+                onClose(); // Close the slash command menu
+                await executeCommandConfirmed(command);
+              }}
+              className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-700"
+            >
+              Yes, Apply to Entire Document
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useApiProcessing } from '@/hooks/use-api-processing';
 
 interface SlashCommandsProps {
   content: string;
@@ -228,6 +229,7 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
     handleEditorKeyDown(e);
   };
   const { toast } = useToast();
+  const { startProcessing, stopProcessing, updateMessage } = useApiProcessing();
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [selectionInfo, setSelectionInfo] = useState({
@@ -241,14 +243,40 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
   // Mutation for executing commands
   const commandMutation = useMutation({
     mutationFn: async (commandAction: string) => {
-      const res = await apiRequest('POST', '/api/ai/slash-command', {
-        command: commandAction,
-        content,
-        selectionInfo
-      });
-      return res.json();
+      // Set processing message based on command
+      const messages = {
+        'continue': 'Continuing your writing...',
+        'expand': 'Adding more detail...',
+        'suggest': 'Generating ideas...',
+        'improve': 'Enhancing your text...',
+        'rewrite': 'Rewriting content...',
+        'fix': 'Fixing grammar and spelling...',
+        'tone': 'Adjusting tone...',
+        'summarize': 'Creating summary...',
+        'list': 'Creating list...',
+        'outline': 'Creating outline...',
+        'format': 'Improving formatting...',
+        'translate': 'Translating text...',
+        'analyze': 'Analyzing writing style...'
+      };
+      
+      const message = messages[commandAction as keyof typeof messages] || 'Processing your request...';
+      startProcessing(message);
+      
+      try {
+        const res = await apiRequest('POST', '/api/ai/slash-command', {
+          command: commandAction,
+          content,
+          selectionInfo
+        });
+        return res.json();
+      } catch (error) {
+        stopProcessing();
+        throw error;
+      }
     },
     onSuccess: (data) => {
+      stopProcessing();
       // Handle different command results based on new backend flags
       if (data.contextOnly) {
         // For context-only commands, don't modify the editor content
@@ -264,8 +292,23 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
           description: data.message || 'New content has been added to your document.'
         });
       } else if (data.insertAtCursor) {
-        // For this simpler component, append to content as fallback
-        setContent(content + '\n\n' + data.result);
+        // Insert at current selection position or append if no selection info
+        const currentSelection = getSelectionInfo();
+        if (currentSelection) {
+          const insertPosition = currentSelection.selectedText 
+            ? currentSelection.selectionEnd 
+            : currentSelection.selectionStart;
+          
+          const newContent = 
+            content.substring(0, insertPosition) + 
+            '\n\n' + data.result + '\n\n' + 
+            content.substring(insertPosition);
+          
+          setContent(newContent);
+        } else {
+          // Fallback to append if no selection info available
+          setContent(content + '\n\n' + data.result);
+        }
         toast({
           title: 'Content Inserted',
           description: data.message || 'New content has been inserted.'
@@ -294,6 +337,7 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
       }
     },
     onError: (error) => {
+      stopProcessing();
       toast({
         title: 'Error',
         description: 'Failed to execute AI command: ' + (error as Error).message,
@@ -377,17 +421,6 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
           onClose={() => setShowMenu(false)}
           position={menuPosition}
         />
-      )}
-      
-      {/* Loading indicator */}
-      {commandMutation.isPending && (
-        <div className="fixed bottom-4 right-4 bg-primary text-white px-4 py-2 rounded-md shadow-lg flex items-center">
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span>Generating AI content...</span>
-        </div>
       )}
     </>
   );

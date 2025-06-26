@@ -38,7 +38,7 @@ const defaultSettings: AppSettings = {
   
   // AI Settings
   llmProvider: 'openai',
-  llmModel: 'gpt-4o',
+  llmModel: 'gpt-4.1-mini',
   ollamaUrl: 'http://localhost:11434',
   
   // UI Settings

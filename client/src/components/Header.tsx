@@ -3,7 +3,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useProcessing } from "@/providers/ProcessingProvider";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sun, Moon, Menu, Info, Plus, Keyboard, Loader2, Brain, Settings, Zap } from "lucide-react";
+import { Sun, Moon, Menu, Info, Plus, Keyboard, Loader2, Brain, Settings, Zap, Star } from "lucide-react";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 import AIProcessingIndicator from "./AIProcessingIndicator";
 
@@ -45,7 +45,17 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
   };
 
   const toggleUserMode = () => {
-    const newMode = settings.userExperienceMode === 'simple' ? 'advanced' : 'simple';
+    const currentMode = settings.userExperienceMode;
+    let newMode: 'simple' | 'advanced' | 'expert';
+    
+    if (currentMode === 'simple') {
+      newMode = 'advanced';
+    } else if (currentMode === 'advanced') {
+      newMode = 'expert';
+    } else {
+      newMode = 'simple';
+    }
+    
     updateSettings({ userExperienceMode: newMode });
   };
 
@@ -74,20 +84,27 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             <span>New Project</span>
           </Button>
           
-          {/* Global AI Processing Indicator - Discrete */}
+          {/* Global AI Processing Indicator - Larger and more prominent */}
           {isAnyProcessing ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center space-x-2 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 rounded-full">
+                  <div className="flex items-center space-x-3 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                     <div className="relative">
-                      <Brain className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                      <Loader2 className="h-2 w-2 text-blue-500 animate-spin absolute -top-0.5 -right-0.5" />
+                      <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                      <Loader2 className="h-3 w-3 text-blue-500 animate-spin absolute -top-1 -right-1" />
                     </div>
-                    <div className="flex space-x-0.5">
-                      <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce"></div>
-                      <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                      <div className="w-1 h-1 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="flex items-center space-x-1">
+                      <div className="flex space-x-1">
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce"></div>
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                      </div>
+                      <span className="text-sm font-medium text-blue-700 dark:text-blue-300 ml-2">
+                        {processingState.message?.length > 20 
+                          ? `${processingState.message.substring(0, 20)}...` 
+                          : processingState.message || 'AI Processing'}
+                      </span>
                     </div>
                   </div>
                 </TooltipTrigger>
@@ -98,26 +115,29 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             </TooltipProvider>
           ) : (
             /* Connection Status Indicator - Only show when AI isn't processing */
-            <div className="flex items-center space-x-1 text-xs px-2">
+            <div className="flex items-center space-x-2 text-sm px-3 py-1">
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
               <span className="text-gray-600 dark:text-gray-400">Ready</span>
             </div>
           )}
           
-          {settings.userExperienceMode === 'advanced' && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" onClick={toggleContextPanel} aria-label="Toggle context panel">
-                    <Info className="h-5 w-5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Toggle Context Panel</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant={contextPanelOpen ? "default" : "ghost"} 
+                  size="icon" 
+                  onClick={toggleContextPanel} 
+                  aria-label="Toggle context panel"
+                >
+                  <Info className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Toggle Context Panel</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           
           <TooltipProvider>
             <Tooltip>
@@ -137,7 +157,7 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button 
-                  variant={settings.userExperienceMode === 'advanced' ? "default" : "outline"} 
+                  variant={settings.userExperienceMode !== 'simple' ? "default" : "outline"} 
                   size="sm" 
                   onClick={toggleUserMode} 
                   className="flex items-center space-x-1"
@@ -147,21 +167,29 @@ export default function Header({ toggleSidebar, toggleContextPanel, onNewProject
                       <Zap className="h-4 w-4" />
                       <span className="hidden sm:inline">Simple</span>
                     </>
-                  ) : (
+                  ) : settings.userExperienceMode === 'advanced' ? (
                     <>
                       <Settings className="h-4 w-4" />
                       <span className="hidden sm:inline">Advanced</span>
+                    </>
+                  ) : (
+                    <>
+                      <Star className="h-4 w-4" />
+                      <span className="hidden sm:inline">Expert</span>
                     </>
                   )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Switch to {settings.userExperienceMode === 'simple' ? 'Advanced' : 'Simple'} Mode</p>
+                <p>Switch to {
+                  settings.userExperienceMode === 'simple' ? 'Advanced' : 
+                  settings.userExperienceMode === 'advanced' ? 'Expert' : 'Simple'
+                } Mode</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
           
-          {settings.userExperienceMode === 'advanced' && (
+          {(settings.userExperienceMode === 'advanced' || settings.userExperienceMode === 'expert') && (
             <>
               <Select value={llmProvider} onValueChange={v => setLlmProvider(v as 'openai' | 'ollama')}>
                 <SelectTrigger className="w-28">

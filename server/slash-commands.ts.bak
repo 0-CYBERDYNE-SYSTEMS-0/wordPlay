@@ -98,21 +98,11 @@ TASK: ${enhancedInstruction}
 
 TARGET: ${operationType} (${hasSelection ? selectionInfo.selectedText.length + ' characters selected' : 'entire document'})
 
-CRITICAL RESPONSE FORMAT:
-- Use <thinking> tags for your analysis, reasoning, and planning
-- Use <final_output> tags ONLY for content that should appear in the editor
-- Everything in <thinking> will appear in the context panel/sidebar
-- Everything in <final_output> will replace or be added to the editor content
-- Never include XML tags in the actual final output content
-
-EXAMPLE RESPONSE:
-<thinking>
-I need to analyze this text and improve its clarity. The current sentence structure is overly complex and could be simplified. I'll focus on breaking down long sentences and removing unnecessary jargon.
-</thinking>
-
-<final_output>
-Improved content goes here without any XML tags.
-</final_output>
+CRITICAL INSTRUCTION:
+- ALL final output that should appear in the editor MUST be wrapped in <final_output> tags
+- Everything else (analysis, thinking, suggestions) will appear in the context panel
+- For surgical edits, wrap ONLY the specific text changes in <final_output> tags
+- Never include XML tags or technical markers in the final output content itself
 
 EXISTING TEXT PROCESSING CAPABILITIES:
 - Use existing grep/sed-like tools for precise text replacement
@@ -367,8 +357,7 @@ export async function executeSlashCommand(
             `You are an expert editor. Improve the text according to this specific guidance: ${customInput}. Make targeted improvements rather than wholesale rewrites.`,
             textContext,
             selectionInfo,
-            customInput,
-            enhancedContext
+            customInput
           );
         } else if (parameter && parameter !== 'custom') {
           switch (parameter) {
@@ -439,8 +428,7 @@ export async function executeSlashCommand(
             `Generate additional content that expands upon the given text following this specific guidance: ${customInput}. This content will be added to the existing text.`,
             textContext,
             selectionInfo,
-            customInput,
-            enhancedContext
+            customInput
           );
         } else if (parameter && parameter !== 'custom') {
           switch (parameter) {

@@ -3,8 +3,13 @@ import { useToast } from '@/hooks/use-toast';
 
 export interface AppSettings {
   // User Experience Settings
-  userExperienceMode: 'simple' | 'advanced';
+  userExperienceMode: 'simple' | 'advanced' | 'expert';
   hasCompletedOnboarding: boolean;
+  
+  // AI Content Generation Settings
+  geminiApiKey?: string;
+  enableVisualizations: boolean;
+  enableImageGeneration: boolean;
   
   // Editor Settings
   theme: 'light' | 'dark' | 'system';
@@ -89,6 +94,10 @@ const defaultSettings: AppSettings = {
   // User Experience Settings
   userExperienceMode: 'simple',
   hasCompletedOnboarding: false,
+  
+  // AI Content Generation Settings
+  enableVisualizations: true,
+  enableImageGeneration: true,
   
   // Editor Settings
   theme: 'system',

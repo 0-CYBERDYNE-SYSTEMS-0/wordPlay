@@ -27,6 +27,7 @@ interface EditorProps {
   isFullScreen: boolean;
   onToggleFullScreen: () => void;
   onSuggestions?: (suggestions: string) => void;
+  activeProjectId?: number | null;
 }
 
 export default function Editor({
@@ -45,7 +46,8 @@ export default function Editor({
   onToggleContextPanel,
   isFullScreen,
   onToggleFullScreen,
-  onSuggestions
+  onSuggestions,
+  activeProjectId
 }: EditorProps) {
   const { toast } = useToast();
   const { settings } = useSettings();
@@ -424,6 +426,7 @@ export default function Editor({
         llmModel={llmModel}
         onSuggestions={onSuggestions}
         onUndo={handleUndo}
+        activeProjectId={activeProjectId}
       />
     </div>
   );

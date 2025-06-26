@@ -1,4 +1,5 @@
 import type { Express, Request, Response } from "express";
+import express from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -8,6 +9,10 @@ import {
   processTextCommand,
   generateContextualAssistance
 } from "./openai";
+import { 
+  processAIContentCommand,
+  initializeAIClients
+} from "./ai-content-generation";
 import { 
   searchWeb, 
   scrapeWebpage 
@@ -23,6 +28,12 @@ import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+  
+  // Initialize AI clients for content generation
+  initializeAIClients(process.env.OPENAI_API_KEY, process.env.GEMINI_API_KEY);
+  
+  // Serve uploaded images
+  app.use('/uploads', express.static('public/uploads'));
   
   // We've replaced WebSockets with direct API calls
   // This simplifies the architecture and avoids connection issues
@@ -430,13 +441,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       style: z.any().optional(),
       llmProvider: z.enum(['openai', 'ollama']).optional(),
       llmModel: z.string().optional(),
-      includeContext: z.boolean().optional()
+      includeContext: z.boolean().optional(),
+      projectId: z.number().optional(),
+      userId: z.number().optional()
     });
     
     try {
       const validatedData = commandSchema.parse(req.body);
       
-      // Import the executeSlashCommand function only when needed
+      // Check if this is an AI content generation command
+      const aiContentCommands = ['table', 'chart', 'image'];
+      if (aiContentCommands.includes(validatedData.command)) {
+        console.log('🎯 Processing AI content command:', validatedData.command);
+        console.log('📋 Command data:', {
+          command: validatedData.command,
+          contentLength: validatedData.content.length,
+          selectedTextLength: validatedData.selectionInfo.selectedText.length,
+          llmProvider: validatedData.llmProvider,
+          llmModel: validatedData.llmModel,
+          style: validatedData.style
+        });
+        
+        try {
+          const result = await processAIContentCommand(
+            validatedData.command,
+            validatedData.content,
+            validatedData.selectionInfo,
+            validatedData.llmProvider || 'openai',
+            validatedData.llmModel || 'gpt-4',
+            process.env.OPENAI_API_KEY,
+            process.env.GEMINI_API_KEY,
+            validatedData.style // Pass style/parameters from request
+          );
+          
+          console.log('✅ AI content command completed, result length:', result.length);
+          return res.json({ result });
+        } catch (aiError: any) {
+          console.error("❌ AI content generation error:", aiError);
+          return res.status(500).json({
+            message: "Failed to generate AI content",
+            error: aiError.message || "Unknown AI content generation error"
+          });
+        }
+      }
+      
+      // Import the executeSlashCommand function for regular commands
       const { executeSlashCommand } = await import("./slash-commands");
       
       const result = await executeSlashCommand(
@@ -446,7 +495,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.style,
         validatedData.llmProvider,
         validatedData.llmModel,
-        validatedData.includeContext || false
+        validatedData.includeContext || false,
+        validatedData.projectId,
+        validatedData.userId
       );
       
       res.json(result);

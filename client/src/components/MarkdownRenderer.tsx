@@ -4,6 +4,7 @@ import remarkBreaks from 'remark-breaks';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useSettings } from '@/providers/SettingsProvider';
+import Chart from './Chart';
 
 interface MarkdownRendererProps {
   content: string;
@@ -100,9 +101,41 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
             </blockquote>
           ),
           
-          // Code blocks with syntax highlighting
+          // Code blocks with syntax highlighting and chart rendering
           code: ({ node, inline, className, children, ...props }) => {
             const match = /language-(\w+)/.exec(className || '');
+            const language = match ? match[1] : '';
+            
+            // Handle chart code blocks
+            if (!inline && language === 'chart') {
+              try {
+                const chartConfig = String(children).replace(/\n$/, '');
+                console.log('📋 MarkdownRenderer: Chart config extracted:', chartConfig.substring(0, 200) + '...');
+                console.log('📏 Chart config length:', chartConfig.length);
+                
+                return (
+                  <div className="my-6 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 shadow-sm">
+                    <div className="mb-2 text-sm font-medium text-gray-600 dark:text-gray-400">
+                      Interactive Chart
+                    </div>
+                    <Chart config={chartConfig} />
+                  </div>
+                );
+              } catch (error) {
+                console.error('❌ MarkdownRenderer error rendering chart:', error);
+                return (
+                  <div className="my-4 p-4 border border-red-200 dark:border-red-700 rounded-lg bg-red-50 dark:bg-red-900/20">
+                    <div className="text-red-600 dark:text-red-400 text-sm font-medium mb-2">
+                      Chart Rendering Error
+                    </div>
+                    <pre className="text-xs text-red-500 dark:text-red-300 overflow-auto">
+                      {String(children)}
+                    </pre>
+                  </div>
+                );
+              }
+            }
+            
             return !inline && match ? (
               <div className="my-4 rounded-lg overflow-hidden shadow-sm">
                 <SyntaxHighlighter

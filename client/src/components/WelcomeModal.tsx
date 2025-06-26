@@ -8,12 +8,12 @@ import { useSettings } from "@/providers/SettingsProvider";
 interface WelcomeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (userType: 'simple' | 'advanced') => void;
+  onComplete: (userType: 'simple' | 'advanced' | 'expert') => void;
 }
 
 export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeModalProps) {
   const [step, setStep] = useState(0);
-  const [selectedUserType, setSelectedUserType] = useState<'simple' | 'advanced' | null>(null);
+  const [selectedUserType, setSelectedUserType] = useState<'simple' | 'advanced' | 'expert' | null>(null);
   const { updateSettings } = useSettings();
 
   const steps = [
@@ -76,6 +76,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
                 <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
                   <div>✓ Essential slash commands (/continue, /improve, /fix)</div>
                   <div>✓ Smart writing suggestions</div>
+                  <div>✓ Context panel for insights and help</div>
                   <div>✓ Clean, distraction-free interface</div>
                   <div>✓ Can upgrade to Advanced mode anytime</div>
                 </div>
@@ -105,6 +106,38 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
                   <div>✓ Autonomous AI agent with 19 tools</div>
                   <div>✓ Research integration and source management</div>
                   <div>✓ Advanced text analysis and style metrics</div>
+                  <div>✓ Context panel with insights and sources</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div 
+            className={`p-6 border-2 rounded-lg cursor-pointer transition-all ${
+              selectedUserType === 'expert' 
+                ? 'border-primary bg-primary/5' 
+                : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
+            onClick={() => setSelectedUserType('expert')}
+          >
+            <div className="flex items-start space-x-4">
+              <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center space-x-2 mb-2">
+                  <h3 className="text-lg font-semibold">Expert Mode</h3>
+                  <Badge variant="secondary" className="bg-purple-100 text-purple-700">New!</Badge>
+                </div>
+                <p className="text-gray-600 dark:text-gray-300 mb-3">
+                  Maximum power with AI visualizations, image generation, and advanced content creation.
+                </p>
+                <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
+                  <div>✓ Everything in Advanced Mode</div>
+                  <div>✓ AI-powered data visualizations with ECharts</div>
+                  <div>✓ AI image generation with Gemini 2.0 Flash</div>
+                  <div>✓ Advanced export with embedded artifacts</div>
+                  <div>✓ /table, /chart, /image commands</div>
                 </div>
               </div>
             </div>
@@ -122,12 +155,16 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
               <Sparkles className="h-8 w-8 text-primary" />
             </div>
             <h3 className="text-xl font-semibold mb-2">
-              {selectedUserType === 'simple' ? 'Simple Mode Activated' : 'Advanced Mode Activated'}
+              {selectedUserType === 'simple' ? 'Simple Mode Activated' : 
+               selectedUserType === 'advanced' ? 'Advanced Mode Activated' : 
+               'Expert Mode Activated'}
             </h3>
             <p className="text-gray-600 dark:text-gray-300">
               {selectedUserType === 'simple' 
                 ? "You'll see a clean, focused writing interface with essential AI features."
-                : "You have access to all WordPlay features including the AI agent and research tools."
+                : selectedUserType === 'advanced'
+                ? "You have access to all WordPlay features including the AI agent and research tools."
+                : "You have maximum power with AI visualizations, image generation, and advanced content creation capabilities."
               }
             </p>
           </div>
@@ -148,7 +185,9 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
                 <span>
                   {selectedUserType === 'simple' 
                     ? "Try /continue to extend your writing or /improve to enhance it"
-                    : "Explore the Research tab for AI-powered research capabilities"
+                    : selectedUserType === 'advanced'
+                    ? "Explore the Research tab for AI-powered research capabilities"
+                    : "Try /table to create tables, /chart for visualizations, or /image for AI-generated images"
                   }
                 </span>
               </div>
