@@ -102,7 +102,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
           ),
           
           // Code blocks with syntax highlighting and chart rendering
-          code: ({ node, inline, className, children, ...props }) => {
+          code: ({ node, inline, className, children, ...props }: any) => {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
             
@@ -158,7 +158,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
                     borderRadius: '0.5rem',
                     fontSize: '0.875rem',
                     lineHeight: '1.5'
-                  }}
+                  } as any}
                   {...props}
                 >
                   {String(children).replace(/\n$/, '')}
@@ -199,7 +199,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
                     maxHeight: '70vh',
                     minHeight: '400px',
                     objectFit: 'contain',
-                    imageRendering: 'high-quality'
+                    imageRendering: 'auto' as any
                   }}
                   loading="lazy"
                   {...props}

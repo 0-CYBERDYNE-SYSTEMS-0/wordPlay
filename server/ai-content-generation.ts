@@ -214,10 +214,7 @@ export async function generateImage(request: ImageGenerationRequest): Promise<st
 
   try {
     const model = gemini.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp',
-      generationConfig: { 
-        responseModalities: ['Text', 'Image'] 
-      } 
+      model: 'gemini-2.0-flash-exp'
     });
 
     const response = await model.generateContent(enhancedPrompt);
@@ -352,7 +349,7 @@ export async function processAIContentCommand(
       // If the selected text is very long, use it intelligently
       if (imagePrompt.length > 300) {
         // Try to extract key concepts and themes for the image
-        const sentences = imagePrompt.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const sentences = imagePrompt.split(/[.!?]+/).filter((s: string) => s.trim().length > 0);
         if (sentences.length > 1) {
           // Use the first two sentences as they often contain main ideas
           imagePrompt = sentences.slice(0, 2).join('. ').trim();

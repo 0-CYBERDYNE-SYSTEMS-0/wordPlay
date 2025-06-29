@@ -22,7 +22,7 @@ interface SidebarProps {
   onSelectDocument: (documentId: number) => void;
   onChangeTab: (tab: "editor" | "research" | "settings") => void;
   onClose: () => void;
-  userExperienceMode: 'simple' | 'advanced';
+  userExperienceMode: 'simple' | 'advanced' | 'expert';
 }
 
 export default function Sidebar({

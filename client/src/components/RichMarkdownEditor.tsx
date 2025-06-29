@@ -17,7 +17,7 @@ interface RichMarkdownEditorProps {
   isFullScreen: boolean;
   showGettingStartedHint?: boolean;
   onHideHint?: () => void;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   editorRef?: React.RefObject<HTMLTextAreaElement>;
 }
 
@@ -70,7 +70,7 @@ export default function RichMarkdownEditor({
   }, [content, setContent, textareaRef]);
 
   // Formatting shortcuts
-  const handleKeyboardShortcuts = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyboardShortcuts = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.ctrlKey || e.metaKey) {
       switch (e.key) {
         case 'b':
