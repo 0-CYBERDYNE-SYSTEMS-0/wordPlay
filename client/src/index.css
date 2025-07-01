@@ -427,6 +427,60 @@ html, body {
   }
 }
 
+/* Hover zones for minimalist experience */
+.hover-zone {
+  background: transparent;
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+}
+
+.hover-zone:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+/* Hover reveal animations for minimalist panels */
+.hover-reveal {
+  position: fixed;
+  top: 64px;
+  bottom: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.2s ease-out;
+  z-index: 50;
+}
+
+.sidebar-container.hover-reveal {
+  left: 0;
+  width: 320px;
+}
+
+.context-container.hover-reveal {
+  right: 0;
+  width: 384px;
+  animation-name: slideInRight;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Debug styles for development (add 'debug-layout' class to app-layout to enable) */
 .debug-layout .sidebar-container {
   outline: 2px solid red;

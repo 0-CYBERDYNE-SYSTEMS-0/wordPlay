@@ -19,8 +19,8 @@ import { useToast } from "@/hooks/use-toast";
 export default function Home() {
   const { settings, updateSettings } = useSettings();
   const { toast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(true); // Default to open to use left space
-  const [contextPanelOpen, setContextPanelOpen] = useState(true); // Default to open to use right space
+  const [sidebarOpen, setSidebarOpen] = useState(false); // Default to closed for minimalist experience
+  const [contextPanelOpen, setContextPanelOpen] = useState(false); // Default to closed for focus on writing
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [welcomeModalOpen, setWelcomeModalOpen] = useState(!settings.hasCompletedOnboarding);
   const [activeTab, setActiveTab] = useState<"editor" | "research" | "settings">("editor");
@@ -30,12 +30,16 @@ export default function Home() {
   // Full screen state management
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [preFullScreenState, setPreFullScreenState] = useState({
-    sidebarOpen: true,
-    contextPanelOpen: true
+    sidebarOpen: false,
+    contextPanelOpen: false
   });
 
   // Add state for AI suggestions
   const [aiSuggestions, setAiSuggestions] = useState<string>("");
+  
+  // Hover-triggered panel states for minimalist experience
+  const [hoverSidebar, setHoverSidebar] = useState(false);
+  const [hoverContext, setHoverContext] = useState(false);
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -196,15 +200,30 @@ export default function Home() {
         llmModel={settings.llmModel}
         setLlmModel={(model) => updateSettings({ llmModel: model })}
         contextPanelOpen={contextPanelOpen}
+        isFullScreen={isFullScreen}
+        onToggleFullScreen={toggleFullScreen}
       />
       
       {/* Main Layout Grid */}
-      <div className={`app-layout ${sidebarOpen ? 'sidebar-open' : ''} ${contextPanelOpen ? 'context-open' : ''}`}>
+      <div className={`app-layout ${(sidebarOpen || hoverSidebar) ? 'sidebar-open' : ''} ${(contextPanelOpen || hoverContext) ? 'context-open' : ''}`}>
+        {/* Left Sidebar Hover Zone */}
+        <div 
+          className="fixed left-0 top-16 bottom-0 w-4 z-40 hover-zone"
+          onMouseEnter={() => setHoverSidebar(true)}
+          onMouseLeave={() => setHoverSidebar(false)}
+        />
+        
         {/* Left Sidebar */}
-        {sidebarOpen && (
-          <div className="sidebar-container">
+        {(sidebarOpen || hoverSidebar) && (
+          <div 
+            className={`sidebar-container transition-all duration-200 ${
+              hoverSidebar && !sidebarOpen ? 'hover-reveal' : ''
+            }`}
+            onMouseEnter={() => setHoverSidebar(true)}
+            onMouseLeave={() => setHoverSidebar(false)}
+          >
             <Sidebar
-              isOpen={sidebarOpen}
+              isOpen={sidebarOpen || hoverSidebar}
               projects={projects || []}
               activeProjectId={activeProjectId}
               activeTab={activeTab}
@@ -255,9 +274,22 @@ export default function Home() {
           )}
         </main>
 
+        {/* Right Context Panel Hover Zone */}
+        <div 
+          className="fixed right-0 top-16 bottom-0 w-4 z-40 hover-zone"
+          onMouseEnter={() => setHoverContext(true)}
+          onMouseLeave={() => setHoverContext(false)}
+        />
+        
         {/* Right Context Panel */}
-        {contextPanelOpen && (
-          <div className="context-container">
+        {(contextPanelOpen || hoverContext) && (
+          <div 
+            className={`context-container transition-all duration-200 ${
+              hoverContext && !contextPanelOpen ? 'hover-reveal' : ''
+            }`}
+            onMouseEnter={() => setHoverContext(true)}
+            onMouseLeave={() => setHoverContext(false)}
+          >
             <ContextPanel 
               title={title || ""}
               content={content || ""}
