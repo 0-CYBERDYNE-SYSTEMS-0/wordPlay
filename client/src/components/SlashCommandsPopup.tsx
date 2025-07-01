@@ -20,7 +20,11 @@ import {
   TrendingUp,
   Database,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  ChevronDown,
+  ChevronRight,
+  Edit3,
+  Settings
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -422,6 +426,8 @@ export default function SlashCommandsPopup({
     value: ''
   });
   
+  const [expandedCommand, setExpandedCommand] = useState<string | null>(null);
+  
   // Use appropriate command set based on user experience mode
   const SLASH_COMMANDS = settings.userExperienceMode === 'simple' ? SIMPLE_SLASH_COMMANDS : 
                          settings.userExperienceMode === 'expert' ? EXPERT_SLASH_COMMANDS : 
@@ -604,6 +610,26 @@ export default function SlashCommandsPopup({
       'translate': {
         title: 'Translation Language',
         placeholder: 'Enter target language (e.g., "Spanish", "French", "German") or leave blank for Spanish'
+      },
+      'rewrite': {
+        title: 'Rewrite Instructions',
+        placeholder: 'How would you like this rewritten? (e.g., "make it more conversational", "add technical details")'
+      },
+      'improve': {
+        title: 'Improvement Focus',
+        placeholder: 'What should be improved? (e.g., "clarity and flow", "add examples", "fix transitions")'
+      },
+      'tone': {
+        title: 'Desired Tone',
+        placeholder: 'What tone should this have? (e.g., "friendly but professional", "enthusiastic", "authoritative")'
+      },
+      'expand': {
+        title: 'Expansion Instructions',
+        placeholder: 'How should this be expanded? (e.g., "add more examples", "include research data", "explain concepts")'
+      },
+      'continue': {
+        title: 'Writing Direction',
+        placeholder: 'How should the writing continue? (e.g., "focus on benefits", "add a conclusion", "include examples")'
       }
     };
     
@@ -644,6 +670,13 @@ export default function SlashCommandsPopup({
       return true; // Needs confirmation
     }
     return false; // No confirmation needed
+  };
+
+  // Execute command with preset parameter
+  const executeCommandWithParameter = async (command: string, parameter: string) => {
+    const commandWithParam = `${command}:${parameter}`;
+    onClose();
+    await executeCommandConfirmed(commandWithParam);
   };
 
   // Main command execution function  
@@ -872,8 +905,20 @@ export default function SlashCommandsPopup({
           e.preventDefault();
           const selectedCommand = filteredCommands[selectedIndex];
           if (selectedCommand) {
-            onClose();
-            executeCommand(selectedCommand.action);
+            if (selectedCommand.hasParameters && expandedCommand !== selectedCommand.id) {
+              setExpandedCommand(selectedCommand.id);
+            } else {
+              onClose();
+              executeCommand(selectedCommand.action);
+            }
+          }
+          break;
+        case 'Tab':
+          e.preventDefault();
+          const currentCmd = filteredCommands[selectedIndex];
+          if (currentCmd?.hasParameters) {
+            setExpandedCommand(null);
+            checkForInputPrompt(currentCmd.action);
           }
           break;
         case 'Backspace':
@@ -1125,57 +1170,107 @@ export default function SlashCommandsPopup({
             </div>
           ) : (
             filteredCommands.map((cmd, index) => (
-            <button
-              key={cmd.id}
-              ref={(el) => {
-                commandRefs.current[index] = el;
-              }}
-              onClick={() => {
-                onClose();
-                executeCommand(cmd.action);
-              }}
-              className={`w-full text-left px-2 py-1.5 rounded-md flex items-center space-x-3 ${
-                index === selectedIndex
-                  ? 'bg-gray-100 dark:bg-gray-700'
-                  : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-              }`}
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                {cmd.icon}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">{cmd.title}</span>
-                  <div className="flex items-center gap-2">
-                    {(() => {
-                      const opType = getCommandOperationType(cmd.action);
-                      return (
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opType.bg} ${opType.color}`}>
-                          {opType.type}
-                        </span>
-                      );
-                    })()}
-                    {cmd.shortcut && (
-                      <kbd className="text-xs text-gray-500 dark:text-gray-400">
-                        {cmd.shortcut}
-                      </kbd>
-                    )}
-                  </div>
+            <div key={cmd.id} className="w-full">
+              <button
+                ref={(el) => {
+                  commandRefs.current[index] = el;
+                }}
+                onClick={() => {
+                  if (cmd.hasParameters && expandedCommand !== cmd.id) {
+                    setExpandedCommand(cmd.id);
+                  } else {
+                    onClose();
+                    executeCommand(cmd.action);
+                  }
+                }}
+                className={`w-full text-left px-2 py-1.5 rounded-md flex items-center space-x-3 ${
+                  index === selectedIndex
+                    ? 'bg-gray-100 dark:bg-gray-700'
+                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                  {cmd.icon}
                 </div>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {cmd.description}
-                </p>
-              </div>
-            </button>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{cmd.title}</span>
+                    <div className="flex items-center gap-2">
+                      {(() => {
+                        const opType = getCommandOperationType(cmd.action);
+                        return (
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opType.bg} ${opType.color}`}>
+                            {opType.type}
+                          </span>
+                        );
+                      })()}
+                      {cmd.hasParameters && (
+                        <div className="flex items-center gap-1">
+                          <Settings className="h-3 w-3 text-gray-400" />
+                          {expandedCommand === cmd.id ? (
+                            <ChevronDown className="h-3 w-3 text-gray-400" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-gray-400" />
+                          )}
+                        </div>
+                      )}
+                      {cmd.shortcut && (
+                        <kbd className="text-xs text-gray-500 dark:text-gray-400">
+                          {cmd.shortcut}
+                        </kbd>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {cmd.description}
+                  </p>
+                </div>
+              </button>
+              
+              {/* Parameter options */}
+              {cmd.hasParameters && expandedCommand === cmd.id && (
+                <div className="mt-1 ml-11 mr-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {cmd.parameters?.map((param) => (
+                      <button
+                        key={param}
+                        onClick={() => executeCommandWithParameter(cmd.action, param)}
+                        className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      >
+                        {param}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      setExpandedCommand(null);
+                      checkForInputPrompt(cmd.action);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
+                  >
+                    <Edit3 className="h-3 w-3" />
+                    Custom instructions...
+                  </button>
+                </div>
+              )}
+            </div>
             ))
           )}
         </div>
         
         {/* Navigation tips footer */}
         <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-          <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center justify-between">
-            <span>↑↓ Navigate • Enter Select • Esc Close</span>
-            <span>{filterText ? 'Backspace Clear' : 'Type to Filter'}</span>
+          <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+            <div className="flex items-center justify-between">
+              <span>↑↓ Navigate • Enter Select/Expand • Tab Custom Input</span>
+              <span>{filterText ? 'Backspace Clear' : 'Type to Filter'}</span>
+            </div>
+            {Object.values(filteredCommands).some(cmd => cmd.hasParameters) && (
+              <div className="text-center text-gray-400">
+                <Settings className="h-3 w-3 inline mr-1" />
+                Commands with gear icon have quick options and custom input
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1196,7 +1291,7 @@ export default function SlashCommandsPopup({
             <Input
               value={inputDialog.value}
               onChange={(e) => setInputDialog(prev => ({ ...prev, value: e.target.value }))}
-              placeholder={inputDialog.command === 'research' ? 'Research topic...' : 'Target language...'}
+              placeholder={inputDialog.placeholder}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   const command = inputDialog.command;

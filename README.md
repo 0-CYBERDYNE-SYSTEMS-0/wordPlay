@@ -224,7 +224,7 @@ The AI Agent is equipped with **19 specialized tools** across 4 categories:
 
 ```bash
 # 📥 Clone the magic
-git clone https://github.com/yourusername/wordPlay.git
+git clone https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay.git
 cd wordPlay
 
 # 📦 Install dependencies
@@ -435,16 +435,14 @@ git checkout -b feature/amazing-feature
 
 <div align="center">
 
-[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord)](https://discord.gg/wordplay)
-[![GitHub Issues](https://img.shields.io/badge/Issues-Get%20Help-orange?style=for-the-badge&logo=github)](https://github.com/wordplay/issues)
-[![Documentation](https://img.shields.io/badge/Docs-Learn%20More-blue?style=for-the-badge&logo=gitbook)](https://docs.wordplay.ai)
+[![GitHub Issues](https://img.shields.io/badge/Issues-Get%20Help-orange?style=for-the-badge&logo=github)](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay/issues)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-black?style=for-the-badge&logo=github)](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay)
 
 ### 💬 **Connect With Us**
 
-**🌍 Community**: [Discord Server](https://discord.gg/wordplay)  
-**📧 Support**: support@wordplay.ai  
-**🐛 Issues**: [GitHub Issues](https://github.com/wordplay/issues)  
-**📖 Docs**: [docs.wordplay.ai](https://docs.wordplay.ai)
+**🐛 Issues**: [GitHub Issues](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay/issues)  
+**📖 Repository**: [GitHub Repository](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay)  
+**⭐ Star**: [Star this project](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay)
 
 </div>
 
@@ -514,8 +512,8 @@ git checkout -b feature/amazing-feature
 
 **🚀 Ready to transform your writing?**
 
-[![🎯 **Get Started**](https://img.shields.io/badge/Get%20Started-Right%20Now-success?style=for-the-badge&logo=rocket)](https://github.com/wordplay/wordplay)
-[![⭐ **Star Repository**](https://img.shields.io/badge/Star-Repository-yellow?style=for-the-badge&logo=star)](https://github.com/wordplay/wordplay)
+[![🎯 **Get Started**](https://img.shields.io/badge/Get%20Started-Right%20Now-success?style=for-the-badge&logo=rocket)](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay)
+[![⭐ **Star Repository**](https://img.shields.io/badge/Star-Repository-yellow?style=for-the-badge&logo=star)](https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay)
 
 **_The future of writing is here. Join the revolution! ✨_**
 
