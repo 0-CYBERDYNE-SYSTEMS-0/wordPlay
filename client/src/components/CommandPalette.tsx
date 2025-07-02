@@ -19,7 +19,11 @@ import {
   Keyboard,
   BarChart2,
   FileText,
-  Brain
+  Brain,
+  Edit3,
+  FolderOpen,
+  Globe,
+  Layout
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -34,6 +38,8 @@ interface CommandPaletteProps {
   contextPanelOpen: boolean;
   isFullScreen?: boolean;
   onToggleFullScreen?: () => void;
+  focusMode?: 'writing' | 'organization' | 'research' | 'full';
+  setFocusMode?: (mode: 'writing' | 'organization' | 'research' | 'full') => void;
 }
 
 interface CommandItem {
@@ -57,7 +63,9 @@ export default function CommandPalette({
   setLlmModel,
   contextPanelOpen,
   isFullScreen,
-  onToggleFullScreen
+  onToggleFullScreen,
+  focusMode = 'writing',
+  setFocusMode
 }: CommandPaletteProps) {
   const { settings, updateSettings } = useSettings();
   const [searchQuery, setSearchQuery] = useState("");
@@ -160,6 +168,44 @@ export default function CommandPalette({
       action: toggleUserMode,
       category: 'Appearance',
       shortcut: 'Ctrl+M'
+    },
+    
+    // Focus Modes
+    {
+      id: 'focus-writing',
+      title: 'Writing Mode',
+      description: 'Distraction-free writing with minimal UI',
+      icon: <Edit3 className="h-4 w-4" />,
+      action: () => { setFocusMode?.('writing'); onClose(); },
+      category: 'Focus Mode',
+      shortcut: 'Ctrl+1'
+    },
+    {
+      id: 'focus-organization',
+      title: 'Organization Mode',
+      description: 'Manage projects and documents',
+      icon: <FolderOpen className="h-4 w-4" />,
+      action: () => { setFocusMode?.('organization'); onClose(); },
+      category: 'Focus Mode',
+      shortcut: 'Ctrl+2'
+    },
+    {
+      id: 'focus-research',
+      title: 'Research Mode',
+      description: 'Research and gather information',
+      icon: <Globe className="h-4 w-4" />,
+      action: () => { setFocusMode?.('research'); onClose(); },
+      category: 'Focus Mode',
+      shortcut: 'Ctrl+3'
+    },
+    {
+      id: 'focus-full',
+      title: 'Full Mode',
+      description: 'Complete interface with all features',
+      icon: <Layout className="h-4 w-4" />,
+      action: () => { setFocusMode?.('full'); onClose(); },
+      category: 'Focus Mode',
+      shortcut: 'Ctrl+4'
     },
 
     // AI Provider (only show in advanced/expert mode)

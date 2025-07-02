@@ -121,15 +121,15 @@ const VALID_OPENAI_MODELS = [
 // Validate model based on provider
 function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
   if (!model) {
-    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:8b';
+    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:4b';
   }
 
   if (provider === 'openai') {
     return VALID_OPENAI_MODELS.includes(model) ? model : 'gpt-4.1-mini';
   } else {
-    // For Ollama, use available tool-capable models
-    const ollamaToolModels = ['qwen3:8b', 'okamototk/deepseek-r1:8b', 'qwen2.5-coder:7b', 'granite3.3:8b', 'qwen3:4b'];
-    return ollamaToolModels.includes(model) ? model : 'qwen3:8b';
+    // For Ollama, use available tool-capable models - prefer qwen3:4b for speed
+    const ollamaToolModels = ['qwen3:4b', 'qwen3:8b', 'okamototk/deepseek-r1:8b', 'qwen2.5-coder:7b', 'granite3.3:8b'];
+    return ollamaToolModels.includes(model) ? model : 'qwen3:4b';
   }
 }
 
@@ -2167,7 +2167,7 @@ Remember:
       
       // Focus on essential tools for the initial request to avoid payload issues
       const essentialTools = allTools.filter(tool => 
-        ['create_project', 'create_document', 'update_document', 'list_projects', 'get_project'].includes(tool.name)
+        ['create_project', 'create_document', 'update_document', 'list_projects', 'get_project', 'web_search', 'scrape_webpage', 'save_source'].includes(tool.name)
       );
       
       const tools = essentialTools.map(tool => ({

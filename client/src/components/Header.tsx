@@ -16,6 +16,8 @@ interface HeaderProps {
   contextPanelOpen: boolean;
   isFullScreen?: boolean;
   onToggleFullScreen?: () => void;
+  focusMode?: 'writing' | 'organization' | 'research' | 'full';
+  setFocusMode?: (mode: 'writing' | 'organization' | 'research' | 'full') => void;
 }
 
 export default function Header({ 
@@ -28,7 +30,9 @@ export default function Header({
   setLlmModel, 
   contextPanelOpen,
   isFullScreen,
-  onToggleFullScreen
+  onToggleFullScreen,
+  focusMode,
+  setFocusMode
 }: HeaderProps) {
   const { settings } = useSettings();
   const { isAnyProcessing } = useProcessing();
@@ -102,6 +106,8 @@ export default function Header({
         contextPanelOpen={contextPanelOpen}
         isFullScreen={isFullScreen}
         onToggleFullScreen={onToggleFullScreen}
+        focusMode={focusMode}
+        setFocusMode={setFocusMode}
       />
     </>
   );

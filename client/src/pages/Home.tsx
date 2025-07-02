@@ -40,6 +40,9 @@ export default function Home() {
   // Hover-triggered panel states for minimalist experience
   const [hoverSidebar, setHoverSidebar] = useState(false);
   const [hoverContext, setHoverContext] = useState(false);
+  
+  // Focus mode hierarchy for different activities
+  const [focusMode, setFocusMode] = useState<'writing' | 'organization' | 'research' | 'full'>('writing');
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -92,8 +95,41 @@ export default function Home() {
   // Handle document selection
   const handleSelectDocument = (documentId: number) => {
     setActiveDocumentId(documentId);
-    // Automatically switch to editor tab when a document is selected
+    // Automatically switch to editor tab and writing focus mode when a document is selected
     setActiveTab("editor");
+    setFocusMode("writing");
+  };
+
+  // Smart focus mode switching based on user activity
+  useEffect(() => {
+    if (activeTab === "editor") {
+      setFocusMode("writing");
+    } else if (activeTab === "research") {
+      setFocusMode("research");
+    } else if (activeTab === "settings") {
+      setFocusMode("full");
+    }
+  }, [activeTab]);
+
+  // Determine panel visibility based on focus mode
+  const shouldShowSidebar = () => {
+    switch (focusMode) {
+      case 'writing': return sidebarOpen || hoverSidebar;
+      case 'organization': return true;
+      case 'research': return sidebarOpen || hoverSidebar;
+      case 'full': return sidebarOpen || hoverSidebar;
+      default: return sidebarOpen || hoverSidebar;
+    }
+  };
+
+  const shouldShowContext = () => {
+    switch (focusMode) {
+      case 'writing': return contextPanelOpen || hoverContext;
+      case 'organization': return contextPanelOpen || hoverContext;
+      case 'research': return true;
+      case 'full': return contextPanelOpen || hoverContext;
+      default: return contextPanelOpen || hoverContext;
+    }
   };
 
   // Handle full screen toggle
@@ -202,10 +238,12 @@ export default function Home() {
         contextPanelOpen={contextPanelOpen}
         isFullScreen={isFullScreen}
         onToggleFullScreen={toggleFullScreen}
+        focusMode={focusMode}
+        setFocusMode={setFocusMode}
       />
       
       {/* Main Layout Grid */}
-      <div className={`app-layout ${(sidebarOpen || hoverSidebar) ? 'sidebar-open' : ''} ${(contextPanelOpen || hoverContext) ? 'context-open' : ''}`}>
+      <div className={`app-layout focus-mode-${focusMode} ${shouldShowSidebar() ? 'sidebar-open' : ''} ${shouldShowContext() ? 'context-open' : ''}`}>
         {/* Left Sidebar Hover Zone */}
         <div 
           className="fixed left-0 top-16 bottom-0 w-4 z-40 hover-zone"
@@ -214,7 +252,7 @@ export default function Home() {
         />
         
         {/* Left Sidebar */}
-        {(sidebarOpen || hoverSidebar) && (
+        {shouldShowSidebar() && (
           <div 
             className={`sidebar-container transition-all duration-200 ${
               hoverSidebar && !sidebarOpen ? 'hover-reveal' : ''
@@ -223,7 +261,7 @@ export default function Home() {
             onMouseLeave={() => setHoverSidebar(false)}
           >
             <Sidebar
-              isOpen={sidebarOpen || hoverSidebar}
+              isOpen={shouldShowSidebar()}
               projects={projects || []}
               activeProjectId={activeProjectId}
               activeTab={activeTab}
@@ -232,6 +270,7 @@ export default function Home() {
               onChangeTab={setActiveTab}
               onClose={() => setSidebarOpen(false)}
               userExperienceMode={settings.userExperienceMode}
+              onModeChange={(mode) => updateSettings({ userExperienceMode: mode })}
             />
           </div>
         )}
@@ -282,7 +321,7 @@ export default function Home() {
         />
         
         {/* Right Context Panel */}
-        {(contextPanelOpen || hoverContext) && (
+        {shouldShowContext() && (
           <div 
             className={`context-container transition-all duration-200 ${
               hoverContext && !contextPanelOpen ? 'hover-reveal' : ''
@@ -325,8 +364,8 @@ export default function Home() {
         }}
       />
       
-      {/* AI Agent - floating, minimized by default - only in advanced mode */}
-      {settings.userExperienceMode === 'advanced' && (
+      {/* AI Agent - floating, minimized by default - only in expert mode */}
+      {settings.userExperienceMode === 'expert' && (
         <AIAgent
           currentProject={activeProject}
           currentDocument={documentData}

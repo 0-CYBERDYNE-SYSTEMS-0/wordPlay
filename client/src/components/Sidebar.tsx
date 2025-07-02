@@ -6,7 +6,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { 
   FileText, Search, Upload, Code, Brush, Link, File, Settings, 
   HelpCircle, BarChart2, PlusCircle, FolderPlus, ChevronDown, 
-  ChevronRight, Trash2, Edit2, Sparkles, BookOpen, Plus, Wrench, Folder, X
+  ChevronRight, Trash2, Edit2, Sparkles, BookOpen, Plus, Wrench, Folder, X,
+  Zap, Star, CheckCircle
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -23,6 +24,7 @@ interface SidebarProps {
   onChangeTab: (tab: "editor" | "research" | "settings") => void;
   onClose: () => void;
   userExperienceMode: 'simple' | 'advanced' | 'expert';
+  onModeChange: (mode: 'simple' | 'advanced' | 'expert') => void;
 }
 
 export default function Sidebar({
@@ -34,7 +36,8 @@ export default function Sidebar({
   onSelectDocument,
   onChangeTab,
   onClose,
-  userExperienceMode
+  userExperienceMode,
+  onModeChange
 }: SidebarProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -566,6 +569,7 @@ export default function Sidebar({
           </h3>
           
           <div className="space-y-2">
+            {/* Editor - Always available */}
             <div 
               className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
                 activeTab === "editor"
@@ -578,32 +582,71 @@ export default function Sidebar({
               <span>Editor</span>
             </div>
             
-            {userExperienceMode === 'advanced' && (
-              <>
-                <div 
-                  className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                    activeTab === "research"
-                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                      : "hover:bg-gray-100 dark:hover:bg-gray-700"
-                  }`}
-                  onClick={() => onChangeTab("research")}
-                >
-                  <Search className="h-4 w-4 mr-2" />
-                  <span>Research</span>
-                </div>
-                <div 
-                  className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                    activeTab === "settings"
-                      ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                      : "hover:bg-gray-100 dark:hover:bg-gray-700"
-                  }`}
-                  onClick={() => onChangeTab("settings")}
-                >
-                  <Settings className="h-4 w-4 mr-2" />
-                  <span>Settings</span>
-                </div>
-              </>
+            {/* Research - Available in advanced and expert modes */}
+            {(userExperienceMode === 'advanced' || userExperienceMode === 'expert') && (
+              <div 
+                className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                  activeTab === "research"
+                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                onClick={() => onChangeTab("research")}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                <span>Research Assistant</span>
+              </div>
             )}
+            
+            {/* Settings - Available in advanced and expert modes */}
+            {(userExperienceMode === 'advanced' || userExperienceMode === 'expert') && (
+              <div 
+                className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                  activeTab === "settings"
+                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                onClick={() => onChangeTab("settings")}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                <span>Settings</span>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* User Experience Mode Switcher */}
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center">
+            <Sparkles className="h-4 w-4 mr-2" />
+            Experience Mode
+          </h3>
+          
+          <div className="space-y-1">
+            {(['simple', 'advanced', 'expert'] as const).map((mode) => (
+              <div
+                key={mode}
+                className={`flex items-center p-2 rounded-lg text-sm cursor-pointer transition-colors ${
+                  userExperienceMode === mode
+                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                onClick={() => onModeChange(mode)}
+              >
+                {mode === 'simple' && <Zap className="h-3 w-3 mr-2" />}
+                {mode === 'advanced' && <Settings className="h-3 w-3 mr-2" />}
+                {mode === 'expert' && <Star className="h-3 w-3 mr-2" />}
+                <span className="capitalize">{mode}</span>
+                {userExperienceMode === mode && (
+                  <CheckCircle className="h-3 w-3 ml-auto text-blue-600 dark:text-blue-400" />
+                )}
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            {userExperienceMode === 'simple' && 'Focus on writing with minimal distractions'}
+            {userExperienceMode === 'advanced' && 'Research tools and advanced features'}
+            {userExperienceMode === 'expert' && 'Full AI agent and all capabilities'}
           </div>
         </div>
 

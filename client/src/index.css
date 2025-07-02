@@ -481,6 +481,40 @@ html, body {
   }
 }
 
+/* Minimalist UI: Hover zones for panel reveals */
+.hover-zone {
+  transition: background-color 0.2s ease;
+}
+
+.hover-zone:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+/* Enhanced hover reveals for minimalist mode */
+.sidebar-container.hover-reveal,
+.context-container.hover-reveal {
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  z-index: 50;
+  animation-duration: 0.2s;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+.sidebar-container.hover-reveal {
+  animation-name: slideInLeft;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 /* Debug styles for development (add 'debug-layout' class to app-layout to enable) */
 .debug-layout .sidebar-container {
   outline: 2px solid red;
