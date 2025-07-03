@@ -229,7 +229,7 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
     handleEditorKeyDown(e);
   };
   const { toast } = useToast();
-  const { startProcessing, stopProcessing, updateMessage } = useApiProcessing();
+  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
   const [showMenu, setShowMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [selectionInfo, setSelectionInfo] = useState({
@@ -239,6 +239,7 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
     beforeSelection: '',
     afterSelection: ''
   });
+  const currentOperationId = useRef<string | null>(null);
   
   // Mutation for executing commands
   const commandMutation = useMutation({
@@ -261,7 +262,12 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
       };
       
       const message = messages[commandAction as keyof typeof messages] || 'Processing your request...';
-      startProcessing(message);
+      const operationId = startProcessing({
+        message,
+        type: 'ai-command',
+        initialProgress: 0
+      });
+      currentOperationId.current = operationId;
       
       try {
         const res = await apiRequest('POST', '/api/ai/slash-command', {
@@ -271,12 +277,18 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
         });
         return res.json();
       } catch (error) {
-        stopProcessing();
+        if (currentOperationId.current) {
+          stopProcessing(currentOperationId.current);
+          currentOperationId.current = null;
+        }
         throw error;
       }
     },
     onSuccess: (data) => {
-      stopProcessing();
+      if (currentOperationId.current) {
+        stopProcessing(currentOperationId.current);
+        currentOperationId.current = null;
+      }
       // Handle different command results based on new backend flags
       if (data.contextOnly) {
         // For context-only commands, don't modify the editor content
@@ -337,7 +349,10 @@ export default function SlashCommands({ content, setContent, editorRef }: SlashC
       }
     },
     onError: (error) => {
-      stopProcessing();
+      if (currentOperationId.current) {
+        stopProcessing(currentOperationId.current);
+        currentOperationId.current = null;
+      }
       toast({
         title: 'Error',
         description: 'Failed to execute AI command: ' + (error as Error).message,

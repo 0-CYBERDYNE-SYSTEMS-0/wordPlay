@@ -62,7 +62,7 @@ export default function AIAgent({
   editorState
 }: AIAgentProps) {
   const { toast } = useToast();
-  const { startProcessing, stopProcessing } = useApiProcessing();
+  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(true);
@@ -150,7 +150,11 @@ export default function AIAgent({
   // Send request to agent
   const agentMutation = useMutation({
     mutationFn: async (request: string) => {
-      startProcessing("Agent is analyzing your request...");
+      const operationId = startProcessing({
+        message: "Agent is analyzing your request...",
+        type: "ai-command",
+        initialProgress: 0
+      });
       try {
         const res = await apiRequest("POST", "/api/agent/intelligent-request", {
           request,
@@ -158,7 +162,7 @@ export default function AIAgent({
         });
         return res.json();
       } finally {
-        stopProcessing();
+        stopProcessing(operationId);
       }
     },
     onSuccess: (data) => {
@@ -245,7 +249,11 @@ export default function AIAgent({
   // Execute individual tool
   const toolMutation = useMutation({
     mutationFn: async ({ toolName, parameters }: { toolName: string; parameters: any }) => {
-      startProcessing(`Executing ${toolName}...`);
+      const operationId = startProcessing({
+        message: `Executing ${toolName}...`,
+        type: "ai-command",
+        initialProgress: 0
+      });
       try {
         const res = await apiRequest("POST", "/api/agent/tool", {
           toolName,
@@ -254,7 +262,7 @@ export default function AIAgent({
         });
         return res.json();
       } finally {
-        stopProcessing();
+        stopProcessing(operationId);
       }
     },
     onSuccess: (data, variables) => {

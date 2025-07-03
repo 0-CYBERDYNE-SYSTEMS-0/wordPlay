@@ -53,7 +53,10 @@ export default function CommandMode({
       const res = await processedApiRequest("POST", "/api/ai/process-command", {
         content,
         command
-      }, "Processing command...");
+      }, {
+        message: "Processing command...",
+        type: "ai-command"
+      });
       return res.json();
     },
     onSuccess: (data) => {
@@ -97,7 +100,10 @@ export default function CommandMode({
         content,
         title: "User Prompt",
         prompt: naturalLanguagePrompt
-      }, "Getting AI assistance...");
+      }, {
+        message: "Getting AI assistance...",
+        type: "ai-command"
+      });
       return res.json();
     },
     onSuccess: async (data) => {
@@ -113,7 +119,10 @@ export default function CommandMode({
         const commandRes = await processedApiRequest("POST", "/api/ai/process-command", {
           content,
           command: `Based on the user request: "${naturalLanguagePrompt}", determine what changes to make to the text and execute them.`
-        }, "Processing your request...");
+        }, {
+          message: "Processing your request...",
+          type: "ai-command"
+        });
         
         const commandData = await commandRes.json();
         

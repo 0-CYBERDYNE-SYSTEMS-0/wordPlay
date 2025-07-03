@@ -34,7 +34,7 @@ export default function ContextPanel({
   onClose,
   aiSuggestions
 }: ContextPanelProps) {
-  const { startProcessing, stopProcessing } = useApiProcessing();
+  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
   const [wordCount, setWordCount] = useState(0);
   const [readingTime, setReadingTime] = useState(0);
   const [paragraphCount, setParagraphCount] = useState(0);
@@ -55,7 +55,11 @@ export default function ContextPanel({
   // Get contextual help from AI
   const contextualHelpMutation = useMutation({
     mutationFn: async (data?: { prompt?: string; content?: string }) => {
-      startProcessing("Getting contextual help...");
+      const operationId = startProcessing({
+        message: "Getting contextual help...",
+        type: "ai-command",
+        initialProgress: 0
+      });
       try {
         const payload = {
           content: data?.content || content,
@@ -73,7 +77,7 @@ export default function ContextPanel({
           suggestions: []
         };
       } finally {
-        stopProcessing();
+        stopProcessing(operationId);
       }
     },
     onSuccess: (data) => {
@@ -104,7 +108,11 @@ export default function ContextPanel({
   // Get style metrics when content changes
   const styleAnalysisMutation = useMutation({
     mutationFn: async () => {
-      startProcessing("Analyzing writing style...");
+      const operationId = startProcessing({
+        message: "Analyzing writing style...",
+        type: "ai-command",
+        initialProgress: 0
+      });
       try {
         const res = await apiRequest("POST", "/api/ai/analyze-style", {
           content
@@ -122,7 +130,7 @@ export default function ContextPanel({
           }
         };
       } finally {
-        stopProcessing();
+        stopProcessing(operationId);
       }
     },
     onSuccess: (data) => {

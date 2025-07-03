@@ -89,7 +89,10 @@ export default function WebSearch({
     queryKey: ["sources", projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      const res = await processedApiRequest("GET", `/api/projects/${projectId}/sources`, undefined, "Loading sources...");
+      const res = await processedApiRequest("GET", `/api/projects/${projectId}/sources`, undefined, {
+        message: "Loading sources...",
+        type: "general"
+      });
       return res.json() as Promise<SavedSource[]>;
     },
     enabled: !!projectId
@@ -115,7 +118,10 @@ export default function WebSearch({
       const res = await processedApiRequest("POST", "/api/search", {
         query: searchQuery,
         source: searchSource
-      }, "Searching...");
+      }, {
+        message: "Searching...",
+        type: "research"
+      });
       return res.json();
     },
     onSuccess: (data) => {
@@ -144,7 +150,10 @@ export default function WebSearch({
   const saveSourceMutation = useMutation({
     mutationFn: async (source: { name: string; url: string; content: string; type: string }) => {
       if (!projectId) throw new Error("No project selected");
-      const res = await processedApiRequest("POST", `/api/projects/${projectId}/sources`, source, "Saving source...");
+      const res = await processedApiRequest("POST", `/api/projects/${projectId}/sources`, source, {
+        message: "Saving source...",
+        type: "file-operation"
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -172,7 +181,10 @@ export default function WebSearch({
         type: "notes",
         content: researchNotes,
         url: ""
-      }, "Saving notes...");
+      }, {
+        message: "Saving notes...",
+        type: "file-operation"
+      });
       return res.json();
     },
     onSuccess: () => {
@@ -195,7 +207,10 @@ export default function WebSearch({
     mutationFn: async () => {
       const res = await processedApiRequest("POST", "/api/scrape", {
         url: scrapeUrl
-      }, "Scraping webpage...");
+      }, {
+        message: "Scraping webpage...",
+        type: "research"
+      });
       return res.json();
     },
     onSuccess: (data) => {
@@ -597,7 +612,10 @@ export default function WebSearch({
                             <button
                               onClick={async () => {
                                 try {
-                                  await processedApiRequest("DELETE", `/api/projects/${projectId}/sources/${source.id}`);
+                                  await processedApiRequest("DELETE", `/api/projects/${projectId}/sources/${source.id}`, undefined, {
+                                    message: "Deleting source...",
+                                    type: "file-operation"
+                                  });
                                   sourcesQuery.refetch();
                                   toast({
                                     title: "Source deleted",

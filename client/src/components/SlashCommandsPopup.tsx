@@ -386,7 +386,7 @@ export default function SlashCommandsPopup({
   activeProjectId
 }: SlashCommandsPopupProps) {
   const { toast } = useToast();
-  const { startProcessing, stopProcessing, updateMessage } = useApiProcessing();
+  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
   const { settings } = useSettings();
   const menuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -737,7 +737,11 @@ export default function SlashCommandsPopup({
     };
     
     const message = messages[command as keyof typeof messages] || 'Processing your request...';
-    startProcessing(message);
+    const operationId = startProcessing({
+      message,
+      type: 'ai-command',
+      initialProgress: 0
+    });
     
     try {
       // Handle help command locally without API call
@@ -756,7 +760,7 @@ export default function SlashCommandsPopup({
             description: 'Command reference added to document.'
           });
         }
-        stopProcessing();
+        stopProcessing(operationId);
         return;
       }
       
@@ -775,7 +779,7 @@ export default function SlashCommandsPopup({
             variant: 'destructive'
           });
         }
-        stopProcessing();
+        stopProcessing(operationId);
         return;
       }
       
@@ -794,7 +798,7 @@ export default function SlashCommandsPopup({
       const data = await res.json();
       
       // Parse the AI response using the intelligent parser
-      updateMessage('Parsing AI response...');
+      updateProgress(operationId, 90, 'Parsing AI response...');
       const parser = createAIResponseParser(llmProvider);
       const parsed = await parser.parseResponse(
         data.result,
@@ -863,7 +867,7 @@ export default function SlashCommandsPopup({
         }, 2000);
       }
     } finally {
-      stopProcessing();
+      stopProcessing(operationId);
     }
   };
   
