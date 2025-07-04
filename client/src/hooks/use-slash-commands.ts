@@ -3,6 +3,7 @@ import { SlashCommand } from '@/components/SlashCommandMenu';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useApiProcessing } from '@/hooks/use-api-processing';
 
 interface UseSlashCommandsProps {
   content: string;
@@ -24,6 +25,7 @@ export function useSlashCommands({
   style
 }: UseSlashCommandsProps) {
   const { toast } = useToast();
+  const { createAIOperation } = useApiProcessing();
   const [isSlashCommandOpen, setIsSlashCommandOpen] = useState(false);
   const [slashCommandFilter, setSlashCommandFilter] = useState('');
   const [slashCommandPosition, setSlashCommandPosition] = useState<{ x: number; y: number } | null>(null);
@@ -84,7 +86,17 @@ export function useSlashCommands({
     }) => {
       setIsExecutingCommand(true);
       
+      // Create operation with detailed progress tracking
+      const operation = createAIOperation(
+        `Executing /${data.command}...`,
+        'ai-command'
+      );
+      
       try {
+        operation.updateProgress(10, 'Analyzing content...');
+        
+        operation.updateProgress(30, 'Sending to AI...');
+        
         const res = await apiRequest('POST', '/api/ai/slash-command', {
           command: data.command,
           content,
@@ -92,7 +104,19 @@ export function useSlashCommands({
           style
         });
 
-        return res.json();
+        operation.updateProgress(70, 'Processing AI response...');
+        
+        const result = await res.json();
+        
+        operation.updateProgress(90, 'Applying changes...');
+        
+        operation.updateProgress(100, 'Complete');
+        operation.complete();
+        
+        return result;
+      } catch (error: any) {
+        operation.setError(error.message || 'Command execution failed', true);
+        throw error;
       } finally {
         setIsExecutingCommand(false);
       }

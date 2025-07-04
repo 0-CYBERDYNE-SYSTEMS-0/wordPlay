@@ -1,13 +1,80 @@
 import OpenAI from "openai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
-// the newest OpenAI model is "gpt-4.1-mini" which is available and excels at diverse tasks
-export const DEFAULT_MODEL = "gpt-4.1-mini";
+// the newest OpenAI model is "o3-mini" which is available and excels at diverse tasks
+export const DEFAULT_MODEL = "o3-mini";
 const DEFAULT_PROVIDER = "openai";
+
+// Helper function to detect if a model is an o3 model
+export function isO3Model(model: string): boolean {
+  return model.startsWith('o3') || model.startsWith('o-3');
+}
+
+// Helper function to prepare parameters for o3 models
+export function prepareO3Parameters(params: any): any {
+  if (!isO3Model(params.model)) {
+    return params;
+  }
+  
+  // Remove unsupported parameters for o3 models
+  const { 
+    temperature, 
+    top_p, 
+    presence_penalty, 
+    frequency_penalty, 
+    logprobs, 
+    top_logprobs, 
+    logit_bias, 
+    max_tokens,
+    ...o3Params 
+  } = params;
+  
+  // Use max_completion_tokens instead of max_tokens for o3
+  if (max_tokens) {
+    o3Params.max_completion_tokens = max_tokens;
+  }
+  
+  // Add reasoning_effort parameter for o3 models
+  if (!o3Params.reasoning_effort) {
+    o3Params.reasoning_effort = "medium";
+  }
+  
+  return o3Params;
+}
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || "default_key" 
 });
+
+// Utility function to build OpenAI API parameters based on model type
+export function buildOpenAIParams(model: string, baseParams: any): any {
+  const isO3 = isO3Model(model);
+  const params = { model, ...baseParams };
+  
+  if (isO3) {
+    // For o3 models, remove unsupported parameters
+    delete params.temperature;
+    delete params.top_p;
+    delete params.presence_penalty;
+    delete params.frequency_penalty;
+    delete params.logprobs;
+    delete params.top_logprobs;
+    delete params.logit_bias;
+    
+    // Convert max_tokens to max_completion_tokens for o3
+    if (params.max_tokens) {
+      params.max_completion_tokens = params.max_tokens;
+      delete params.max_tokens;
+    }
+    
+    // Add reasoning_effort for o3 models (default to medium)
+    if (!params.reasoning_effort) {
+      params.reasoning_effort = 'medium';
+    }
+  }
+  
+  return params;
+}
 
 async function callOllama(model: string, prompt: string, requestJson: boolean = false): Promise<string> {
   try {
@@ -68,7 +135,7 @@ export async function generateTextCompletion(
       const systemPrompt = `You are an AI writing assistant. Continue or modify the given text based on the provided prompt. Maintain the same style and tone.`;
       const fullPrompt = `${systemPrompt}\n\nText: ${content}\n\nPrompt: ${prompt}\n\nContinuation:`;
       
-      const response = await callOllama(llmModel || 'qwen3:8b', fullPrompt);
+      const response = await callOllama(llmModel || 'qwen3:4b', fullPrompt);
       return response.trim();
     } catch (error: any) {
       console.error("Error generating text with Ollama:", error);
@@ -76,7 +143,7 @@ export async function generateTextCompletion(
     }
   }
   try {
-    const response = await openai.chat.completions.create({
+    const requestParams = prepareO3Parameters({
       model: llmModel || DEFAULT_MODEL,
       messages: [
         {
@@ -98,7 +165,11 @@ export async function generateTextCompletion(
         }
       ],
       max_tokens: 500,
+      temperature: 0.7,
+      top_p: 0.9
     });
+    
+    const response = await openai.chat.completions.create(requestParams);
 
     return response.choices[0].message.content || "";
   } catch (error: any) {
@@ -110,7 +181,7 @@ export async function generateTextCompletion(
 // Analyze the text style in greater detail
 export async function analyzeTextStyle(text: string): Promise<any> {
   try {
-    const response = await openai.chat.completions.create({
+    const requestParams = prepareO3Parameters({
       model: DEFAULT_MODEL,
       messages: [
         {
@@ -146,8 +217,11 @@ export async function analyzeTextStyle(text: string): Promise<any> {
           content: text || "Sample text for analysis."
         }
       ],
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.3
     });
+    
+    const response = await openai.chat.completions.create(requestParams);
 
     const result = JSON.parse(response.choices[0].message.content || '{}');
     
@@ -239,7 +313,7 @@ export async function generateSuggestions(
       const systemPrompt = `You are an AI writing assistant. Based on the given text, generate 3 possible continuations or sentence completions that match the writing style. You must respond with a valid JSON array of exactly 3 strings.`;
       const prompt = `${systemPrompt}\n\nText: ${content}\n\nRespond with a JSON array format: ["suggestion 1", "suggestion 2", "suggestion 3"]`;
       
-      const raw = await callOllama(llmModel || 'qwen3:8b', prompt, true);
+      const raw = await callOllama(llmModel || 'qwen3:4b', prompt, true);
       
       try {
         // Try to parse as JSON first
@@ -288,7 +362,7 @@ export async function generateSuggestions(
     }
   }
   try {
-    const response = await openai.chat.completions.create({
+    const requestParams = prepareO3Parameters({
       model: llmModel || DEFAULT_MODEL,
       messages: [
         {
@@ -303,8 +377,11 @@ export async function generateSuggestions(
           content: content
         }
       ],
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.7
     });
+    
+    const response = await openai.chat.completions.create(requestParams);
 
     const result = JSON.parse(response.choices[0].message.content || '{"suggestions":[]}');
     return result.suggestions || [];
@@ -320,7 +397,7 @@ export async function processTextCommand(
   command: string
 ): Promise<{ result: string; message: string }> {
   try {
-    const response = await openai.chat.completions.create({
+    const requestParams = prepareO3Parameters({
       model: DEFAULT_MODEL,
       messages: [
         {
@@ -342,8 +419,11 @@ export async function processTextCommand(
           content: `Document:\n${content}\n\nCommand: ${command}`
         }
       ],
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.3
     });
+    
+    const response = await openai.chat.completions.create(requestParams);
 
     const result = JSON.parse(response.choices[0].message.content || '{"result":"","message":""}');
     
@@ -366,7 +446,7 @@ export async function generateContextualAssistance(
   title: string
 ): Promise<{ message: string; suggestions: string[] }> {
   try {
-    const response = await openai.chat.completions.create({
+    const requestParams = prepareO3Parameters({
       model: DEFAULT_MODEL,
       messages: [
         {
@@ -382,8 +462,11 @@ export async function generateContextualAssistance(
           content: `Title: ${title}\n\nContent: ${content}`
         }
       ],
-      response_format: { type: "json_object" }
+      response_format: { type: "json_object" },
+      temperature: 0.7
     });
+    
+    const response = await openai.chat.completions.create(requestParams);
 
     const result = JSON.parse(response.choices[0].message.content || '{"message":"","suggestions":[]}');
     

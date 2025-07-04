@@ -5,6 +5,7 @@ import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
 import Editor from "@/components/Editor";
 import ContextPanel from "@/components/ContextPanel";
+import ResizablePanel from "@/components/ResizablePanel";
 import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
@@ -43,6 +44,10 @@ export default function Home() {
   
   // Focus mode hierarchy for different activities
   const [focusMode, setFocusMode] = useState<'writing' | 'organization' | 'research' | 'full'>('writing');
+  
+  // Panel resize state
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [contextPanelWidth, setContextPanelWidth] = useState(384);
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -243,7 +248,16 @@ export default function Home() {
       />
       
       {/* Main Layout Grid */}
-      <div className={`app-layout focus-mode-${focusMode} ${shouldShowSidebar() ? 'sidebar-open' : ''} ${shouldShowContext() ? 'context-open' : ''}`}>
+      <div 
+        className={`app-layout focus-mode-${focusMode} ${shouldShowSidebar() ? 'sidebar-open' : ''} ${shouldShowContext() ? 'context-open' : ''}`}
+        onClick={(e) => {
+          // Close panels when clicking backdrop on mobile
+          if (e.target === e.currentTarget && (sidebarOpen || contextPanelOpen)) {
+            setSidebarOpen(false);
+            setContextPanelOpen(false);
+          }
+        }}
+      >
         {/* Left Sidebar Hover Zone */}
         <div 
           className="fixed left-0 top-16 bottom-0 w-4 z-40 hover-zone"
@@ -252,13 +266,19 @@ export default function Home() {
         />
         
         {/* Left Sidebar */}
-        {shouldShowSidebar() && (
-          <div 
-            className={`sidebar-container transition-all duration-200 ${
-              hoverSidebar && !sidebarOpen ? 'hover-reveal' : ''
-            }`}
+        <ResizablePanel
+          side="left"
+          isOpen={shouldShowSidebar()}
+          onResize={setSidebarWidth}
+          storageKey="wordplay-sidebar-width"
+          className={`sidebar-container transition-all duration-200 ${
+            hoverSidebar && !sidebarOpen ? 'hover-reveal' : ''
+          }`}
+        >
+          <div
             onMouseEnter={() => setHoverSidebar(true)}
             onMouseLeave={() => setHoverSidebar(false)}
+            className="h-full"
           >
             <Sidebar
               isOpen={shouldShowSidebar()}
@@ -273,7 +293,7 @@ export default function Home() {
               onModeChange={(mode) => updateSettings({ userExperienceMode: mode })}
             />
           </div>
-        )}
+        </ResizablePanel>
 
         {/* Main Content Area */}
         <main className="main-content">
@@ -321,13 +341,19 @@ export default function Home() {
         />
         
         {/* Right Context Panel */}
-        {shouldShowContext() && (
-          <div 
-            className={`context-container transition-all duration-200 ${
-              hoverContext && !contextPanelOpen ? 'hover-reveal' : ''
-            }`}
+        <ResizablePanel
+          side="right"
+          isOpen={shouldShowContext()}
+          onResize={setContextPanelWidth}
+          storageKey="wordplay-context-width"
+          className={`context-container transition-all duration-200 ${
+            hoverContext && !contextPanelOpen ? 'hover-reveal' : ''
+          }`}
+        >
+          <div
             onMouseEnter={() => setHoverContext(true)}
             onMouseLeave={() => setHoverContext(false)}
+            className="h-full"
           >
             <ContextPanel 
               title={title || ""}
@@ -338,7 +364,7 @@ export default function Home() {
               aiSuggestions={aiSuggestions}
             />
           </div>
-        )}
+        </ResizablePanel>
       </div>
 
       {/* Modals */}

@@ -26,7 +26,7 @@ export function useAISuggestions({
   llmModel
 }: UseAISuggestionsProps) {
   const { toast } = useToast();
-  const { processedApiRequest } = useApiProcessing();
+  const { createAIOperation } = useApiProcessing();
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [selectedSuggestion, setSelectedSuggestion] = useState<string | null>(null);
   const [isFetching, setIsFetching] = useState(false);
@@ -51,13 +51,35 @@ export function useAISuggestions({
   // API-based suggestions (now only manual via agent/slash commands)
   const fetchSuggestionsMutation = useMutation({
     mutationFn: async () => {
-      const res = await processedApiRequest("POST", "/api/ai/suggestions", {
-        content: debouncedContent,
-        style,
-        llmProvider,
-        llmModel
-      }, "Getting writing suggestions...");
-      return res.json();
+      const operation = createAIOperation(
+        'Generating writing suggestions...',
+        'content-generation'
+      );
+      
+      try {
+        operation.updateProgress(15, 'Analyzing writing style...');
+        
+        operation.updateProgress(40, 'Generating suggestions...');
+        
+        const res = await apiRequest("POST", "/api/ai/suggestions", {
+          content: debouncedContent,
+          style,
+          llmProvider,
+          llmModel
+        });
+        
+        operation.updateProgress(80, 'Processing suggestions...');
+        
+        const result = await res.json();
+        
+        operation.updateProgress(100, 'Complete');
+        operation.complete();
+        
+        return result;
+      } catch (error: any) {
+        operation.setError(error.message || 'Failed to generate suggestions', true);
+        throw error;
+      }
     },
     onSuccess: (data) => {
       setSuggestions(data.suggestions || []);
@@ -76,14 +98,36 @@ export function useAISuggestions({
   
   const generateTextCompletion = useMutation({
     mutationFn: async (prompt?: string) => {
-      const res = await processedApiRequest("POST", "/api/ai/generate", {
-        content,
-        style,
-        prompt,
-        llmProvider,
-        llmModel
-      }, "Generating text...");
-      return res.json();
+      const operation = createAIOperation(
+        'Generating text completion...',
+        'content-generation'
+      );
+      
+      try {
+        operation.updateProgress(20, 'Analyzing context...');
+        
+        operation.updateProgress(50, 'Generating content...');
+        
+        const res = await apiRequest("POST", "/api/ai/generate", {
+          content,
+          style,
+          prompt,
+          llmProvider,
+          llmModel
+        });
+        
+        operation.updateProgress(85, 'Finalizing text...');
+        
+        const result = await res.json();
+        
+        operation.updateProgress(100, 'Complete');
+        operation.complete();
+        
+        return result;
+      } catch (error: any) {
+        operation.setError(error.message || 'Failed to generate text', true);
+        throw error;
+      }
     },
     onError: (error) => {
       toast({

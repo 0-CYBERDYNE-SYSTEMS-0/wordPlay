@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import { prepareO3Parameters, isO3Model } from './openai';
 
 interface TableGenerationRequest {
   text: string;
@@ -63,8 +64,8 @@ export async function generateTable(request: TableGenerationRequest): Promise<st
     : `Analyze this text and create a complementary table that augments the information:\n\n${request.text}`;
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+    const requestParams = prepareO3Parameters({
+      model: 'o3-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -72,6 +73,8 @@ export async function generateTable(request: TableGenerationRequest): Promise<st
       temperature: 0.3,
       max_tokens: 2000,
     });
+    
+    const completion = await openai.chat.completions.create(requestParams);
 
     return completion.choices[0]?.message?.content || '';
   } catch (error) {
@@ -147,8 +150,8 @@ export async function generateChart(request: ChartGenerationRequest): Promise<st
 
   try {
     console.log('📡 Making OpenAI API call for chart generation...');
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1',
+    const requestParams = prepareO3Parameters({
+      model: 'o3-mini',
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -156,6 +159,8 @@ export async function generateChart(request: ChartGenerationRequest): Promise<st
       temperature: 0.2,
       max_tokens: 3000,
     });
+    
+    const completion = await openai.chat.completions.create(requestParams);
 
     const content = completion.choices[0]?.message?.content || '';
     console.log('✅ OpenAI response received, content length:', content.length);
