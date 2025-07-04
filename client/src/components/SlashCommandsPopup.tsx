@@ -24,7 +24,16 @@ import {
   ChevronDown,
   ChevronRight,
   Edit3,
-  Settings
+  Settings,
+  Info,
+  Plus,
+  Replace,
+  ArrowRight,
+  FileEdit,
+  Eye,
+  Brush,
+  Target,
+  Shield
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -227,7 +236,7 @@ export const ALL_SLASH_COMMANDS: SlashCommand[] = [
     action: 'research',
     category: 'utility',
     hasParameters: true,
-    parameters: ['topic']
+    parameters: ['current-topic', 'related-concepts', 'alternatives', 'examples']
   },
   {
     id: 'cite',
@@ -433,46 +442,197 @@ export default function SlashCommandsPopup({
                          settings.userExperienceMode === 'expert' ? EXPERT_SLASH_COMMANDS : 
                          ALL_SLASH_COMMANDS;
   
-  // Get operation type and visual indicator for commands
+  // Get operation type and enhanced visual indicator for commands
   const getCommandOperationType = (commandAction: string) => {
     const operationTypes = {
-      // Context-only operations (don't modify document)
-      'suggest': { type: 'Context Only', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-      'analyze': { type: 'Context Only', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
-      'help': { type: 'Context Only', color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
+      // Context-only operations (don't modify document) - Purple with Eye icon
+      'suggest': { 
+        type: 'Ideas Only', 
+        color: 'text-purple-700 dark:text-purple-300', 
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        border: 'border-purple-200 dark:border-purple-700',
+        icon: Eye,
+        description: 'Generates ideas in sidebar - no document changes'
+      },
+      'analyze': { 
+        type: 'Analysis Only', 
+        color: 'text-purple-700 dark:text-purple-300', 
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        border: 'border-purple-200 dark:border-purple-700',
+        icon: Eye,
+        description: 'Shows analysis in sidebar - no document changes'
+      },
+      'help': { 
+        type: 'Info Only', 
+        color: 'text-purple-700 dark:text-purple-300', 
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        border: 'border-purple-200 dark:border-purple-700',
+        icon: Info,
+        description: 'Displays help information - no document changes'
+      },
+      'research': { 
+        type: 'Research Only', 
+        color: 'text-purple-700 dark:text-purple-300', 
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        border: 'border-purple-200 dark:border-purple-700',
+        icon: Eye,
+        description: 'Searches web and shows results in sidebar'
+      },
+      'cite': { 
+        type: 'Reference Only', 
+        color: 'text-purple-700 dark:text-purple-300', 
+        bg: 'bg-purple-100 dark:bg-purple-900/30',
+        border: 'border-purple-200 dark:border-purple-700',
+        icon: Eye,
+        description: 'Shows available citations - no direct insertion'
+      },
       
-      // Append operations (add to document)
-      'continue': { type: 'Adds Content', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
-      'expand': { type: 'Adds Content', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+      // Append operations (add to document) - Green with Plus icon
+      'continue': { 
+        type: 'Adds Content', 
+        color: 'text-green-700 dark:text-green-300', 
+        bg: 'bg-green-100 dark:bg-green-900/30',
+        border: 'border-green-200 dark:border-green-700',
+        icon: Plus,
+        description: 'Adds new content to the end of your document'
+      },
+      'expand': { 
+        type: 'Adds Content', 
+        color: 'text-green-700 dark:text-green-300', 
+        bg: 'bg-green-100 dark:bg-green-900/30',
+        border: 'border-green-200 dark:border-green-700',
+        icon: Plus,
+        description: 'Adds more detail to the end of your document'
+      },
       
-      // Insert operations (insert at cursor)
-      'summarize': { type: 'Inserts at Cursor', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-      'list': { type: 'Inserts at Cursor', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
-      'outline': { type: 'Inserts at Cursor', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20' },
+      // Insert operations (insert at cursor) - Blue with ArrowRight icon
+      'summarize': { 
+        type: 'Inserts at Cursor', 
+        color: 'text-blue-700 dark:text-blue-300', 
+        bg: 'bg-blue-100 dark:bg-blue-900/30',
+        border: 'border-blue-200 dark:border-blue-700',
+        icon: ArrowRight,
+        description: 'Creates summary and inserts at cursor position'
+      },
+      'list': { 
+        type: 'Inserts at Cursor', 
+        color: 'text-blue-700 dark:text-blue-300', 
+        bg: 'bg-blue-100 dark:bg-blue-900/30',
+        border: 'border-blue-200 dark:border-blue-700',
+        icon: ArrowRight,
+        description: 'Creates list and inserts at cursor position'
+      },
+      'outline': { 
+        type: 'Inserts at Cursor', 
+        color: 'text-blue-700 dark:text-blue-300', 
+        bg: 'bg-blue-100 dark:bg-blue-900/30',
+        border: 'border-blue-200 dark:border-blue-700',
+        icon: ArrowRight,
+        description: 'Creates outline and inserts at cursor position'
+      },
+      'table': { 
+        type: 'Inserts at Cursor', 
+        color: 'text-blue-700 dark:text-blue-300', 
+        bg: 'bg-blue-100 dark:bg-blue-900/30',
+        border: 'border-blue-200 dark:border-blue-700',
+        icon: ArrowRight,
+        description: 'Creates table and inserts at cursor position'
+      },
+      'chart': { 
+        type: 'Inserts at Cursor', 
+        color: 'text-blue-700 dark:text-blue-300', 
+        bg: 'bg-blue-100 dark:bg-blue-900/30',
+        border: 'border-blue-200 dark:border-blue-700',
+        icon: ArrowRight,
+        description: 'Creates chart and inserts at cursor position'
+      },
+      'image': { 
+        type: 'Inserts at Cursor', 
+        color: 'text-blue-700 dark:text-blue-300', 
+        bg: 'bg-blue-100 dark:bg-blue-900/30',
+        border: 'border-blue-200 dark:border-blue-700',
+        icon: ArrowRight,
+        description: 'Generates image and inserts at cursor position'
+      },
       
-      // Modify operations (changes selection or document)
-      'improve': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
-                  color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
-                  bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
-      'fix': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
-              color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
-              bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
-      'rewrite': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
-                  color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
-                  bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
-      'tone': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
-               color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
-               bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
-      'translate': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
-                    color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
-                    bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' },
-      'format': { type: contextInfo.hasSelection ? 'Modifies Selection' : 'Modifies Document', 
-                 color: contextInfo.hasSelection ? 'text-blue-600 dark:text-blue-400' : 'text-orange-600 dark:text-orange-400',
-                 bg: contextInfo.hasSelection ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-orange-50 dark:bg-orange-900/20' }
+      // Conditional operations (changes selection or document) - Dynamic colors
+      'improve': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'EDITS ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Improves only the selected text' : 'REPLACES your entire document with improved version'
+      },
+      'fix': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'EDITS ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Fixes grammar in selected text only' : 'REPLACES your entire document with grammar-corrected version'
+      },
+      'rewrite': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'REWRITES ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Rewrites only the selected text' : 'COMPLETELY REWRITES your entire document'
+      },
+      'tone': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'CHANGES ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Changes tone of selected text only' : 'REPLACES your entire document with different tone'
+      },
+      'translate': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'TRANSLATES ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Translates only the selected text' : 'REPLACES your entire document with translated version'
+      },
+      'format': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'FORMATS ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Formats only the selected text' : 'REPLACES your entire document with formatted version'
+      },
+      'simplify': { 
+        type: contextInfo.hasSelection ? 'Edits Selection' : 'SIMPLIFIES ENTIRE DOCUMENT', 
+        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
+        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
+        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
+        icon: contextInfo.hasSelection ? Target : Replace,
+        description: contextInfo.hasSelection ? 'Simplifies only the selected text' : 'REPLACES your entire document with simplified version'
+      },
+      
+      // Special operations - Gray with specific icons
+      'undo': { 
+        type: 'Undo Last Change', 
+        color: 'text-gray-700 dark:text-gray-300', 
+        bg: 'bg-gray-100 dark:bg-gray-900/30',
+        border: 'border-gray-200 dark:border-gray-700',
+        icon: Shield,
+        description: 'Safely reverts the last AI modification'
+      }
     };
     
     return operationTypes[commandAction as keyof typeof operationTypes] || 
-           { type: 'Modifies Content', color: 'text-gray-600 dark:text-gray-400', bg: 'bg-gray-50 dark:bg-gray-900/20' };
+           { 
+             type: 'Modifies Content', 
+             color: 'text-gray-700 dark:text-gray-300', 
+             bg: 'bg-gray-100 dark:bg-gray-900/30',
+             border: 'border-gray-200 dark:border-gray-700',
+             icon: FileEdit,
+             description: 'Modifies document content'
+           };
   };
   
   // Filter and sort commands based on filter text
@@ -600,8 +760,8 @@ export default function SlashCommandsPopup({
     return helpText;
   };
 
-  // Check if command requires input prompt
-  const checkForInputPrompt = (command: string) => {
+  // Show custom input dialog for command with custom instructions
+  const showCustomInputDialog = (command: string) => {
     const inputCommands = {
       'research': {
         title: 'Research Topic',
@@ -630,42 +790,69 @@ export default function SlashCommandsPopup({
       'continue': {
         title: 'Writing Direction',
         placeholder: 'How should the writing continue? (e.g., "focus on benefits", "add a conclusion", "include examples")'
+      },
+      'table': {
+        title: 'Table Instructions',
+        placeholder: 'How should the table be created? (e.g., "3 columns with headers", "include summary row")'
+      },
+      'chart': {
+        title: 'Chart Instructions',
+        placeholder: 'What type of chart and data? (e.g., "bar chart of sales data", "line chart over time")'
+      },
+      'image': {
+        title: 'Image Description',
+        placeholder: 'Describe the image you want to generate (e.g., "realistic photo of sunset", "diagram of process")'
       }
     };
     
-    if (inputCommands[command as keyof typeof inputCommands]) {
-      const config = inputCommands[command as keyof typeof inputCommands];
-      setInputDialog({
-        isOpen: true,
-        command,
-        title: config.title,
-        placeholder: config.placeholder,
-        value: ''
-      });
-      return true; // Needs input
-    }
-    return false; // No input needed
+    const config = inputCommands[command as keyof typeof inputCommands] || {
+      title: 'Custom Instructions',
+      placeholder: 'Enter your custom instructions for this command...'
+    };
+    
+    setInputDialog({
+      isOpen: true,
+      command,
+      title: config.title,
+      placeholder: config.placeholder,
+      value: ''
+    });
   };
 
   // Check if command requires confirmation for whole-document operation
   const checkForConfirmation = (command: string, selectionInfo: any) => {
-    const destructiveCommands = ['improve', 'fix', 'tone', 'rewrite', 'translate', 'format'];
+    const destructiveCommands = ['improve', 'fix', 'tone', 'rewrite', 'translate', 'format', 'simplify'];
     const commandTitles = {
       'improve': 'Improve Writing',
       'fix': 'Fix Grammar',
       'tone': 'Change Tone', 
       'rewrite': 'Rewrite',
       'translate': 'Translate',
-      'format': 'Format Text'
+      'format': 'Format Text',
+      'simplify': 'Simplify Language'
+    };
+    
+    const commandDescriptions = {
+      'improve': 'enhance clarity, readability, and overall quality',
+      'fix': 'correct grammar, spelling, and punctuation',
+      'tone': 'change the tone and style', 
+      'rewrite': 'completely rewrite the content',
+      'translate': 'translate to a different language',
+      'format': 'restructure and format the text',
+      'simplify': 'simplify the language and concepts'
     };
     
     if (destructiveCommands.includes(command) && !selectionInfo.selectedText) {
       const wordCount = Math.round(content.length / 250);
+      const charCount = content.length;
+      const commandTitle = commandTitles[command as keyof typeof commandTitles] || command;
+      const commandDesc = commandDescriptions[command as keyof typeof commandDescriptions] || 'modify';
+      
       setConfirmationDialog({
         isOpen: true,
         command,
-        commandTitle: commandTitles[command as keyof typeof commandTitles] || command,
-        message: `You're about to apply "${commandTitles[command as keyof typeof commandTitles]}" to your entire document (~${wordCount} words). This will replace all your content. Are you sure?`
+        commandTitle,
+        message: `⚠️ **DOCUMENT REPLACEMENT WARNING**\n\nYou're about to **"${commandTitle}"** your entire document:\n\n📄 **Current document:** ~${wordCount} words (${charCount.toLocaleString()} characters)\n🔄 **What will happen:** AI will ${commandDesc} and **completely replace** all your content\n\n**This cannot be undone automatically** - your original text will be gone unless you manually copy it first or use the /undo command immediately after.\n\n**Safer alternatives:**\n• Select specific text first for targeted edits\n• Use "Ideas Only" commands (purple badges) for suggestions without changes\n• Copy your document as backup before proceeding`
       });
       return true; // Needs confirmation
     }
@@ -683,17 +870,13 @@ export default function SlashCommandsPopup({
   const executeCommand = async (command: string) => {
     const selectionInfo = getSelectionInfo();
     
-    // Check if this command needs input prompt first
-    if (checkForInputPrompt(command)) {
-      return; // Will show input dialog, don't proceed yet
-    }
-    
     // Check if this command needs confirmation for whole-document operation
     if (checkForConfirmation(command, selectionInfo)) {
       return; // Will show confirmation dialog, don't proceed yet
     }
     
-    // Execute directly if no input or confirmation needed
+    // Execute directly - no automatic input prompts
+    onClose();
     await executeCommandConfirmed(command);
   };
 
@@ -910,9 +1093,10 @@ export default function SlashCommandsPopup({
           const selectedCommand = filteredCommands[selectedIndex];
           if (selectedCommand) {
             if (selectedCommand.hasParameters && expandedCommand !== selectedCommand.id) {
+              // Show parameter options first
               setExpandedCommand(selectedCommand.id);
             } else {
-              onClose();
+              // Execute command directly
               executeCommand(selectedCommand.action);
             }
           }
@@ -921,8 +1105,8 @@ export default function SlashCommandsPopup({
           e.preventDefault();
           const currentCmd = filteredCommands[selectedIndex];
           if (currentCmd?.hasParameters) {
-            setExpandedCommand(null);
-            checkForInputPrompt(currentCmd.action);
+            // Toggle parameter expansion instead of immediately showing input dialog
+            setExpandedCommand(expandedCommand === currentCmd.id ? null : currentCmd.id);
           }
           break;
         case 'Backspace':
@@ -1120,14 +1304,31 @@ export default function SlashCommandsPopup({
               </div>
             </div>
             
-            {/* Warning for whole-document operations */}
+            {/* Enhanced warning for whole-document operations */}
             {contextInfo.contextType === 'document' && contextInfo.documentLength > 500 && (
-              <div className="flex items-start gap-2 p-2 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md">
-                <AlertTriangle className="h-3 w-3 text-orange-600 dark:text-orange-400 mt-0.5 flex-shrink-0" />
-                <div className="text-xs text-orange-800 dark:text-orange-200">
-                  <strong>No text selected.</strong> Commands like improve, fix, rewrite will modify your entire document.
-                  <div className="mt-1 text-orange-600 dark:text-orange-300">
-                    Tip: Select specific text first for targeted changes.
+              <div className="p-3 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-2 border-red-200 dark:border-red-700 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 p-1 bg-red-100 dark:bg-red-900/40 rounded-full">
+                    <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
+                      ⚠️ Whole Document Mode
+                    </div>
+                    <div className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
+                      <strong>No text is selected.</strong> Commands like improve, fix, rewrite will <strong>completely replace your entire document</strong> (~{Math.round(contextInfo.documentLength / 250)} words).
+                    </div>
+                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded">
+                      <div className="flex items-center gap-1.5">
+                        <Shield className="h-3 w-3 text-green-600 dark:text-green-400" />
+                        <span className="text-xs font-medium text-green-800 dark:text-green-200">Safe Options:</span>
+                      </div>
+                      <div className="text-xs text-green-700 dark:text-green-300 mt-1">
+                        • Select specific text first for targeted edits<br/>
+                        • Use "Ideas Only" commands (purple badges) for suggestions<br/>
+                        • Use /undo to revert any unwanted changes
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1181,9 +1382,10 @@ export default function SlashCommandsPopup({
                 }}
                 onClick={() => {
                   if (cmd.hasParameters && expandedCommand !== cmd.id) {
+                    // Show parameter options first
                     setExpandedCommand(cmd.id);
                   } else {
-                    onClose();
+                    // Execute command directly
                     executeCommand(cmd.action);
                   }
                 }}
@@ -1202,10 +1404,14 @@ export default function SlashCommandsPopup({
                     <div className="flex items-center gap-2">
                       {(() => {
                         const opType = getCommandOperationType(cmd.action);
+                        const IconComponent = opType.icon;
                         return (
-                          <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${opType.bg} ${opType.color}`}>
-                            {opType.type}
-                          </span>
+                          <div className="flex items-center gap-1">
+                            <div className={`flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-semibold ${opType.bg} ${opType.color} ${opType.border}`}>
+                              <IconComponent className="h-3 w-3" />
+                              <span>{opType.type}</span>
+                            </div>
+                          </div>
                         );
                       })()}
                       {cmd.hasParameters && (
@@ -1219,15 +1425,25 @@ export default function SlashCommandsPopup({
                         </div>
                       )}
                       {cmd.shortcut && (
-                        <kbd className="text-xs text-gray-500 dark:text-gray-400">
+                        <kbd className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">
                           {cmd.shortcut}
                         </kbd>
                       )}
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {cmd.description}
-                  </p>
+                  <div className="space-y-1">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {cmd.description}
+                    </p>
+                    {(() => {
+                      const opType = getCommandOperationType(cmd.action);
+                      return (
+                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                          {opType.description}
+                        </p>
+                      );
+                    })()}
+                  </div>
                 </div>
               </button>
               
@@ -1248,7 +1464,8 @@ export default function SlashCommandsPopup({
                   <button
                     onClick={() => {
                       setExpandedCommand(null);
-                      checkForInputPrompt(cmd.action);
+                      onClose();
+                      showCustomInputDialog(cmd.action);
                     }}
                     className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
                   >
@@ -1266,7 +1483,7 @@ export default function SlashCommandsPopup({
         <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
           <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
             <div className="flex items-center justify-between">
-              <span>↑↓ Navigate • Enter Select/Expand • Tab Custom Input</span>
+              <span>↑↓ Navigate • Enter Select/Expand • Tab Toggle Options</span>
               <span>{filterText ? 'Backspace Clear' : 'Type to Filter'}</span>
             </div>
             {Object.values(filteredCommands).some(cmd => cmd.hasParameters) && (
@@ -1330,32 +1547,63 @@ export default function SlashCommandsPopup({
         </DialogContent>
       </Dialog>
       
-      {/* Confirmation Dialog for Destructive Operations */}
+      {/* Enhanced Confirmation Dialog for Destructive Operations */}
       <AlertDialog 
         open={confirmationDialog.isOpen} 
         onOpenChange={(open) => setConfirmationDialog(prev => ({ ...prev, isOpen: open }))}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-orange-500" />
-              Confirm Whole Document Operation
+            <AlertDialogTitle className="flex items-center gap-3 text-lg">
+              <div className="flex-shrink-0 p-2 bg-red-100 dark:bg-red-900/40 rounded-full">
+                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <div className="text-red-800 dark:text-red-200">⚠️ Document Replacement Warning</div>
+                <div className="text-sm font-normal text-red-600 dark:text-red-400 mt-1">
+                  This will completely replace your entire document
+                </div>
+              </div>
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-gray-600 dark:text-gray-400">
-              {confirmationDialog.message}
-              <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-md">
-                <p className="text-xs text-orange-800 dark:text-orange-200">
-                  <strong>Tip:</strong> Select specific text first to apply commands only to that selection, 
-                  or use /undo after the operation to revert changes.
-                </p>
+            <AlertDialogDescription className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+              <div className="whitespace-pre-line mb-4">{confirmationDialog.message}</div>
+              
+              {/* Enhanced safety section */}
+              <div className="space-y-3">
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 rounded">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                    <span className="font-semibold text-red-800 dark:text-red-200">High Risk Action</span>
+                  </div>
+                  <p className="text-xs text-red-700 dark:text-red-300">
+                    Your original content will be permanently replaced. This action will modify your entire document, 
+                    which could result in significant changes or loss of specific formatting, style, or content.
+                  </p>
+                </div>
+                
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-400 rounded">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <span className="font-semibold text-green-800 dark:text-green-200">Recommended Safety Steps</span>
+                  </div>
+                  <ul className="text-xs text-green-700 dark:text-green-300 space-y-1 ml-4">
+                    <li className="list-disc">✅ Copy your document as backup (Ctrl/Cmd+A, Ctrl/Cmd+C)</li>
+                    <li className="list-disc">✅ Select specific text instead for targeted edits</li>
+                    <li className="list-disc">✅ Use "Ideas Only" commands (purple badges) for safe suggestions</li>
+                    <li className="list-disc">✅ Remember you can use /undo immediately after to revert</li>
+                  </ul>
+                </div>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
-            }}>
-              Cancel
+          <AlertDialogFooter className="gap-3">
+            <AlertDialogCancel 
+              onClick={() => {
+                setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
+              }}
+              className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
+            >
+              ❌ Cancel (Recommended)
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={async () => {
@@ -1364,9 +1612,9 @@ export default function SlashCommandsPopup({
                 onClose(); // Close the slash command menu
                 await executeCommandConfirmed(command);
               }}
-              className="bg-orange-600 hover:bg-orange-700 dark:bg-orange-600 dark:hover:bg-orange-700"
+              className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white font-semibold"
             >
-              Yes, Apply to Entire Document
+              ⚠️ Yes, Replace Entire Document
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
