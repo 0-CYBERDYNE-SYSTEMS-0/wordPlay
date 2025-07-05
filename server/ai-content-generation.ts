@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Modality } from '@google/genai';
 import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
@@ -26,6 +27,7 @@ interface ImageGenerationRequest {
 // Initialize AI clients
 let openai: OpenAI | null = null;
 let gemini: GoogleGenerativeAI | null = null;
+let geminiNew: GoogleGenAI | null = null;
 
 export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
   if (openaiKey) {
@@ -33,8 +35,12 @@ export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
   }
   
   if (geminiKey) {
+    // Keep old client for compatibility
     gemini = new GoogleGenerativeAI(geminiKey);
-    console.log('Gemini client initialized for image generation with 2.0 Flash');
+    
+    // Initialize new client for image generation
+    geminiNew = new GoogleGenAI({ apiKey: geminiKey });
+    console.log('Gemini clients initialized for image generation with 2.0 Flash');
   } else {
     console.warn('Gemini API key not provided - image generation will not work');
   }
@@ -178,9 +184,13 @@ ${content}
 }
 
 export async function generateImage(request: ImageGenerationRequest): Promise<string> {
-  if (!gemini) {
-    throw new Error('Gemini client not initialized');
+  if (!geminiNew) {
+    throw new Error('Gemini client not initialized for image generation');
   }
+
+  console.log('🎨 Starting Gemini 2.0 Flash image generation...');
+  console.log(`📝 Prompt: "${request.prompt}"`);
+  console.log(`🎭 Style: ${request.style}`);
 
   const stylePrompts = {
     realistic: 'ultra-high quality photorealistic style, 8K resolution, professional DSLR photography, perfect lighting, sharp details, cinematic composition, award-winning photography',
@@ -189,98 +199,96 @@ export async function generateImage(request: ImageGenerationRequest): Promise<st
     icon: 'premium icon design, ultra-modern flat design, Apple-quality vector graphics, pixel-perfect clarity, sophisticated minimalism, high-end brand quality'
   };
 
-  // Ultra-enhanced prompt for premium quality results
-  const enhancedPrompt = `Create an exceptionally high-quality, large-format image (1792x1024 or larger) that professionally represents: "${request.prompt}". 
+  // Enhanced prompt for premium quality results
+  const enhancedPrompt = `Create a high-quality image that represents: "${request.prompt}".
 
-  🎯 PREMIUM QUALITY SPECIFICATIONS:
-  ${stylePrompts[request.style]}
-  
-  📐 COMPOSITION REQUIREMENTS:
-  - Ultra-high resolution and crisp details
-  - Professional composition with rule of thirds
-  - Balanced visual hierarchy and sophisticated layout
-  - Premium color palette with excellent contrast
-  - Export-ready quality suitable for presentations
-  
-  🎨 VISUAL EXCELLENCE:
-  - Cutting-edge modern aesthetic
-  - Perfect lighting and shadows
-  - Rich, vibrant colors with professional color grading
-  - Sharp focus and exceptional clarity
-  - Sophisticated depth and dimension
-  
-  📱 EXPORT OPTIMIZATION:
-  - High DPI rendering for crisp display on all devices
-  - Scalable quality that looks perfect when resized
-  - Professional presentation-ready output
-  - Print-quality resolution and color accuracy
-  
-  Create something that would be impressive in an Apple keynote or Fortune 500 presentation.`;
+Style: ${stylePrompts[request.style]}
+
+Requirements:
+- High resolution and crisp details
+- Professional composition
+- Excellent color balance and contrast
+- Modern aesthetic with perfect lighting
+- Export-ready quality
+
+Create a visually appealing and professional image.`;
 
   try {
-    const model = gemini.getGenerativeModel({ 
-      model: 'gemini-2.0-flash-exp'
+    console.log('📡 Sending request to Gemini 2.0 Flash...');
+    
+    const response = await geminiNew.models.generateContent({
+      model: 'gemini-2.0-flash-preview-image-generation',
+      contents: enhancedPrompt,
+      config: {
+        responseModalities: [Modality.TEXT, Modality.IMAGE],
+      },
     });
-
-    const response = await model.generateContent(enhancedPrompt);
+    
+    console.log('✅ Response received from Gemini');
     
     // Process the response to extract image data
-    if (response?.response?.candidates?.[0]) {
-      const candidate = response.response.candidates[0];
+    const candidate = response.candidates?.[0];
+    const parts = candidate?.content?.parts || [];
+    
+    console.log(`📊 Processing ${parts.length} response parts`);
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
       
-      // Look for image parts in the response
-      if (candidate?.content?.parts) {
-        for (const part of candidate.content.parts) {
-          if (part?.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) {
-            try {
-              console.log(`Processing image: ${part.inlineData.mimeType}, data length: ${part.inlineData.data.length}`);
-              
-              // Immediately process and save the image to avoid sending large data back
-              const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
-              
-              // Check if image is reasonable size (max 10MB for processing, but we'll save smaller)
-              if (imageBuffer.length > 10 * 1024 * 1024) {
-                console.warn(`Image too large: ${Math.round(imageBuffer.length / (1024 * 1024))}MB`);
-                throw new Error('Generated image is too large');
-              }
-              
-              const fileExtension = part.inlineData.mimeType.split('/')[1] || 'png';
-              const fileName = `gemini-image-${crypto.randomUUID()}.${fileExtension}`;
-              
-              // Create uploads directory if it doesn't exist
-              const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-              if (!fs.existsSync(uploadsDir)) {
-                fs.mkdirSync(uploadsDir, { recursive: true });
-              }
-              
-              // Save the image file
-              const filePath = path.join(uploadsDir, fileName);
-              fs.writeFileSync(filePath, imageBuffer);
-              
-              console.log(`✅ Image saved: ${fileName} (${Math.round(imageBuffer.length / 1024)}KB)`);
-              
-              // Return markdown with relative URL - this should be small
-              const imageUrl = `/uploads/${fileName}`;
-              const altText = request.prompt.substring(0, 100);
-              const result = `![${altText}](${imageUrl})`;
-              
-              console.log(`Returning result of length: ${result.length} characters`);
-              return result;
-              
-            } catch (saveError: any) {
-              console.error('Error processing image:', saveError);
-              // Return a simple error message to avoid payload issues
-              return `**Image Generation Error**: ${saveError.message || 'Could not process generated image'}\n\n*Please try again with a simpler image description.*`;
-            }
+      if (part.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) {
+        try {
+          console.log(`🖼️  Found image data: ${part.inlineData.mimeType}`);
+          console.log(`📐 Data length: ${part.inlineData.data.length} characters`);
+          
+          // Process and save the image
+          const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+          console.log(`💾 Image buffer size: ${Math.round(imageBuffer.length / 1024)}KB`);
+          
+          // Check if image is reasonable size (max 10MB)
+          if (imageBuffer.length > 10 * 1024 * 1024) {
+            console.warn(`⚠️  Image too large: ${Math.round(imageBuffer.length / (1024 * 1024))}MB`);
+            throw new Error('Generated image is too large');
           }
+          
+          const fileExtension = part.inlineData.mimeType.split('/')[1] || 'png';
+          const fileName = `gemini-image-${crypto.randomUUID()}.${fileExtension}`;
+          
+          // Create uploads directory if it doesn't exist
+          const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+            console.log('📁 Created uploads directory');
+          }
+          
+          // Save the image file
+          const filePath = path.join(uploadsDir, fileName);
+          fs.writeFileSync(filePath, imageBuffer);
+          
+          console.log(`✅ Image saved successfully: ${fileName}`);
+          console.log(`📂 Full path: ${filePath}`);
+          
+          // Return markdown with relative URL
+          const imageUrl = `/uploads/${fileName}`;
+          const altText = request.prompt.substring(0, 100);
+          const result = `![${altText}](${imageUrl})`;
+          
+          console.log(`📤 Returning markdown result: ${result}`);
+          return result;
+          
+        } catch (saveError: any) {
+          console.error('❌ Error processing image:', saveError);
+          return `**Image Generation Error**: ${saveError.message || 'Could not process generated image'}\n\n*Please try again with a simpler image description.*`;
         }
+      } else if (part.text) {
+        console.log(`📝 Text part: ${part.text.substring(0, 100)}...`);
       }
     }
 
+    console.error('❌ No image data found in Gemini response');
     throw new Error('No image data found in Gemini response');
     
   } catch (error: any) {
-    console.error('Error generating image with Gemini 2.0 Flash:', error);
+    console.error('❌ Error generating image with Gemini 2.0 Flash:', error);
     
     // Provide more specific error messages
     if (error.message?.includes('content policy') || error.message?.includes('safety')) {
@@ -289,6 +297,8 @@ export async function generateImage(request: ImageGenerationRequest): Promise<st
       throw new Error('Rate limit exceeded. Please try again in a moment.');
     } else if (error.message?.includes('not supported')) {
       throw new Error('Image generation not available in your region. Please check Gemini 2.0 Flash availability.');
+    } else if (error.message?.includes('responseModalities')) {
+      throw new Error('Gemini model configuration error. The service may be temporarily unavailable.');
     } else {
       throw new Error(`Failed to generate image: ${error.message || 'Unknown error'}`);
     }

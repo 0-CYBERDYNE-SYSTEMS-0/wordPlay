@@ -122,9 +122,12 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
                     <div className="bg-white/50 dark:bg-black/20 rounded-xl p-2 backdrop-blur-sm">
                       <Chart 
                         config={chartConfig} 
+                        autoHeight={true}
+                        minHeight={450}
+                        maxHeight={800}
+                        aspectRatio={16/9}
+                        exportQuality="ultra"
                         style={{ 
-                          minHeight: '600px',
-                          height: '600px',
                           background: 'transparent'
                         }}
                       />

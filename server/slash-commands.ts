@@ -32,6 +32,240 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
   }
 }
 
+// SMART TEXT SELECTION: Helper functions for intelligent text boundary detection
+function findParagraphBoundaries(content: string, position: number): { start: number; end: number } {
+  const lines = content.split('\n');
+  let currentPos = 0;
+  let lineIndex = 0;
+  
+  // Find which line contains the position
+  for (let i = 0; i < lines.length; i++) {
+    if (currentPos + lines[i].length >= position) {
+      lineIndex = i;
+      break;
+    }
+    currentPos += lines[i].length + 1; // +1 for newline
+  }
+  
+  // Find paragraph boundaries (empty lines)
+  let paragraphStart = lineIndex;
+  let paragraphEnd = lineIndex;
+  
+  // Find start of paragraph (go backwards until empty line or start)
+  while (paragraphStart > 0 && lines[paragraphStart - 1].trim() !== '') {
+    paragraphStart--;
+  }
+  
+  // Find end of paragraph (go forwards until empty line or end)
+  while (paragraphEnd < lines.length - 1 && lines[paragraphEnd + 1].trim() !== '') {
+    paragraphEnd++;
+  }
+  
+  // Calculate character positions
+  let startPos = 0;
+  for (let i = 0; i < paragraphStart; i++) {
+    startPos += lines[i].length + 1;
+  }
+  
+  let endPos = startPos;
+  for (let i = paragraphStart; i <= paragraphEnd; i++) {
+    endPos += lines[i].length;
+    if (i < paragraphEnd) endPos += 1; // Add newline except for last line
+  }
+  
+  return { start: startPos, end: endPos };
+}
+
+function findSentenceBoundaries(content: string, position: number): { start: number; end: number } {
+  // Simple sentence boundary detection
+  const sentenceEnders = /[.!?]\s+/g;
+  const matches = Array.from(content.matchAll(sentenceEnders));
+  
+  let sentenceStart = 0;
+  let sentenceEnd = content.length;
+  
+  // Find sentence boundaries around the position
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const matchEnd = match.index! + match[0].length;
+    
+    if (matchEnd <= position) {
+      sentenceStart = matchEnd;
+    } else if (match.index! > position && sentenceEnd === content.length) {
+      sentenceEnd = match.index! + 1; // Include the sentence ender
+      break;
+    }
+  }
+  
+  return { start: sentenceStart, end: sentenceEnd };
+}
+
+function findSectionBoundaries(content: string, position: number): { start: number; end: number } {
+  // Look for section markers like headers (# ## ###) or horizontal rules
+  const lines = content.split('\n');
+  let currentPos = 0;
+  let lineIndex = 0;
+  
+  // Find which line contains the position
+  for (let i = 0; i < lines.length; i++) {
+    if (currentPos + lines[i].length >= position) {
+      lineIndex = i;
+      break;
+    }
+    currentPos += lines[i].length + 1;
+  }
+  
+  // Find section boundaries (headers or significant whitespace)
+  let sectionStart = 0;
+  let sectionEnd = lines.length - 1;
+  
+  // Look backwards for section start
+  for (let i = lineIndex; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (line.match(/^#{1,6}\s/) || line.match(/^-{3,}/) || line.match(/^={3,}/)) {
+      sectionStart = i;
+      break;
+    }
+  }
+  
+  // Look forwards for section end
+  for (let i = lineIndex + 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.match(/^#{1,6}\s/) || line.match(/^-{3,}/) || line.match(/^={3,}/)) {
+      sectionEnd = i - 1;
+      break;
+    }
+  }
+  
+  // Calculate character positions
+  let startPos = 0;
+  for (let i = 0; i < sectionStart; i++) {
+    startPos += lines[i].length + 1;
+  }
+  
+  let endPos = startPos;
+  for (let i = sectionStart; i <= sectionEnd; i++) {
+    endPos += lines[i].length;
+    if (i < sectionEnd) endPos += 1;
+  }
+  
+  return { start: startPos, end: endPos };
+}
+
+function expandSelectionIntelligently(
+  content: string,
+  selectionInfo: any,
+  expansionType: 'auto' | 'paragraph' | 'sentence' | 'section' = 'auto'
+): {
+  expandedText: string;
+  expandedStart: number;
+  expandedEnd: number;
+  expansionApplied: string;
+} {
+  // If there's no selection, try to determine current cursor position context
+  if (!selectionInfo.selectedText || selectionInfo.selectedText.trim() === '') {
+    const cursorPosition = selectionInfo.selectionStart || 0;
+    
+    if (expansionType === 'auto') {
+      // Auto-detect best expansion based on content structure
+      const paragraphBounds = findParagraphBoundaries(content, cursorPosition);
+      const paragraphText = content.substring(paragraphBounds.start, paragraphBounds.end).trim();
+      
+      // If paragraph is short (< 100 chars), try section
+      if (paragraphText.length < 100) {
+        const sectionBounds = findSectionBoundaries(content, cursorPosition);
+        const sectionText = content.substring(sectionBounds.start, sectionBounds.end).trim();
+        
+        if (sectionText.length > paragraphText.length && sectionText.length < 2000) {
+          return {
+            expandedText: sectionText,
+            expandedStart: sectionBounds.start,
+            expandedEnd: sectionBounds.end,
+            expansionApplied: 'section'
+          };
+        }
+      }
+      
+      // Default to paragraph
+      return {
+        expandedText: paragraphText,
+        expandedStart: paragraphBounds.start,
+        expandedEnd: paragraphBounds.end,
+        expansionApplied: 'paragraph'
+      };
+    } else if (expansionType === 'paragraph') {
+      const bounds = findParagraphBoundaries(content, cursorPosition);
+      return {
+        expandedText: content.substring(bounds.start, bounds.end).trim(),
+        expandedStart: bounds.start,
+        expandedEnd: bounds.end,
+        expansionApplied: 'paragraph'
+      };
+    } else if (expansionType === 'sentence') {
+      const bounds = findSentenceBoundaries(content, cursorPosition);
+      return {
+        expandedText: content.substring(bounds.start, bounds.end).trim(),
+        expandedStart: bounds.start,
+        expandedEnd: bounds.end,
+        expansionApplied: 'sentence'
+      };
+    } else if (expansionType === 'section') {
+      const bounds = findSectionBoundaries(content, cursorPosition);
+      return {
+        expandedText: content.substring(bounds.start, bounds.end).trim(),
+        expandedStart: bounds.start,
+        expandedEnd: bounds.end,
+        expansionApplied: 'section'
+      };
+    }
+  }
+  
+  // If there is a selection, try to expand it intelligently
+  if (selectionInfo.selectedText && selectionInfo.selectedText.trim() !== '') {
+    const selectionStart = selectionInfo.selectionStart;
+    const selectionEnd = selectionInfo.selectionEnd;
+    const selectedText = selectionInfo.selectedText;
+    
+    // Check if selection is partial (doesn't align with natural boundaries)
+    const paragraphBounds = findParagraphBoundaries(content, selectionStart);
+    const sentenceBounds = findSentenceBoundaries(content, selectionStart);
+    
+    // If selection is much smaller than the paragraph and doesn't align with sentence boundaries
+    if (selectedText.length < 50 && 
+        (selectionStart > sentenceBounds.start + 10 || selectionEnd < sentenceBounds.end - 10)) {
+      
+      if (expansionType === 'auto' || expansionType === 'sentence') {
+        return {
+          expandedText: content.substring(sentenceBounds.start, sentenceBounds.end).trim(),
+          expandedStart: sentenceBounds.start,
+          expandedEnd: sentenceBounds.end,
+          expansionApplied: 'sentence'
+        };
+      }
+    }
+    
+    // If selection is partial paragraph, expand to full paragraph
+    if (selectionStart > paragraphBounds.start + 10 || selectionEnd < paragraphBounds.end - 10) {
+      if (expansionType === 'auto' || expansionType === 'paragraph') {
+        return {
+          expandedText: content.substring(paragraphBounds.start, paragraphBounds.end).trim(),
+          expandedStart: paragraphBounds.start,
+          expandedEnd: paragraphBounds.end,
+          expansionApplied: 'paragraph'
+        };
+      }
+    }
+  }
+  
+  // No expansion needed/possible - return original selection
+  return {
+    expandedText: selectionInfo.selectedText || '',
+    expandedStart: selectionInfo.selectionStart || 0,
+    expandedEnd: selectionInfo.selectionEnd || 0,
+    expansionApplied: 'none'
+  };
+}
+
 // Helper function to parse command parameters - UPDATED to handle custom input
 function parseCommand(command: string): { 
   baseCommand: string; 
@@ -303,12 +537,60 @@ export async function executeSlashCommand(
   appendToContent?: boolean;
   contextOnly?: boolean;
   insertAtCursor?: boolean;
+  smartExpansion?: {
+    applied: string;
+    expandedStart: number;
+    expandedEnd: number;
+  };
 }> {
   // Parse command, parameter, and custom input - UPDATED
   const { baseCommand, parameter, customInput } = parseCommand(command);
   
-  // Analyze content for smart defaults
-  const context = analyzeContentContext(content, selectionInfo);
+  // SMART TEXT SELECTION: Apply intelligent text expansion for better UX
+  let smartSelectionInfo = { ...selectionInfo };
+  let expansionApplied = 'none';
+  let expandedStart = selectionInfo.selectionStart;
+  let expandedEnd = selectionInfo.selectionEnd;
+  
+  // Determine if we should apply smart expansion
+  const shouldExpandSelection = (
+    // Commands that benefit from smart expansion
+    ['improve', 'fix', 'tone', 'rewrite', 'format', 'analyze'].includes(baseCommand) &&
+    (
+      // No selection at all
+      !selectionInfo.selectedText || 
+      // Very small selection (likely accidental)
+      selectionInfo.selectedText.trim().length < 10 ||
+      // Partial word selection
+      (selectionInfo.selectedText.length < 50 && 
+       !selectionInfo.selectedText.includes(' ') && 
+       selectionInfo.selectedText.match(/^\w+$/)
+      )
+    )
+  );
+  
+  if (shouldExpandSelection) {
+    const expansion = expandSelectionIntelligently(content, selectionInfo, 'auto');
+    
+    if (expansion.expansionApplied !== 'none' && expansion.expandedText.trim().length > 0) {
+      smartSelectionInfo = {
+        ...selectionInfo,
+        selectedText: expansion.expandedText,
+        selectionStart: expansion.expandedStart,
+        selectionEnd: expansion.expandedEnd,
+        beforeSelection: content.substring(0, expansion.expandedStart),
+        afterSelection: content.substring(expansion.expandedEnd)
+      };
+      expansionApplied = expansion.expansionApplied;
+      expandedStart = expansion.expandedStart;
+      expandedEnd = expansion.expandedEnd;
+      
+      console.log(`Smart expansion applied: ${expansionApplied} (${expansion.expandedText.length} chars)`);
+    }
+  }
+  
+  // Analyze content for smart defaults using the potentially expanded selection
+  const context = analyzeContentContext(content, smartSelectionInfo);
   
   // Enhanced context analysis for smart commands (if needed in future)
   let enhancedContext: any = null;
@@ -324,16 +606,21 @@ export async function executeSlashCommand(
   // Determine which model to use based on provider
   const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
   
-  // The context is either the selected text (if any) or the entire content
-  const textContext = selectionInfo.selectedText || content;
+  // The context is either the selected text (potentially expanded) or the entire content
+  const textContext = smartSelectionInfo.selectedText || content;
   
   // Default response
   let defaultResponse = {
-    result: selectionInfo.selectedText || "",
+    result: smartSelectionInfo.selectedText || "",
     message: "Could not process the command.",
-    replaceSelection: Boolean(selectionInfo.selectedText),
+    replaceSelection: Boolean(smartSelectionInfo.selectedText),
     replaceEntireContent: false,
-    appendToContent: false
+    appendToContent: false,
+    smartExpansion: expansionApplied !== 'none' ? {
+      applied: expansionApplied,
+      expandedStart,
+      expandedEnd
+    } : undefined
   };
   
   // Determine which command to execute
@@ -352,7 +639,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           continueInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput,
           enhancedContext
         );
@@ -366,7 +653,7 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `You are an expert editor. Improve the text according to this specific guidance: ${customInput}. Make targeted improvements rather than wholesale rewrites.`,
             textContext,
-            selectionInfo,
+            smartSelectionInfo,
             customInput,
             enhancedContext
           );
@@ -376,42 +663,42 @@ export async function executeSlashCommand(
               systemPrompt = createToolBasedPrompt(
                 `You are an expert editor focused on clarity. For the given text, identify specific sentences or phrases that need improvement for clarity. Find unclear expressions, ambiguous language, or overly complex sentences and provide precise replacements. DO NOT rewrite the entire text - only fix specific unclear parts.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'engagement':
               systemPrompt = createToolBasedPrompt(
                 `You are an expert editor focused on engagement. Identify specific weak or boring sentences/phrases and provide more compelling alternatives. Add vivid language and stronger hooks where needed. Make targeted improvements, not wholesale rewrites.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'flow':
               systemPrompt = createToolBasedPrompt(
                 `You are an expert editor focused on flow. Identify specific transition problems, awkward sentence connections, or logical gaps. Provide targeted fixes to improve transitions and coherence. Focus on specific sentences that break the flow.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'word-choice':
               systemPrompt = createToolBasedPrompt(
                 `You are an expert editor focused on word choice. Identify specific weak, imprecise, or inappropriate words/phrases and provide stronger alternatives. Make targeted vocabulary improvements while maintaining the original meaning.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             default:
               systemPrompt = createToolBasedPrompt(
                 `You are an expert editor. Analyze the text and identify specific sentences or phrases that need improvement for clarity, flow, and readability. Provide targeted fixes rather than rewriting everything. Focus on the most impactful changes.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
           }
         } else {
           systemPrompt = createToolBasedPrompt(
             `You are an expert editor. Based on the content's ${context.complexity} complexity and ${context.tone} tone, identify specific problems and provide targeted improvements. Focus on surgical edits rather than wholesale rewrites.`,
             textContext,
-            selectionInfo
+            smartSelectionInfo
           );
         }
         userPrompt = `Please improve this text with targeted edits:\n\n${textContext}`;
@@ -427,7 +714,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           summaryInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Summarize this text:\n\n${textContext}`;
@@ -438,7 +725,7 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `Generate additional content that expands upon the given text following this specific guidance: ${customInput}. This content will be added to the existing text.`,
             textContext,
-            selectionInfo,
+            smartSelectionInfo,
             customInput,
             enhancedContext
           );
@@ -448,35 +735,35 @@ export async function executeSlashCommand(
               systemPrompt = createToolBasedPrompt(
                 `Generate additional content with concrete examples, case studies, or real-world illustrations that support and clarify the main points. This content will be added to the existing text.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'detail':
               systemPrompt = createToolBasedPrompt(
                 `Generate additional content with more specific details, explanations, and depth that expands on the given text. This content will be added to the existing text.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'context':
               systemPrompt = createToolBasedPrompt(
                 `Generate additional content with background information, historical context, or broader implications. This content will be added to the existing text.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'analysis':
               systemPrompt = createToolBasedPrompt(
                 `Generate additional content with deeper analysis, critical thinking, implications, and connections. This content will be added to the existing text.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             default:
               systemPrompt = createToolBasedPrompt(
                 `Generate additional content that expands upon the given text by adding more detail, examples, evidence, or context. This content will be added to the existing text.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
           }
         } else {
@@ -485,7 +772,7 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `Generate additional content that expands upon the given text by adding ${expandStyle}. This content will be added to the existing text.`,
             textContext,
-            selectionInfo
+            smartSelectionInfo
           );
         }
         userPrompt = `Expand on this content:\n\n${textContext}`;
@@ -499,7 +786,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           listInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Transform this content into a list:\n\n${textContext}`;
@@ -510,7 +797,7 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `Rewrite the text according to this specific guidance: ${customInput}. Preserve all key information while following the guidance.`,
             textContext,
-            selectionInfo,
+            smartSelectionInfo,
             customInput
           );
         } else if (parameter && parameter !== 'custom') {
@@ -519,42 +806,42 @@ export async function executeSlashCommand(
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text using simpler language, shorter sentences, and clearer structure. Make it accessible to a broader audience while preserving all key information.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'formal':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text in a more formal, professional tone suitable for business or academic contexts. Use sophisticated vocabulary and formal structure.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'engaging':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text to be more engaging, compelling, and interesting. Use vivid language, varied sentence structure, and techniques that capture reader attention.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'different-angle':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text from a completely different angle or viewpoint while preserving the core information. Change the approach, structure, or perspective to offer fresh insights.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             default:
               systemPrompt = createToolBasedPrompt(
                 `Completely rewrite the text in a fresh way while preserving all the key information and overall message. Change sentence structures, word choices, and flow, but keep the meaning intact.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
           }
         } else {
           systemPrompt = createToolBasedPrompt(
             `Completely rewrite the text in a fresh way while preserving all the key information and overall message. Based on the content's ${context.tone} tone, make it more ${context.complexity === 'complex' ? 'accessible' : 'sophisticated'} while keeping the meaning intact.`,
             textContext,
-            selectionInfo
+            smartSelectionInfo
           );
         }
         userPrompt = `Rewrite this content:\n\n${textContext}`;
@@ -570,7 +857,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           suggestInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Generate ideas based on this content:\n\n${content}`;
@@ -584,7 +871,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           outlineInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Create an outline from this content:\n\n${textContext}`;
@@ -598,7 +885,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           formatInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Improve formatting of this content:\n\n${textContext}`;
@@ -609,7 +896,7 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `Rewrite the text to match this specific tone: ${customInput}. Adjust formality, warmth, authority, and other tone aspects while preserving the core message.`,
             textContext,
-            selectionInfo,
+            smartSelectionInfo,
             customInput
           );
         } else if (parameter && parameter !== 'custom') {
@@ -618,42 +905,42 @@ export async function executeSlashCommand(
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text in a professional, business-appropriate tone. Use formal language, clear structure, and authoritative voice suitable for workplace communication.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'casual':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text in a casual, friendly tone as if speaking to a friend. Use conversational language, contractions, and a relaxed approach while maintaining clarity.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'academic':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text in a scholarly, academic tone. Use formal vocabulary, precise language, and analytical approach suitable for academic or research contexts.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'friendly':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text in a friendly, approachable tone. Use warm language, inclusive expressions, and a welcoming voice that builds connection with readers.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             case 'authoritative':
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text with confidence and authority. Use decisive language, strong statements, and expert positioning to establish credibility and leadership.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
               break;
             default:
               systemPrompt = createToolBasedPrompt(
                 `Rewrite the text to improve its tone, making it more professional, engaging, and appropriate for the apparent context. Adjust formality, warmth, authority, and other tone aspects while preserving the core message.`,
                 textContext,
-                selectionInfo
+                smartSelectionInfo
               );
           }
         } else {
@@ -662,7 +949,7 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `Rewrite the text to make it ${suggestedTone} while preserving the core message. Adjust formality, warmth, and authority as appropriate.`,
             textContext,
-            selectionInfo
+            smartSelectionInfo
           );
         }
         userPrompt = `Adjust tone of this content:\n\n${textContext}`;
@@ -676,7 +963,7 @@ export async function executeSlashCommand(
         systemPrompt = createToolBasedPrompt(
           fixInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Fix grammar and spelling in this content:\n\n${textContext}`;
@@ -687,20 +974,20 @@ export async function executeSlashCommand(
           systemPrompt = createToolBasedPrompt(
             `Translate the text according to this guidance: ${customInput}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural.`,
             textContext,
-            selectionInfo,
+            smartSelectionInfo,
             customInput
           );
         } else if (parameter && parameter !== 'custom' && parameter !== 'other') {
           systemPrompt = createToolBasedPrompt(
             `Translate the text accurately into ${parameter}. Maintain the original meaning, tone, and style while ensuring the translation sounds natural in the target language.`,
             textContext,
-            selectionInfo
+            smartSelectionInfo
           );
         } else {
           systemPrompt = createToolBasedPrompt(
             `Translate the text into Spanish (or ask the user to specify a language if the intent is unclear). Maintain the original meaning, tone, and style while ensuring the translation sounds natural.`,
             textContext,
-            selectionInfo
+            smartSelectionInfo
           );
         }
         userPrompt = `Translate this content:\n\n${textContext}`;
@@ -723,7 +1010,7 @@ Format your analysis clearly with headers and bullet points. Be specific and act
         systemPrompt = createToolBasedPrompt(
           analyzeInstruction,
           textContext,
-          selectionInfo,
+          smartSelectionInfo,
           customInput
         );
         userPrompt = `Analyze this content:\n\n${textContext}`;
@@ -845,13 +1132,23 @@ Format your analysis clearly with headers and bullet points. Be specific and act
     
     // SELECTION-ONLY commands: Only work on selected text, require selection
     if (['improve', 'fix', 'tone', 'rewrite', 'translate', 'format'].includes(baseCommand)) {
-      if (selectionInfo.selectedText) {
+      if (smartSelectionInfo.selectedText) {
+        let message = `Applied ${action} to the selected text.`;
+        if (expansionApplied !== 'none') {
+          message = `Applied ${action} to the current ${expansionApplied} (smart expansion applied).`;
+        }
+        
         return {
           result: generatedText,
-          message: `Applied ${action} to the selected text.`,
+          message,
           replaceSelection: true,
           replaceEntireContent: false,
-          appendToContent: false
+          appendToContent: false,
+          smartExpansion: expansionApplied !== 'none' ? {
+            applied: expansionApplied,
+            expandedStart,
+            expandedEnd
+          } : undefined
         };
       } else {
         // For these commands, if no selection, work on entire document but warn user
@@ -868,13 +1165,23 @@ Format your analysis clearly with headers and bullet points. Be specific and act
 
     
     // DEFAULT: Replace selection if available, otherwise entire content
-    if (selectionInfo.selectedText) {
+    if (smartSelectionInfo.selectedText) {
+      let message = `Applied ${action} to the selected text.`;
+      if (expansionApplied !== 'none') {
+        message = `Applied ${action} to the current ${expansionApplied} (smart expansion applied).`;
+      }
+      
       return {
         result: generatedText,
-        message: `Applied ${action} to the selected text.`,
+        message,
         replaceSelection: true,
         replaceEntireContent: false,
-        appendToContent: false
+        appendToContent: false,
+        smartExpansion: expansionApplied !== 'none' ? {
+          applied: expansionApplied,
+          expandedStart,
+          expandedEnd
+        } : undefined
       };
     } else {
       return {

@@ -2,13 +2,14 @@ import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
-import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, WifiOff, Info, Maximize, Minimize, Undo, Redo } from "lucide-react";
+import { Edit, Search, Code, BarChart2, Save, CheckCircle, AlertTriangle, Wifi, WifiOff, Info, Maximize, Minimize, Undo, Redo, Download, FileText } from "lucide-react";
 import { useAISuggestions } from "@/hooks/use-ai-suggestions";
 import { useUndoRedo } from "@/hooks/use-undo-redo";
 import SlashCommandsPopup from "@/components/SlashCommandsPopup";
 import { GuidedHint } from "@/components/HelpTooltip";
 import { useSettings } from "@/providers/SettingsProvider";
 import RichMarkdownEditor from "@/components/RichMarkdownEditor";
+import { exportDocumentToPDF, exportDocumentToImage, printDocument, getOptimalExportSettings } from "@/utils/export-utils";
 
 interface EditorProps {
   title: string;

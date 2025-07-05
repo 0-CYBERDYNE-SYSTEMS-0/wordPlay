@@ -5,6 +5,21 @@ import OpenAI from "openai";
 export const DEFAULT_MODEL = "o3-mini";
 const DEFAULT_PROVIDER = "openai";
 
+// Connection test interfaces
+export interface AIServiceStatus {
+  service: 'openai' | 'ollama';
+  available: boolean;
+  error?: string;
+  latency?: number;
+  models?: string[];
+}
+
+export interface ConnectionTestResult {
+  openai: AIServiceStatus;
+  ollama: AIServiceStatus;
+  recommended: 'openai' | 'ollama' | 'none';
+}
+
 // Helper function to detect if a model is an o3 model
 export function isO3Model(model: string): boolean {
   return model.startsWith('o3') || model.startsWith('o-3');
@@ -45,6 +60,141 @@ export function prepareO3Parameters(params: any): any {
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY || "default_key" 
 });
+
+// Connection testing utilities
+export async function testOpenAIConnection(): Promise<AIServiceStatus> {
+  const startTime = Date.now();
+  
+  try {
+    // Check if API key is properly configured
+    if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "default_key") {
+      return {
+        service: 'openai',
+        available: false,
+        error: 'OpenAI API key not configured. Set OPENAI_API_KEY environment variable.',
+        latency: 0
+      };
+    }
+
+    // Test connection by listing models
+    const models = await openai.models.list();
+    const latency = Date.now() - startTime;
+    
+    const modelNames = models.data.map(model => model.id);
+    
+    // Check if our default model is available
+    const hasDefaultModel = modelNames.includes(DEFAULT_MODEL);
+    
+    return {
+      service: 'openai',
+      available: true,
+      latency,
+      models: modelNames.slice(0, 10), // Return first 10 models
+      error: hasDefaultModel ? undefined : `Default model ${DEFAULT_MODEL} not available. Available models: ${modelNames.slice(0, 5).join(', ')}`
+    };
+  } catch (error: any) {
+    const latency = Date.now() - startTime;
+    
+    let errorMessage = 'Unknown OpenAI connection error';
+    
+    if (error.status === 401) {
+      errorMessage = 'Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable.';
+    } else if (error.status === 429) {
+      errorMessage = 'OpenAI API rate limit exceeded. Please try again later.';
+    } else if (error.status === 503) {
+      errorMessage = 'OpenAI API is temporarily unavailable. Please try again later.';
+    } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      errorMessage = 'Cannot connect to OpenAI API. Please check your internet connection.';
+    } else if (error.message) {
+      errorMessage = `OpenAI API error: ${error.message}`;
+    }
+    
+    return {
+      service: 'openai',
+      available: false,
+      error: errorMessage,
+      latency
+    };
+  }
+}
+
+export async function testOllamaConnection(): Promise<AIServiceStatus> {
+  const startTime = Date.now();
+  const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
+  
+  try {
+    // Test if Ollama server is reachable
+    const healthResponse = await fetch(`${ollamaUrl}/api/tags`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (!healthResponse.ok) {
+      throw new Error(`Ollama server responded with status ${healthResponse.status}`);
+    }
+    
+    const data = await healthResponse.json();
+    const latency = Date.now() - startTime;
+    
+    const models = data.models || [];
+    const modelNames = models.map((model: any) => model.name);
+    
+    // Check if our default model is available
+    const hasDefaultModel = modelNames.some((name: string) => name.includes('qwen3'));
+    
+    return {
+      service: 'ollama',
+      available: true,
+      latency,
+      models: modelNames,
+      error: hasDefaultModel ? undefined : 'Default model qwen3:4b not available. Please run: ollama pull qwen3:4b'
+    };
+  } catch (error: any) {
+    const latency = Date.now() - startTime;
+    
+    let errorMessage = 'Unknown Ollama connection error';
+    
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage = `Cannot connect to Ollama server at ${ollamaUrl}. Please ensure Ollama is running and accessible.`;
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = `Ollama server not found at ${ollamaUrl}. Please check the OLLAMA_URL environment variable.`;
+    } else if (error.message) {
+      errorMessage = `Ollama error: ${error.message}`;
+    }
+    
+    return {
+      service: 'ollama',
+      available: false,
+      error: errorMessage,
+      latency
+    };
+  }
+}
+
+export async function testAIConnections(): Promise<ConnectionTestResult> {
+  const [openaiStatus, ollamaStatus] = await Promise.all([
+    testOpenAIConnection(),
+    testOllamaConnection()
+  ]);
+  
+  // Determine recommended service
+  let recommended: 'openai' | 'ollama' | 'none' = 'none';
+  
+  if (openaiStatus.available && ollamaStatus.available) {
+    // Prefer OpenAI if both are available (generally more reliable)
+    recommended = 'openai';
+  } else if (openaiStatus.available) {
+    recommended = 'openai';
+  } else if (ollamaStatus.available) {
+    recommended = 'ollama';
+  }
+  
+  return {
+    openai: openaiStatus,
+    ollama: ollamaStatus,
+    recommended
+  };
+}
 
 // Utility function to build OpenAI API parameters based on model type
 export function buildOpenAIParams(model: string, baseParams: any): any {
@@ -118,8 +268,50 @@ async function callOllama(model: string, prompt: string, requestJson: boolean = 
     return data.message.content;
   } catch (err: any) {
     console.error("Ollama fetch error:", err);
+    
+    // Provide specific error messages for common issues
+    if (err.code === 'ECONNREFUSED') {
+      throw new Error(`Cannot connect to Ollama server at ${process.env.OLLAMA_URL || 'http://localhost:11434'}. Please ensure Ollama is running.`);
+    } else if (err.code === 'ENOTFOUND') {
+      throw new Error(`Ollama server not found. Please check your OLLAMA_URL environment variable.`);
+    } else if (err.message.includes('404')) {
+      throw new Error(`Model '${model}' not found. Please run: ollama pull ${model}`);
+    } else if (err.message.includes('timeout')) {
+      throw new Error(`Ollama request timed out. The model might be loading or the server is overloaded.`);
+    }
+    
     throw new Error(`Ollama error: ${err.message}`);
   }
+}
+
+// Enhanced function with automatic fallback
+export async function callAIWithFallback(
+  prompt: string,
+  preferredProvider: 'openai' | 'ollama' = 'openai',
+  model?: string,
+  style?: any
+): Promise<{ result: string; provider: 'openai' | 'ollama'; error?: string }> {
+  const providers: ('openai' | 'ollama')[] = preferredProvider === 'openai' ? ['openai', 'ollama'] : ['ollama', 'openai'];
+  
+  let lastError = '';
+  
+  for (const provider of providers) {
+    try {
+      if (provider === 'openai') {
+        const result = await generateTextCompletion('', style || {}, prompt, 'openai', model);
+        return { result, provider: 'openai' };
+      } else {
+        const result = await generateTextCompletion('', style || {}, prompt, 'ollama', model);
+        return { result, provider: 'ollama' };
+      }
+    } catch (error: any) {
+      lastError = error.message;
+      console.warn(`${provider} failed, trying fallback:`, error.message);
+      continue;
+    }
+  }
+  
+  throw new Error(`All AI providers failed. Last error: ${lastError}`);
 }
 
 // Generate text based on the current content and user's writing style
@@ -174,6 +366,20 @@ export async function generateTextCompletion(
     return response.choices[0].message.content || "";
   } catch (error: any) {
     console.error("Error generating text completion:", error.message);
+    
+    // Provide specific error messages for common OpenAI issues
+    if (error.status === 401) {
+      throw new Error("Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable.");
+    } else if (error.status === 429) {
+      throw new Error("OpenAI API rate limit exceeded. Please try again later or check your usage limits.");
+    } else if (error.status === 503) {
+      throw new Error("OpenAI API is temporarily unavailable. Please try again later.");
+    } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+      throw new Error("Cannot connect to OpenAI API. Please check your internet connection.");
+    } else if (error.message?.includes('model')) {
+      throw new Error(`Model error: ${error.message}. Try using a different model.`);
+    }
+    
     throw new Error("Failed to generate text: " + error.message);
   }
 }

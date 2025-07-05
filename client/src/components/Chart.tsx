@@ -1,22 +1,63 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import * as echarts from 'echarts';
+import { useSettings } from '@/providers/SettingsProvider';
+import { exportChart, ExportOptions } from '@/utils/export-utils';
 
 interface ChartProps {
   config: any;
   className?: string;
   style?: React.CSSProperties;
+  autoHeight?: boolean;
+  minHeight?: number;
+  maxHeight?: number;
+  aspectRatio?: number;
+  exportQuality?: 'standard' | 'high' | 'ultra';
 }
 
-export default function Chart({ config, className = '', style }: ChartProps) {
+export interface ChartRef {
+  exportChart: (options: ExportOptions) => Promise<string>;
+  getChartInstance: () => echarts.ECharts | null;
+  resize: () => void;
+}
+
+const Chart = forwardRef<ChartRef, ChartProps>(({ 
+  config, 
+  className = '', 
+  style, 
+  autoHeight = true,
+  minHeight = 400,
+  maxHeight = 800,
+  aspectRatio = 16/9,
+  exportQuality = 'high'
+}, ref) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
+  const { settings } = useSettings();
+  const [dynamicHeight, setDynamicHeight] = useState(500);
+  
+  // Expose chart methods via ref
+  useImperativeHandle(ref, () => ({
+    exportChart: async (options: ExportOptions) => {
+      if (!chartInstance.current) {
+        throw new Error('Chart instance not available');
+      }
+      return await exportChart(chartInstance.current, options);
+    },
+    getChartInstance: () => chartInstance.current,
+    resize: () => {
+      if (chartInstance.current) {
+        chartInstance.current.resize();
+      }
+    }
+  }));
 
   useEffect(() => {
     if (!chartRef.current) return;
 
-    // Initialize chart with high-quality rendering options
+    // Initialize chart with ultra-high-quality rendering options
+    const pixelRatio = exportQuality === 'ultra' ? 4 : exportQuality === 'high' ? 3 : (window.devicePixelRatio || 2);
     chartInstance.current = echarts.init(chartRef.current, null, {
-      devicePixelRatio: window.devicePixelRatio || 2, // High DPI support
+      devicePixelRatio: pixelRatio, // Ultra-high DPI support for exports
       renderer: 'canvas', // Use canvas for better performance and quality
       useDirtyRect: true, // Performance optimization
       width: 'auto',
@@ -81,50 +122,94 @@ export default function Chart({ config, className = '', style }: ChartProps) {
       
       console.log('📊 Parsed chart config:', JSON.stringify(chartConfig, null, 2));
       
-      // Enhanced chart configuration with defaults
+      // Calculate dynamic height based on content
+      const calculateDynamicHeight = () => {
+        if (!autoHeight) return 500;
+        
+        const containerWidth = chartRef.current?.clientWidth || 800;
+        const calculatedHeight = Math.max(
+          minHeight,
+          Math.min(maxHeight, containerWidth / aspectRatio)
+        );
+        
+        // Adjust based on data complexity
+        const hasMultipleSeries = chartConfig.series?.length > 1;
+        const hasLegend = chartConfig.legend;
+        const complexityFactor = hasMultipleSeries || hasLegend ? 1.2 : 1;
+        
+        return Math.round(calculatedHeight * complexityFactor);
+      };
+      
+      const newHeight = calculateDynamicHeight();
+      setDynamicHeight(newHeight);
+      
+      // Enhanced chart configuration with dynamic sizing and premium styling
       const enhancedConfig = {
         ...chartConfig,
-        // Ensure responsive grid
+        // Ensure responsive grid with dynamic spacing
         grid: {
           containLabel: true,
-          top: 80,
-          right: 80,
-          bottom: 80,
-          left: 100,
+          top: Math.max(60, newHeight * 0.12),
+          right: Math.max(60, newHeight * 0.1),
+          bottom: Math.max(60, newHeight * 0.12),
+          left: Math.max(80, newHeight * 0.12),
           ...chartConfig.grid
         },
-        // Enhance animations
+        // Ultra-smooth animations with spring physics
         animation: true,
-        animationDuration: 1000,
-        animationEasing: 'cubicOut',
-        // Enhance tooltip
+        animationDuration: 1200,
+        animationEasing: 'elasticOut',
+        animationDelayUpdate: 300,
+        // Premium tooltip with glass-morphism
         tooltip: {
           trigger: 'axis',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-          borderColor: '#ccc',
+          backgroundColor: settings.theme === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          borderColor: settings.theme === 'dark' ? '#444' : '#ccc',
           borderWidth: 1,
+          borderRadius: 12,
+          padding: [12, 16],
           textStyle: {
-            color: '#333'
+            color: settings.theme === 'dark' ? '#fff' : '#333',
+            fontSize: 13,
+            fontWeight: '500'
           },
+          boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
           ...chartConfig.tooltip
-        }
+        },
+        // Enhanced legend with better positioning
+        legend: chartConfig.legend ? {
+          ...chartConfig.legend,
+          textStyle: {
+            color: settings.theme === 'dark' ? '#ccc' : '#666',
+            fontSize: 12,
+            fontWeight: '500',
+            ...chartConfig.legend?.textStyle
+          }
+        } : chartConfig.legend
       };
       
       // Set chart options
       chartInstance.current.setOption(enhancedConfig, true);
       console.log('✅ Chart options set successfully');
       
-      // Handle resize
+      // Enhanced resize handler with debouncing
+      let resizeTimeout: NodeJS.Timeout;
       const handleResize = () => {
-        if (chartInstance.current) {
-          chartInstance.current.resize();
-        }
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+          if (chartInstance.current && chartRef.current) {
+            const newHeight = calculateDynamicHeight();
+            setDynamicHeight(newHeight);
+            chartInstance.current.resize();
+          }
+        }, 150);
       };
       
       window.addEventListener('resize', handleResize);
       
       return () => {
         window.removeEventListener('resize', handleResize);
+        clearTimeout(resizeTimeout);
       };
     } catch (error) {
       console.error('❌ Error rendering chart:', error);
@@ -167,8 +252,8 @@ export default function Chart({ config, className = '', style }: ChartProps) {
         className={`chart-container ${className} flex items-center justify-center`}
         style={{ 
           width: '100%', 
-          minHeight: '500px',
-          height: '500px',
+          minHeight: `${minHeight}px`,
+          height: `${dynamicHeight}px`,
           background: 'transparent',
           borderRadius: '12px',
           border: '2px dashed #ccc',
@@ -189,13 +274,18 @@ export default function Chart({ config, className = '', style }: ChartProps) {
       className={`chart-container ${className}`}
       style={{ 
         width: '100%', 
-        minHeight: '500px',
-        height: '500px',
+        minHeight: `${minHeight}px`,
+        height: `${dynamicHeight}px`,
         background: 'transparent',
         borderRadius: '12px',
         overflow: 'hidden',
+        transition: 'height 0.3s ease-in-out',
         ...style 
       }}
     />
   );
-}
+});
+
+Chart.displayName = 'Chart';
+
+export default Chart;

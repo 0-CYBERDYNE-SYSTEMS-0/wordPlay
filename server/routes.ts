@@ -503,9 +503,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(result);
     } catch (error: any) {
       console.error("Error executing slash command:", error);
-      res.status(500).json({ 
-        message: "Failed to execute slash command",
-        error: error.message || "Unknown error"
+      
+      // Provide specific error messages and troubleshooting steps
+      let errorMessage = "Failed to execute slash command";
+      let troubleshooting: string[] = [];
+      let statusCode = 500;
+      
+      if (error.message?.includes('OpenAI API key')) {
+        errorMessage = "OpenAI configuration issue";
+        troubleshooting = [
+          "Set your OpenAI API key: export OPENAI_API_KEY=your_api_key",
+          "Verify your API key at https://platform.openai.com/api-keys",
+          "Check your OpenAI account has sufficient credits"
+        ];
+        statusCode = 401;
+      } else if (error.message?.includes('Ollama')) {
+        errorMessage = "Ollama connection issue";
+        troubleshooting = [
+          "Start Ollama server: ollama serve",
+          "Pull required model: ollama pull qwen3:4b",
+          "Check Ollama is running on port 11434: curl http://localhost:11434/api/tags",
+          "Set custom Ollama URL if needed: export OLLAMA_URL=http://your-ollama-server:11434"
+        ];
+        statusCode = 503;
+      } else if (error.message?.includes('rate limit')) {
+        errorMessage = "API rate limit exceeded";
+        troubleshooting = [
+          "Wait a few minutes before trying again",
+          "Check your API usage limits",
+          "Consider upgrading your API plan",
+          "Try switching to Ollama as a fallback"
+        ];
+        statusCode = 429;
+      } else if (error.message?.includes('model')) {
+        errorMessage = "AI model issue";
+        troubleshooting = [
+          "Try using a different model",
+          "For OpenAI: use gpt-4o-mini or gpt-3.5-turbo",
+          "For Ollama: ensure the model is downloaded with 'ollama pull model_name'",
+          "Check model availability in your API account"
+        ];
+        statusCode = 400;
+      } else if (error.message?.includes('timeout') || error.message?.includes('ECONNREFUSED')) {
+        errorMessage = "Connection timeout or server unavailable";
+        troubleshooting = [
+          "Check your internet connection",
+          "Verify the AI service is accessible",
+          "Try again in a few moments",
+          "Switch to an alternative AI provider"
+        ];
+        statusCode = 503;
+      } else if (error.message?.includes('All AI providers failed')) {
+        errorMessage = "All AI services are unavailable";
+        troubleshooting = [
+          "Check both OpenAI API key and Ollama server status",
+          "Use the /api/ai/test endpoint to diagnose connectivity",
+          "Ensure at least one AI service is properly configured",
+          "Check the server logs for detailed error information"
+        ];
+        statusCode = 503;
+      }
+      
+      res.status(statusCode).json({ 
+        message: errorMessage,
+        error: error.message || "Unknown error",
+        troubleshooting,
+        timestamp: new Date().toISOString()
       });
     }
   });
@@ -554,6 +617,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: "Failed to parse AI response",
         error: error.message || "Unknown error"
+      });
+    }
+  });
+
+  // AI Connection test endpoint for debugging
+  app.get("/api/ai/test", async (req: Request, res: Response) => {
+    try {
+      const { testAIConnections } = await import("./openai");
+      const connectionStatus = await testAIConnections();
+      
+      res.json({
+        status: "success",
+        timestamp: new Date().toISOString(),
+        ...connectionStatus,
+        troubleshooting: {
+          openai: connectionStatus.openai.available ? null : [
+            "Set your OpenAI API key: export OPENAI_API_KEY=your_api_key",
+            "Verify your API key at https://platform.openai.com/api-keys",
+            "Check your account has sufficient credits",
+            "Ensure your API key has the correct permissions"
+          ],
+          ollama: connectionStatus.ollama.available ? null : [
+            "Install Ollama from https://ollama.ai",
+            "Start Ollama server: ollama serve",
+            "Pull a model: ollama pull qwen3:4b",
+            "Check server status: curl http://localhost:11434/api/tags",
+            "Set custom URL if needed: export OLLAMA_URL=http://your-server:11434"
+          ]
+        }
+      });
+    } catch (error: any) {
+      console.error("Error testing AI connections:", error);
+      res.status(500).json({
+        status: "error",
+        message: "Failed to test AI connections",
+        error: error.message,
+        timestamp: new Date().toISOString(),
+        troubleshooting: [
+          "Check if the server can access external APIs",
+          "Verify network connectivity",
+          "Check firewall settings",
+          "Ensure environment variables are properly set"
+        ]
       });
     }
   });

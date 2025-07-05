@@ -145,10 +145,18 @@ export function useSlashCommands({
           description: data.message || 'New content has been inserted.',
         });
       } else if (data.replaceSelection && selectionInfo.selectedText) {
-        // Replace just the selection
-        setContent(
-          selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
-        );
+        // Replace just the selection (potentially with smart expansion)
+        if (data.smartExpansion) {
+          // Use smart expansion boundaries for replacement
+          const beforeExpansion = content.substring(0, data.smartExpansion.expandedStart);
+          const afterExpansion = content.substring(data.smartExpansion.expandedEnd);
+          setContent(beforeExpansion + data.result + afterExpansion);
+        } else {
+          // Use original selection boundaries
+          setContent(
+            selectionInfo.beforeSelection + data.result + selectionInfo.afterSelection
+          );
+        }
         toast({
           title: 'Selection Updated',
           description: data.message || 'Selected text has been updated.',
