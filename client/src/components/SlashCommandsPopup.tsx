@@ -1,39 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Type, 
-  List, 
   Sparkles, 
-  MessageSquare, 
   CheckSquare, 
-  Wand2, 
   FileText, 
   Lightbulb,
   Pencil,
-  Zap,
-  TreePine,
-  Layout,
-  Globe,
-  BarChart2,
   Undo,
-  Table,
-  Image,
-  TrendingUp,
-  Database,
-  AlertTriangle,
-  CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  Edit3,
-  Settings,
-  Info,
-  Plus,
-  Replace,
-  ArrowRight,
-  FileEdit,
-  Eye,
-  Brush,
-  Target,
-  Shield
+  ArrowRight
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -42,26 +16,6 @@ import { useApiProcessing } from '@/hooks/use-api-processing';
 import AIProcessingIndicator from './AIProcessingIndicator';
 import { createAIResponseParser, type ParsedAIResponse } from '@/lib/aiResponseParser';
 import { useSettings } from '@/providers/SettingsProvider';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 
 interface SlashCommandsPopupProps {
   isOpen: boolean;
@@ -83,301 +37,66 @@ export interface SlashCommand {
   description: string;
   icon: React.ReactNode;
   action: string;
-  category: string;
-  hasParameters?: boolean;
-  parameters?: string[];
   shortcut?: string;
 }
 
-export const ALL_SLASH_COMMANDS: SlashCommand[] = [
-  // Creation Commands
+// Simplified, essential commands only
+const SLASH_COMMANDS: SlashCommand[] = [
   {
     id: 'continue',
     title: 'Continue writing',
     description: 'Continue the text with AI assistance',
     icon: <Type className="h-4 w-4" />,
     action: 'continue',
-    category: 'creation',
     shortcut: '1'
+  },
+  {
+    id: 'improve',
+    title: 'Improve writing',
+    description: 'Enhance clarity and readability',
+    icon: <Sparkles className="h-4 w-4" />,
+    action: 'improve',
+    shortcut: '2'
+  },
+  {
+    id: 'fix',
+    title: 'Fix grammar',
+    description: 'Correct grammar and spelling',
+    icon: <CheckSquare className="h-4 w-4" />,
+    action: 'fix',
+    shortcut: '3'
+  },
+  {
+    id: 'summarize',
+    title: 'Summarize',
+    description: 'Create a concise summary',
+    icon: <FileText className="h-4 w-4" />,
+    action: 'summarize',
+    shortcut: '4'
+  },
+  {
+    id: 'rewrite',
+    title: 'Rewrite',
+    description: 'Rewrite the selected text',
+    icon: <Pencil className="h-4 w-4" />,
+    action: 'rewrite',
+    shortcut: '5'
   },
   {
     id: 'suggest',
-    title: 'Ideas',
-    description: 'Get new ideas related to your content',
+    title: 'Get ideas',
+    description: 'Generate ideas and suggestions',
     icon: <Lightbulb className="h-4 w-4" />,
     action: 'suggest',
-    category: 'creation',
-    shortcut: '2'
-  },
-
-  // Enhancement Commands
-  {
-    id: 'improve',
-    title: 'Improve writing',
-    description: 'Enhance clarity and readability',
-    icon: <Sparkles className="h-4 w-4" />,
-    action: 'improve',
-    category: 'enhancement',
-    hasParameters: true,
-    parameters: ['clarity', 'engagement', 'flow', 'word-choice'],
-    shortcut: '3'
-  },
-  {
-    id: 'expand',
-    title: 'Expand',
-    description: 'Elaborate on the current text',
-    icon: <Wand2 className="h-4 w-4" />,
-    action: 'expand',
-    category: 'enhancement',
-    hasParameters: true,
-    parameters: ['examples', 'detail', 'context', 'analysis'],
-    shortcut: '4'
-  },
-  {
-    id: 'rewrite',
-    title: 'Rewrite',
-    description: 'Rewrite the selected text',
-    icon: <Pencil className="h-4 w-4" />,
-    action: 'rewrite',
-    category: 'enhancement',
-    hasParameters: true,
-    parameters: ['simpler', 'formal', 'engaging', 'different-angle'],
-    shortcut: '5'
-  },
-  {
-    id: 'simplify',
-    title: 'Simplify',
-    description: 'Make text easier to understand',
-    icon: <Zap className="h-4 w-4" />,
-    action: 'simplify',
-    category: 'enhancement',
     shortcut: '6'
   },
-
-  // Organization Commands
   {
-    id: 'summarize',
-    title: 'Summarize',
-    description: 'Create a concise summary',
-    icon: <FileText className="h-4 w-4" />,
-    action: 'summarize',
-    category: 'organization',
+    id: 'undo',
+    title: 'Undo',
+    description: 'Undo the last change',
+    icon: <Undo className="h-4 w-4" />,
+    action: 'undo',
     shortcut: '7'
-  },
-  {
-    id: 'list',
-    title: 'Create list',
-    description: 'Generate a list from the content',
-    icon: <List className="h-4 w-4" />,
-    action: 'list',
-    category: 'organization',
-    shortcut: '8'
-  },
-  {
-    id: 'outline',
-    title: 'Create outline',
-    description: 'Generate structured outline',
-    icon: <TreePine className="h-4 w-4" />,
-    action: 'outline',
-    category: 'organization',
-    shortcut: '9'
-  },
-  {
-    id: 'format',
-    title: 'Format',
-    description: 'Add proper formatting and structure',
-    icon: <Layout className="h-4 w-4" />,
-    action: 'format',
-    category: 'organization'
-  },
-
-  // Utility Commands
-  {
-    id: 'fix',
-    title: 'Fix grammar',
-    description: 'Correct grammar and spelling',
-    icon: <CheckSquare className="h-4 w-4" />,
-    action: 'fix',
-    category: 'utility'
-  },
-  {
-    id: 'tone',
-    title: 'Change tone',
-    description: 'Adjust the tone of the text',
-    icon: <MessageSquare className="h-4 w-4" />,
-    action: 'tone',
-    category: 'utility',
-    hasParameters: true,
-    parameters: ['professional', 'casual', 'academic', 'friendly', 'authoritative']
-  },
-  {
-    id: 'translate',
-    title: 'Translate',
-    description: 'Translate text to another language',
-    icon: <Globe className="h-4 w-4" />,
-    action: 'translate',
-    category: 'utility',
-    hasParameters: true,
-    parameters: ['spanish', 'french', 'german', 'italian', 'portuguese', 'other']
-  },
-  {
-    id: 'analyze',
-    title: 'Analyze Style',
-    description: 'Get detailed style and readability analysis',
-    icon: <BarChart2 className="h-4 w-4" />,
-    action: 'analyze',
-    category: 'utility'
-  },
-  {
-    id: 'research',
-    title: 'Research topic',
-    description: 'Search the web for information on a topic',
-    icon: <Globe className="h-4 w-4" />,
-    action: 'research',
-    category: 'utility',
-    hasParameters: true,
-    parameters: ['current-topic', 'related-concepts', 'alternatives', 'examples']
-  },
-  {
-    id: 'cite',
-    title: 'Add citation',
-    description: 'Reference saved sources from research',
-    icon: <FileText className="h-4 w-4" />,
-    action: 'cite',
-    category: 'utility'
-  },
-  {
-    id: 'undo',
-    title: 'Undo last change',
-    description: 'Revert the last AI modification',
-    icon: <Undo className="h-4 w-4" />,
-    action: 'undo',
-    category: 'utility',
-    shortcut: 'z'
-  },
-  {
-    id: 'help',
-    title: 'Help',
-    description: 'Show all available commands and examples',
-    icon: <Lightbulb className="h-4 w-4" />,
-    action: 'help',
-    category: 'utility',
-    shortcut: '?'
-  }
-];
-
-// Expert mode commands - AI content generation
-export const EXPERT_SLASH_COMMANDS: SlashCommand[] = [
-  ...ALL_SLASH_COMMANDS,
-  {
-    id: 'table',
-    title: 'Create table',
-    description: 'Convert selected text into a formatted table',
-    icon: <Table className="h-4 w-4" />,
-    action: 'table',
-    category: 'creation',
-    hasParameters: true,
-    parameters: ['replace', 'augment'],
-    shortcut: 't'
-  },
-  {
-    id: 'chart',
-    title: 'Create chart',
-    description: 'Generate data visualization from text or data',
-    icon: <TrendingUp className="h-4 w-4" />,
-    action: 'chart',
-    category: 'creation',
-    hasParameters: true,
-    parameters: ['bar', 'line', 'pie', 'scatter', 'auto'],
-    shortcut: 'c'
-  },
-  {
-    id: 'image',
-    title: 'Generate image',
-    description: 'Create AI-generated image using Gemini 2.0 Flash',
-    icon: <Image className="h-4 w-4" />,
-    action: 'image',
-    category: 'creation',
-    hasParameters: true,
-    parameters: ['realistic', 'artistic', 'diagram', 'icon']
-  }
-];
-
-// Simple mode commands - essential features only
-export const SIMPLE_SLASH_COMMANDS: SlashCommand[] = [
-  {
-    id: 'continue',
-    title: 'Continue writing',
-    description: 'Continue the text with AI assistance',
-    icon: <Type className="h-4 w-4" />,
-    action: 'continue',
-    category: 'creation',
-    shortcut: '1'
-  },
-  {
-    id: 'improve',
-    title: 'Improve writing',
-    description: 'Enhance clarity and readability',
-    icon: <Sparkles className="h-4 w-4" />,
-    action: 'improve',
-    category: 'enhancement',
-    shortcut: '2'
-  },
-  {
-    id: 'fix',
-    title: 'Fix grammar',
-    description: 'Correct grammar and spelling',
-    icon: <CheckSquare className="h-4 w-4" />,
-    action: 'fix',
-    category: 'utility',
-    shortcut: '3'
-  },
-  {
-    id: 'summarize',
-    title: 'Summarize',
-    description: 'Create a concise summary',
-    icon: <FileText className="h-4 w-4" />,
-    action: 'summarize',
-    category: 'organization',
-    shortcut: '4'
-  },
-  {
-    id: 'rewrite',
-    title: 'Rewrite',
-    description: 'Rewrite the selected text',
-    icon: <Pencil className="h-4 w-4" />,
-    action: 'rewrite',
-    category: 'enhancement',
-    shortcut: '5'
-  },
-  {
-    id: 'table',
-    title: 'Create table',
-    description: 'Convert selected text into a formatted table',
-    icon: <Table className="h-4 w-4" />,
-    action: 'table',
-    category: 'creation',
-    hasParameters: true,
-    parameters: ['replace', 'augment'],
-    shortcut: 't'
-  },
-  {
-    id: 'undo',
-    title: 'Undo last change',
-    description: 'Revert the last AI modification',
-    icon: <Undo className="h-4 w-4" />,
-    action: 'undo',
-    category: 'utility',
-    shortcut: 'z'
-  },
-  {
-    id: 'help',
-    title: 'Help',
-    description: 'Show all available commands and examples',
-    icon: <Lightbulb className="h-4 w-4" />,
-    action: 'help',
-    category: 'utility',
-    shortcut: '?'
   }
 ];
 
@@ -386,1239 +105,293 @@ export default function SlashCommandsPopup({
   onClose, 
   position, 
   content, 
-  setContent,
-  editorRef,
-  llmProvider,
-  llmModel,
-  onSuggestions,
-  onUndo,
-  activeProjectId
+  setContent, 
+  editorRef, 
+  llmProvider, 
+  llmModel, 
+  onSuggestions, 
+  onUndo, 
+  activeProjectId 
 }: SlashCommandsPopupProps) {
-  const { toast } = useToast();
-  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
-  const { settings } = useSettings();
-  const menuRef = useRef<HTMLDivElement>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [filterText, setFilterText] = useState('');
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const commandRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [contextInfo, setContextInfo] = useState({
-    hasSelection: false,
-    selectionLength: 0,
-    documentLength: 0,
-    contextType: 'document' as 'document' | 'selection'
-  });
-  const [includeResearchContext, setIncludeResearchContext] = useState(false);
-  const [confirmationDialog, setConfirmationDialog] = useState<{
-    isOpen: boolean;
-    command: string;
-    commandTitle: string;
-    message: string;
-  }>({
-    isOpen: false,
-    command: '',
-    commandTitle: '',
-    message: ''
-  });
-  
-  const [inputDialog, setInputDialog] = useState<{
-    isOpen: boolean;
-    command: string;
-    title: string;
-    placeholder: string;
-    value: string;
-  }>({
-    isOpen: false,
-    command: '',
-    title: '',
-    placeholder: '',
-    value: ''
-  });
-  
-  const [expandedCommand, setExpandedCommand] = useState<string | null>(null);
-  
-  // Use appropriate command set based on user experience mode
-  const SLASH_COMMANDS = settings.userExperienceMode === 'simple' ? SIMPLE_SLASH_COMMANDS : 
-                         settings.userExperienceMode === 'expert' ? EXPERT_SLASH_COMMANDS : 
-                         ALL_SLASH_COMMANDS;
-  
-  // Get operation type and enhanced visual indicator for commands
-  const getCommandOperationType = (commandAction: string) => {
-    const operationTypes = {
-      // Context-only operations (don't modify document) - Purple with Eye icon
-      'suggest': { 
-        type: 'Ideas Only', 
-        color: 'text-purple-700 dark:text-purple-300', 
-        bg: 'bg-purple-100 dark:bg-purple-900/30',
-        border: 'border-purple-200 dark:border-purple-700',
-        icon: Eye,
-        description: 'Generates ideas in sidebar - no document changes'
-      },
-      'analyze': { 
-        type: 'Analysis Only', 
-        color: 'text-purple-700 dark:text-purple-300', 
-        bg: 'bg-purple-100 dark:bg-purple-900/30',
-        border: 'border-purple-200 dark:border-purple-700',
-        icon: Eye,
-        description: 'Shows analysis in sidebar - no document changes'
-      },
-      'help': { 
-        type: 'Info Only', 
-        color: 'text-purple-700 dark:text-purple-300', 
-        bg: 'bg-purple-100 dark:bg-purple-900/30',
-        border: 'border-purple-200 dark:border-purple-700',
-        icon: Info,
-        description: 'Displays help information - no document changes'
-      },
-      'research': { 
-        type: 'Research Only', 
-        color: 'text-purple-700 dark:text-purple-300', 
-        bg: 'bg-purple-100 dark:bg-purple-900/30',
-        border: 'border-purple-200 dark:border-purple-700',
-        icon: Eye,
-        description: 'Searches web and shows results in sidebar'
-      },
-      'cite': { 
-        type: 'Reference Only', 
-        color: 'text-purple-700 dark:text-purple-300', 
-        bg: 'bg-purple-100 dark:bg-purple-900/30',
-        border: 'border-purple-200 dark:border-purple-700',
-        icon: Eye,
-        description: 'Shows available citations - no direct insertion'
-      },
-      
-      // Append operations (add to document) - Green with Plus icon
-      'continue': { 
-        type: 'Adds Content', 
-        color: 'text-green-700 dark:text-green-300', 
-        bg: 'bg-green-100 dark:bg-green-900/30',
-        border: 'border-green-200 dark:border-green-700',
-        icon: Plus,
-        description: 'Adds new content to the end of your document'
-      },
-      'expand': { 
-        type: 'Adds Content', 
-        color: 'text-green-700 dark:text-green-300', 
-        bg: 'bg-green-100 dark:bg-green-900/30',
-        border: 'border-green-200 dark:border-green-700',
-        icon: Plus,
-        description: 'Adds more detail to the end of your document'
-      },
-      
-      // Insert operations (insert at cursor) - Blue with ArrowRight icon
-      'summarize': { 
-        type: 'Inserts at Cursor', 
-        color: 'text-blue-700 dark:text-blue-300', 
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        border: 'border-blue-200 dark:border-blue-700',
-        icon: ArrowRight,
-        description: 'Creates summary and inserts at cursor position'
-      },
-      'list': { 
-        type: 'Inserts at Cursor', 
-        color: 'text-blue-700 dark:text-blue-300', 
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        border: 'border-blue-200 dark:border-blue-700',
-        icon: ArrowRight,
-        description: 'Creates list and inserts at cursor position'
-      },
-      'outline': { 
-        type: 'Inserts at Cursor', 
-        color: 'text-blue-700 dark:text-blue-300', 
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        border: 'border-blue-200 dark:border-blue-700',
-        icon: ArrowRight,
-        description: 'Creates outline and inserts at cursor position'
-      },
-      'table': { 
-        type: 'Inserts at Cursor', 
-        color: 'text-blue-700 dark:text-blue-300', 
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        border: 'border-blue-200 dark:border-blue-700',
-        icon: ArrowRight,
-        description: 'Creates table and inserts at cursor position'
-      },
-      'chart': { 
-        type: 'Inserts at Cursor', 
-        color: 'text-blue-700 dark:text-blue-300', 
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        border: 'border-blue-200 dark:border-blue-700',
-        icon: ArrowRight,
-        description: 'Creates chart and inserts at cursor position'
-      },
-      'image': { 
-        type: 'Inserts at Cursor', 
-        color: 'text-blue-700 dark:text-blue-300', 
-        bg: 'bg-blue-100 dark:bg-blue-900/30',
-        border: 'border-blue-200 dark:border-blue-700',
-        icon: ArrowRight,
-        description: 'Generates image and inserts at cursor position'
-      },
-      
-      // Conditional operations (changes selection or document) - Dynamic colors
-      'improve': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'EDITS ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Improves only the selected text' : 'REPLACES your entire document with improved version'
-      },
-      'fix': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'EDITS ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Fixes grammar in selected text only' : 'REPLACES your entire document with grammar-corrected version'
-      },
-      'rewrite': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'REWRITES ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Rewrites only the selected text' : 'COMPLETELY REWRITES your entire document'
-      },
-      'tone': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'CHANGES ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Changes tone of selected text only' : 'REPLACES your entire document with different tone'
-      },
-      'translate': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'TRANSLATES ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Translates only the selected text' : 'REPLACES your entire document with translated version'
-      },
-      'format': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'FORMATS ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Formats only the selected text' : 'REPLACES your entire document with formatted version'
-      },
-      'simplify': { 
-        type: contextInfo.hasSelection ? 'Edits Selection' : 'SIMPLIFIES ENTIRE DOCUMENT', 
-        color: contextInfo.hasSelection ? 'text-blue-700 dark:text-blue-300' : 'text-red-700 dark:text-red-300',
-        bg: contextInfo.hasSelection ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-red-100 dark:bg-red-900/30',
-        border: contextInfo.hasSelection ? 'border-blue-200 dark:border-blue-700' : 'border-red-200 dark:border-red-700',
-        icon: contextInfo.hasSelection ? Target : Replace,
-        description: contextInfo.hasSelection ? 'Simplifies only the selected text' : 'REPLACES your entire document with simplified version'
-      },
-      
-      // Special operations - Gray with specific icons
-      'undo': { 
-        type: 'Undo Last Change', 
-        color: 'text-gray-700 dark:text-gray-300', 
-        bg: 'bg-gray-100 dark:bg-gray-900/30',
-        border: 'border-gray-200 dark:border-gray-700',
-        icon: Shield,
-        description: 'Safely reverts the last AI modification'
-      }
-    };
-    
-    return operationTypes[commandAction as keyof typeof operationTypes] || 
-           { 
-             type: 'Modifies Content', 
-             color: 'text-gray-700 dark:text-gray-300', 
-             bg: 'bg-gray-100 dark:bg-gray-900/30',
-             border: 'border-gray-200 dark:border-gray-700',
-             icon: FileEdit,
-             description: 'Modifies document content'
-           };
-  };
-  
-  // Filter and sort commands based on filter text
-  const filteredCommands = filterText
-    ? SLASH_COMMANDS.filter(cmd => 
-        cmd.title.toLowerCase().includes(filterText.toLowerCase()) ||
-        cmd.action.toLowerCase().includes(filterText.toLowerCase()) ||
-        cmd.description.toLowerCase().includes(filterText.toLowerCase())
-      ).sort((a, b) => {
-        // Prioritize matches that start with the filter text
-        const aStartsWithTitle = a.title.toLowerCase().startsWith(filterText.toLowerCase());
-        const bStartsWithTitle = b.title.toLowerCase().startsWith(filterText.toLowerCase());
-        const aStartsWithAction = a.action.toLowerCase().startsWith(filterText.toLowerCase());
-        const bStartsWithAction = b.action.toLowerCase().startsWith(filterText.toLowerCase());
-        
-        if (aStartsWithTitle && !bStartsWithTitle) return -1;
-        if (!aStartsWithTitle && bStartsWithTitle) return 1;
-        if (aStartsWithAction && !bStartsWithAction) return -1;
-        if (!aStartsWithAction && bStartsWithAction) return 1;
-        
-        // Alphabetical sort
-        return a.title.localeCompare(b.title);
-      })
-    : SLASH_COMMANDS;
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const { settings } = useSettings();
+  const { startProcessing, stopProcessing } = useApiProcessing();
 
-  // Update context info when popup opens
-  useEffect(() => {
-    if (isOpen) {
-      const selectionInfo = getSelectionInfo();
-      setContextInfo({
-        hasSelection: selectionInfo.selectedText.length > 0,
-        selectionLength: selectionInfo.selectedText.length,
-        documentLength: content.length,
-        contextType: selectionInfo.selectedText.length > 0 ? 'selection' : 'document'
-      });
-      setSelectedIndex(0); // Reset selection when popup opens
-      setFilterText(''); // Reset filter when popup opens
-      // Initialize refs array
-      commandRefs.current = new Array(SLASH_COMMANDS.length).fill(null);
-    }
-  }, [isOpen, content]);
-
-  // Reset selected index when filter changes
-  useEffect(() => {
-    setSelectedIndex(0);
-    // Update refs array size for filtered commands
-    commandRefs.current = new Array(filteredCommands.length).fill(null);
-  }, [filterText, filteredCommands.length]);
-
-  // Auto-scroll to keep selected item visible
-  useEffect(() => {
-    if (isOpen && commandRefs.current[selectedIndex]) {
-      const selectedElement = commandRefs.current[selectedIndex];
-      const container = scrollContainerRef.current;
-      
-      if (selectedElement && container) {
-        const elementRect = selectedElement.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        
-        // Check if element is above the visible area
-        if (elementRect.top < containerRect.top) {
-          selectedElement.scrollIntoView({ block: 'start', behavior: 'instant' });
-        }
-        // Check if element is below the visible area
-        else if (elementRect.bottom > containerRect.bottom) {
-          selectedElement.scrollIntoView({ block: 'end', behavior: 'instant' });
-        }
-      }
-    }
-  }, [selectedIndex, isOpen]);
-  
-  // Get selection details from editor
+  // Get selected text or determine context
   const getSelectionInfo = () => {
-    if (!editorRef.current) return {
-      selectedText: '',
-      selectionStart: 0,
-      selectionEnd: 0,
-      beforeSelection: content,
-      afterSelection: ''
-    };
-    
     const textarea = editorRef.current;
-    const selectionStart = textarea.selectionStart;
-    const selectionEnd = textarea.selectionEnd;
-    const selectedText = content.substring(selectionStart, selectionEnd);
+    if (!textarea) return { selectedText: '', hasSelection: false };
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.slice(start, end);
     
     return {
-      selectedText,
-      selectionStart,
-      selectionEnd,
-      beforeSelection: content.substring(0, selectionStart),
-      afterSelection: content.substring(selectionEnd)
+      selectedText: selectedText.trim(),
+      hasSelection: selectedText.trim().length > 0,
+      start,
+      end
     };
   };
 
-  // Generate help text with all available commands
-  const generateHelpText = () => {
-    const categories = {
-      'creation': 'Creation Commands',
-      'enhancement': 'Enhancement Commands', 
-      'organization': 'Organization Commands',
-      'utility': 'Utility Commands'
-    };
-    
-    let helpText = '# Slash Command Reference\n\nType "/" to open the command menu, then select a command.\n\n';
-    
-    Object.entries(categories).forEach(([categoryKey, categoryName]) => {
-      const categoryCommands = SLASH_COMMANDS.filter(cmd => cmd.category === categoryKey && cmd.id !== 'help');
-      if (categoryCommands.length > 0) {
-        helpText += `## ${categoryName}\n\n`;
-        categoryCommands.forEach(cmd => {
-          const shortcut = cmd.shortcut ? ` (${cmd.shortcut})` : '';
-          helpText += `**/${cmd.action}${shortcut}** - ${cmd.description}\n`;
-        });
-        helpText += '\n';
+  const selectionInfo = getSelectionInfo();
+
+  // Execute slash command
+  const executeCommandMutation = useMutation({
+    mutationFn: async (command: SlashCommand) => {
+      if (command.action === 'undo') {
+        onUndo?.();
+        return null;
       }
-    });
-    
-    helpText += '## Tips\n\n';
-    helpText += '- Select text before using a command to apply it only to that selection\n';
-    helpText += '- Commands work on your entire document when no text is selected\n';
-    helpText += '- Use keyboard shortcuts (shown in parentheses) for faster access\n';
-    helpText += '- Type /help or /? to see this reference again\n';
-    
-    return helpText;
-  };
 
-  // Show custom input dialog for command with custom instructions
-  const showCustomInputDialog = (command: string) => {
-    const inputCommands = {
-      'research': {
-        title: 'Research Topic',
-        placeholder: 'Enter the topic you want to research (e.g., "artificial intelligence", "climate change")'
-      },
-      'translate': {
-        title: 'Translation Language',
-        placeholder: 'Enter target language (e.g., "Spanish", "French", "German") or leave blank for Spanish'
-      },
-      'rewrite': {
-        title: 'Rewrite Instructions',
-        placeholder: 'How would you like this rewritten? (e.g., "make it more conversational", "add technical details")'
-      },
-      'improve': {
-        title: 'Improvement Focus',
-        placeholder: 'What should be improved? (e.g., "clarity and flow", "add examples", "fix transitions")'
-      },
-      'tone': {
-        title: 'Desired Tone',
-        placeholder: 'What tone should this have? (e.g., "friendly but professional", "enthusiastic", "authoritative")'
-      },
-      'expand': {
-        title: 'Expansion Instructions',
-        placeholder: 'How should this be expanded? (e.g., "add more examples", "include research data", "explain concepts")'
-      },
-      'continue': {
-        title: 'Writing Direction',
-        placeholder: 'How should the writing continue? (e.g., "focus on benefits", "add a conclusion", "include examples")'
-      },
-      'table': {
-        title: 'Table Instructions',
-        placeholder: 'How should the table be created? (e.g., "3 columns with headers", "include summary row")'
-      },
-      'chart': {
-        title: 'Chart Instructions',
-        placeholder: 'What type of chart and data? (e.g., "bar chart of sales data", "line chart over time")'
-      },
-      'image': {
-        title: 'Image Description',
-        placeholder: 'Describe the image you want to generate (e.g., "realistic photo of sunset", "diagram of process")'
-      }
-    };
-    
-    const config = inputCommands[command as keyof typeof inputCommands] || {
-      title: 'Custom Instructions',
-      placeholder: 'Enter your custom instructions for this command...'
-    };
-    
-    setInputDialog({
-      isOpen: true,
-      command,
-      title: config.title,
-      placeholder: config.placeholder,
-      value: ''
-    });
-  };
-
-  // Check if command requires confirmation for whole-document operation
-  const checkForConfirmation = (command: string, selectionInfo: any) => {
-    const destructiveCommands = ['improve', 'fix', 'tone', 'rewrite', 'translate', 'format', 'simplify'];
-    const commandTitles = {
-      'improve': 'Improve Writing',
-      'fix': 'Fix Grammar',
-      'tone': 'Change Tone', 
-      'rewrite': 'Rewrite',
-      'translate': 'Translate',
-      'format': 'Format Text',
-      'simplify': 'Simplify Language'
-    };
-    
-    const commandDescriptions = {
-      'improve': 'enhance clarity, readability, and overall quality',
-      'fix': 'correct grammar, spelling, and punctuation',
-      'tone': 'change the tone and style', 
-      'rewrite': 'completely rewrite the content',
-      'translate': 'translate to a different language',
-      'format': 'restructure and format the text',
-      'simplify': 'simplify the language and concepts'
-    };
-    
-    if (destructiveCommands.includes(command) && !selectionInfo.selectedText) {
-      const wordCount = Math.round(content.length / 250);
-      const charCount = content.length;
-      const commandTitle = commandTitles[command as keyof typeof commandTitles] || command;
-      const commandDesc = commandDescriptions[command as keyof typeof commandDescriptions] || 'modify';
+      const { selectedText, hasSelection, start, end } = selectionInfo;
       
-      setConfirmationDialog({
-        isOpen: true,
-        command,
-        commandTitle,
-        message: `⚠️ **DOCUMENT REPLACEMENT WARNING**\n\nYou're about to **"${commandTitle}"** your entire document:\n\n📄 **Current document:** ~${wordCount} words (${charCount.toLocaleString()} characters)\n🔄 **What will happen:** AI will ${commandDesc} and **completely replace** all your content\n\n**This cannot be undone automatically** - your original text will be gone unless you manually copy it first or use the /undo command immediately after.\n\n**Safer alternatives:**\n• Select specific text first for targeted edits\n• Use "Ideas Only" commands (purple badges) for suggestions without changes\n• Copy your document as backup before proceeding`
-      });
-      return true; // Needs confirmation
-    }
-    return false; // No confirmation needed
-  };
-
-  // Execute command with preset parameter
-  const executeCommandWithParameter = async (command: string, parameter: string) => {
-    const commandWithParam = `${command}:${parameter}`;
-    onClose();
-    await executeCommandConfirmed(commandWithParam);
-  };
-
-  // Main command execution function  
-  const executeCommand = async (command: string) => {
-    const selectionInfo = getSelectionInfo();
-    
-    // Check if this command needs confirmation for whole-document operation
-    if (checkForConfirmation(command, selectionInfo)) {
-      return; // Will show confirmation dialog, don't proceed yet
-    }
-    
-    // Execute directly - no automatic input prompts
-    onClose();
-    await executeCommandConfirmed(command);
-  };
-
-  // Execute command with custom input
-  const executeCommandWithInput = async (command: string, customInput: string) => {
-    const commandWithInput = customInput.trim() 
-      ? `${command}:custom:${customInput.trim()}`
-      : command;
-    
-    const selectionInfo = getSelectionInfo();
-    
-    // Check if this command still needs confirmation for whole-document operation
-    if (checkForConfirmation(command, selectionInfo)) {
-      return; // Will show confirmation dialog, don't proceed yet
-    }
-    
-    // Execute with the custom input
-    await executeCommandConfirmed(commandWithInput);
-  };
-
-  // Execute command after confirmation (or directly if no confirmation needed)
-  const executeCommandConfirmed = async (command: string) => {
-    const selectionInfo = getSelectionInfo();
-    
-    // Set specific processing message based on command
-    const messages = {
-      'continue': 'Continuing your writing...',
-      'suggest': 'Generating ideas...',
-      'improve': 'Enhancing your text...',
-      'expand': 'Adding more detail...',
-      'rewrite': 'Rewriting content...',
-      'simplify': 'Simplifying language...',
-      'format': 'Improving formatting...',
-      'fix': 'Fixing grammar and spelling...',
-      'tone': 'Adjusting tone...',
-      'translate': 'Translating text...',
-      'analyze': 'Analyzing writing style...',
-      'table': 'Creating data table...',
-      'chart': 'Generating visualization...',
-      'image': 'Creating image with Gemini 2.0 Flash...'
-    };
-    
-    const message = messages[command as keyof typeof messages] || 'Processing your request...';
-    const operationId = startProcessing({
-      message,
-      type: 'ai-command',
-      initialProgress: 0
-    });
-    
-    try {
-      // Handle help command locally without API call
-      if (command === 'help') {
-        const helpText = generateHelpText();
-        if (onSuggestions) {
-          onSuggestions(helpText);
-          toast({
-            title: 'Help Information',
-            description: 'Command reference has been added to the insights panel.'
-          });
-        } else {
-          setContent(content + '\n\n--- Slash Command Help ---\n' + helpText);
-          toast({
-            title: 'Help Information',
-            description: 'Command reference added to document.'
-          });
-        }
-        stopProcessing(operationId);
-        return;
-      }
-      
-      // Handle undo command locally
-      if (command === 'undo') {
-        if (onUndo) {
-          onUndo();
-          toast({
-            title: 'Undone',
-            description: 'Last change has been reverted.'
-          });
-        } else {
-          toast({
-            title: 'Undo not available',
-            description: 'No undo functionality available in this context.',
-            variant: 'destructive'
-          });
-        }
-        stopProcessing(operationId);
-        return;
-      }
-      
-      const res = await apiRequest('POST', '/api/ai/slash-command', {
-        command,
-        content,
-        selectionInfo,
-        style: null, // You can add style information here if needed
+      const response = await apiRequest('POST', '/api/ai/slash-command', {
+        command: command.action,
+        content: content,
+        selectedText: hasSelection ? selectedText : undefined,
+        selectionStart: hasSelection ? start : undefined,
+        selectionEnd: hasSelection ? end : undefined,
         llmProvider,
         llmModel,
-        includeContext: includeResearchContext,
-        projectId: activeProjectId,
-        userId: 1 // Using default user ID as per app convention
+        projectId: activeProjectId
       });
-      
-      const data = await res.json();
-      
-      // Parse the AI response using the intelligent parser
-      updateProgress(operationId, 90, 'Parsing AI response...');
-      const parser = createAIResponseParser(llmProvider);
-      const parsed = await parser.parseResponse(
-        data.result,
-        command,
-        content,
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return response.json();
+    },
+    onSuccess: async (data) => {
+      if (!data) return; // Undo command
+
+      const responseParser = createAIResponseParser(llmProvider);
+      const parsedResponse = await responseParser.parseResponse(
+        data.result || '', 
+        data.command || 'unknown', 
+        content, 
         selectionInfo
       );
       
-      // Apply the parsed result based on strategy
-      await applyParsedResult(parsed, command, selectionInfo);
-      
-      // Force focus back to editor after content update
-      setTimeout(() => {
-        if (editorRef.current) {
-          editorRef.current.focus();
+      // Handle different response types
+      if (data.contextOnly) {
+        // Show suggestions in context panel
+        onSuggestions?.(parsedResponse.suggestions || data.result);
+        toast({
+          title: "Suggestions Generated",
+          description: data.message || "Check the context panel for AI suggestions."
+        });
+      } else if (data.replaceSelection && selectionInfo.hasSelection) {
+        // Replace selected text
+        const { start, end } = selectionInfo;
+        if (start !== undefined && end !== undefined) {
+          const newContent = content.slice(0, start) + parsedResponse.content + content.slice(end);
+          setContent(newContent);
+          
+          // Update cursor position
+          setTimeout(() => {
+            if (editorRef.current) {
+              const newPosition = start + parsedResponse.content.length;
+              editorRef.current.setSelectionRange(newPosition, newPosition);
+              editorRef.current.focus();
+            }
+          }, 0);
         }
-      }, 100);
-      
-    } catch (error: any) {
-      console.error('Error executing command:', error);
-      
-      // Enhanced error handling with better user feedback
-      let errorTitle = 'Command Failed';
-      let errorDescription = 'Failed to execute command';
-      let showRetry = false;
-      
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        errorTitle = 'Network Error';
-        errorDescription = 'Unable to connect to the AI service. Please check your internet connection and try again.';
-        showRetry = true;
-      } else if (error.status === 429) {
-        errorTitle = 'Rate Limited';
-        errorDescription = 'Too many requests. Please wait a moment before trying again.';
-        showRetry = true;
-      } else if (error.status === 500) {
-        errorTitle = 'Server Error';
-        errorDescription = 'The AI service is temporarily unavailable. Please try again in a few moments.';
-        showRetry = true;
-      } else if (error.message?.includes('timeout')) {
-        errorTitle = 'Request Timeout';
-        errorDescription = 'The AI service took too long to respond. Try breaking your content into smaller sections.';
-        showRetry = true;
-      } else if (error.message?.includes('parse')) {
-        errorTitle = 'AI Response Error';
-        errorDescription = 'The AI response was malformed. This usually resolves by trying again.';
-        showRetry = true;
-      } else if (error.message) {
-        errorDescription = error.message;
-      }
-      
-      toast({
-        title: errorTitle,
-        description: errorDescription + (showRetry ? '\n\nTip: Try the command again or select less text.' : ''),
-        variant: 'destructive',
-        duration: showRetry ? 8000 : 5000 // Longer duration for retryable errors
-      });
-      
-      // For certain errors, suggest alternative approaches
-      if (command === 'continue' && error.message?.includes('context')) {
+      } else if (data.appendToContent) {
+        // Append to end of content
+        const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + parsedResponse.content;
+        setContent(newContent);
+        
+        // Move cursor to end
         setTimeout(() => {
-          toast({
-            title: 'Alternative Suggestion',
-            description: 'Try selecting the last paragraph and using /improve or /expand instead.',
-            variant: 'default'
-          });
-        }, 2000);
+          if (editorRef.current) {
+            editorRef.current.setSelectionRange(newContent.length, newContent.length);
+            editorRef.current.focus();
+          }
+        }, 0);
       }
-    } finally {
-      stopProcessing(operationId);
+
+      toast({
+        title: "Command Executed",
+        description: data.message || `Applied ${data.command} successfully.`
+      });
+    },
+    onError: (error) => {
+      console.error('Slash command error:', error);
+      toast({
+        title: "Command Failed",
+        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        variant: "destructive"
+      });
+    },
+    onSettled: () => {
+      setIsProcessing(false);
+      if (processingId) {
+        stopProcessing(processingId);
+        setProcessingId(null);
+      }
+      onClose();
     }
+  });
+
+  // Handle command execution
+  const handleExecuteCommand = (command: SlashCommand) => {
+    setIsProcessing(true);
+    const id = startProcessing({
+      message: `Executing ${command.title}...`,
+      type: 'ai-command',
+      initialProgress: 0
+    });
+    setProcessingId(id);
+    executeCommandMutation.mutate(command);
   };
-  
-  // Close on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen, onClose]);
-  
-  // Handle keyboard navigation
+
+  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
-      
+
       switch (e.key) {
-        case 'Escape':
-          onClose();
+        case 'ArrowUp':
+          e.preventDefault();
+          setSelectedIndex(prev => prev > 0 ? prev - 1 : SLASH_COMMANDS.length - 1);
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setSelectedIndex(prev => (prev + 1) % filteredCommands.length);
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          setSelectedIndex(prev => prev === 0 ? filteredCommands.length - 1 : prev - 1);
+          setSelectedIndex(prev => prev < SLASH_COMMANDS.length - 1 ? prev + 1 : 0);
           break;
         case 'Enter':
           e.preventDefault();
-          const selectedCommand = filteredCommands[selectedIndex];
-          if (selectedCommand) {
-            if (selectedCommand.hasParameters && expandedCommand !== selectedCommand.id) {
-              // Show parameter options first
-              setExpandedCommand(selectedCommand.id);
-            } else {
-              // Execute command directly
-              executeCommand(selectedCommand.action);
-            }
+          if (!isProcessing) {
+            handleExecuteCommand(SLASH_COMMANDS[selectedIndex]);
           }
           break;
-        case 'Tab':
+        case 'Escape':
           e.preventDefault();
-          const currentCmd = filteredCommands[selectedIndex];
-          if (currentCmd?.hasParameters) {
-            // Toggle parameter expansion instead of immediately showing input dialog
-            setExpandedCommand(expandedCommand === currentCmd.id ? null : currentCmd.id);
-          }
-          break;
-        case 'Backspace':
-          e.preventDefault();
-          setFilterText(prev => prev.slice(0, -1));
+          onClose();
           break;
         default:
-          // Handle letter typing for filtering
-          if (e.key.length === 1 && e.key.match(/[a-zA-Z0-9]/)) {
+          // Handle number shortcuts
+          const num = parseInt(e.key);
+          if (num >= 1 && num <= SLASH_COMMANDS.length) {
             e.preventDefault();
-            setFilterText(prev => prev + e.key.toLowerCase());
-          }
-          // Handle number shortcuts (only if no filter text)
-          else if (!filterText) {
-            const num = parseInt(e.key);
-            if (num >= 1 && num <= 9) {
-              const commandWithShortcut = SLASH_COMMANDS.find(cmd => cmd.shortcut === e.key);
-              if (commandWithShortcut) {
-                e.preventDefault();
-                onClose();
-                executeCommand(commandWithShortcut.action);
-              }
-            }
-            // Handle ? for help
-            if (e.key === '?') {
-              e.preventDefault();
-              onClose();
-              executeCommand('help');
+            if (!isProcessing) {
+              handleExecuteCommand(SLASH_COMMANDS[num - 1]);
             }
           }
           break;
       }
     };
-    
+
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose, selectedIndex, filterText, filteredCommands]);
-  
-  // Apply parsed result based on strategy
-  const applyParsedResult = async (parsed: ParsedAIResponse, command: string, selectionInfo: any) => {
-    switch (parsed.strategy) {
-      case 'context-only':
-        // Send to Context Panel only
-        if (parsed.thinking || parsed.suggestions) {
-          const contextContent = [
-            parsed.thinking,
-            parsed.suggestions?.join('\n\n')
-          ].filter(Boolean).join('\n\n');
-          
-          if (onSuggestions) {
-            onSuggestions(contextContent);
-          }
-          
-          toast({
-            title: command === 'suggest' ? 'Ideas Generated' : 
-                   command === 'analyze' ? 'Style Analysis Complete' : 
-                   'Information Generated',
-            description: 'Results have been added to the insights panel.'
-          });
-        }
-        break;
-        
-      case 'append':
-        // Add to end of content
-        if (parsed.content) {
-          setContent(content + '\n\n' + parsed.content);
-          toast({
-            title: 'Content Added',
-            description: 'New content has been added to your document.'
-          });
-        }
-        // Send thinking to context panel
-        if (parsed.thinking && onSuggestions) {
-          onSuggestions(parsed.thinking);
-        }
-        break;
-        
-      case 'replace':
-        // Replace entire content or selection
-        if (parsed.content) {
-          if (selectionInfo.selectedText) {
-            setContent(
-              selectionInfo.beforeSelection + parsed.content + selectionInfo.afterSelection
-            );
-          } else {
-            setContent(parsed.content);
-          }
-          toast({
-            title: 'Content Updated',
-            description: 'Your content has been updated.'
-          });
-        }
-        // Send thinking to context panel
-        if (parsed.thinking && onSuggestions) {
-          onSuggestions(parsed.thinking);
-        }
-        break;
-        
-      case 'targeted-edit':
-        // For targeted edits using existing grep/sed-like tools
-        if (parsed.content) {
-          if (selectionInfo.selectedText) {
-            setContent(
-              selectionInfo.beforeSelection + parsed.content + selectionInfo.afterSelection
-            );
-          } else {
-            setContent(parsed.content);
-          }
-          toast({
-            title: 'Content Enhanced',
-            description: 'Your content has been improved with targeted edits using existing text processing tools.'
-          });
-        }
-        // Send thinking to context panel for targeted edits too
-        if (parsed.thinking && onSuggestions) {
-          onSuggestions(parsed.thinking);
-        }
-        break;
-        
-      case 'insert-at-cursor':
-        // Insert content at current cursor position
-        if (parsed.content) {
-          const cursorPosition = selectionInfo.selectedText 
-            ? selectionInfo.selectionEnd  // If there's a selection, insert after it
-            : selectionInfo.selectionStart; // Otherwise, insert at cursor
-          
-          const newContent = 
-            content.substring(0, cursorPosition) + 
-            '\n\n' + parsed.content + '\n\n' + 
-            content.substring(cursorPosition);
-          
-          setContent(newContent);
-          
-          // Update cursor position to after inserted content
-          setTimeout(() => {
-            if (editorRef.current) {
-              const newCursorPos = cursorPosition + parsed.content.length + 4; // +4 for newlines
-              editorRef.current.setSelectionRange(newCursorPos, newCursorPos);
-              editorRef.current.focus();
-            }
-          }, 10);
-          
-          toast({
-            title: 'Content Inserted',
-            description: 'Content has been inserted at cursor position.'
-          });
-        }
-        // Send thinking to context panel
-        if (parsed.thinking && onSuggestions) {
-          onSuggestions(parsed.thinking);
-        }
-        break;
+  }, [isOpen, selectedIndex, isProcessing]);
+
+  // Close on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-    
-    // Send thinking to Context Panel for any remaining strategies not handled above
-    if (parsed.thinking && onSuggestions && 
-        parsed.strategy !== 'context-only' && 
-        parsed.strategy !== 'targeted-edit' && 
-        parsed.strategy !== 'append' && 
-        parsed.strategy !== 'replace') {
-      onSuggestions(parsed.thinking);
-    }
-  };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-  
+
   return (
-    <>
-      <div 
-        ref={menuRef}
-        className="absolute z-50 bg-white dark:bg-gray-800 rounded-md shadow-lg border border-gray-200 dark:border-gray-700 w-72"
-        style={{ top: position.y, left: position.x }}
-      >
-        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">AI Commands</p>
-            {filterText && (
-              <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                "{filterText}" ({filteredCommands.length} matches)
-              </div>
-            )}
-          </div>
-          {/* Enhanced Context indicator */}
-          <div className="mt-2 space-y-2">
-            <div className="flex items-center gap-2">
-              <div className={`px-2 py-1 rounded-full text-xs font-medium ${
-                contextInfo.contextType === 'selection' 
-                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                  : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
-              }`}>
-                {contextInfo.contextType === 'selection' 
-                  ? `Applying to selection (${contextInfo.selectionLength} chars)`
-                  : `Applying to document (${Math.round(contextInfo.documentLength / 250)} words)`
-                }
-              </div>
-            </div>
-            
-            {/* Enhanced warning for whole-document operations */}
-            {contextInfo.contextType === 'document' && contextInfo.documentLength > 500 && (
-              <div className="p-3 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 border-2 border-red-200 dark:border-red-700 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 p-1 bg-red-100 dark:bg-red-900/40 rounded-full">
-                    <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-sm font-semibold text-red-800 dark:text-red-200 mb-1">
-                      ⚠️ Whole Document Mode
-                    </div>
-                    <div className="text-xs text-red-700 dark:text-red-300 leading-relaxed">
-                      <strong>No text is selected.</strong> Commands like improve, fix, rewrite will <strong>completely replace your entire document</strong> (~{Math.round(contextInfo.documentLength / 250)} words).
-                    </div>
-                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded">
-                      <div className="flex items-center gap-1.5">
-                        <Shield className="h-3 w-3 text-green-600 dark:text-green-400" />
-                        <span className="text-xs font-medium text-green-800 dark:text-green-200">Safe Options:</span>
-                      </div>
-                      <div className="text-xs text-green-700 dark:text-green-300 mt-1">
-                        • Select specific text first for targeted edits<br/>
-                        • Use "Ideas Only" commands (purple badges) for suggestions<br/>
-                        • Use /undo to revert any unwanted changes
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* Success indicator for selections */}
-            {contextInfo.contextType === 'selection' && (
-              <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-300">
-                <CheckCircle className="h-3 w-3" />
-                <span>Commands will only modify the selected text</span>
-              </div>
-            )}
-          </div>
-          
-          {/* Research context toggle */}
-          <div className="mt-2 flex items-center justify-between">
-            <label htmlFor="research-toggle" className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
-              <Database className="h-3 w-3" />
-              <span>Include research context</span>
-            </label>
-            <button
-              id="research-toggle"
-              onClick={() => setIncludeResearchContext(!includeResearchContext)}
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                includeResearchContext 
-                  ? 'bg-blue-600 dark:bg-blue-500' 
-                  : 'bg-gray-300 dark:bg-gray-600'
-              }`}
-            >
-              <span
-                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                  includeResearchContext ? 'translate-x-3.5' : 'translate-x-0.5'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-        <div ref={scrollContainerRef} className="max-h-64 overflow-y-auto p-1">
-          {filteredCommands.length === 0 ? (
-            <div className="px-3 py-4 text-center text-gray-500 dark:text-gray-400 text-sm">
-              No commands match "{filterText}"
-              <br />
-              <span className="text-xs">Press Backspace to clear filter</span>
-            </div>
-          ) : (
-            filteredCommands.map((cmd, index) => (
-            <div key={cmd.id} className="w-full">
-              <button
-                ref={(el) => {
-                  commandRefs.current[index] = el;
-                }}
-                onClick={() => {
-                  if (cmd.hasParameters && expandedCommand !== cmd.id) {
-                    // Show parameter options first
-                    setExpandedCommand(cmd.id);
-                  } else {
-                    // Execute command directly
-                    executeCommand(cmd.action);
-                  }
-                }}
-                className={`w-full text-left px-2 py-1.5 rounded-md flex items-center space-x-3 ${
-                  index === selectedIndex
-                    ? 'bg-gray-100 dark:bg-gray-700'
-                    : 'hover:bg-gray-100 dark:hover:bg-gray-700'
-                }`}
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                  {cmd.icon}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{cmd.title}</span>
-                    <div className="flex items-center gap-2">
-                      {(() => {
-                        const opType = getCommandOperationType(cmd.action);
-                        const IconComponent = opType.icon;
-                        return (
-                          <div className="flex items-center gap-1">
-                            <div className={`flex items-center gap-1 px-2 py-1 rounded-md border text-xs font-semibold ${opType.bg} ${opType.color} ${opType.border}`}>
-                              <IconComponent className="h-3 w-3" />
-                              <span>{opType.type}</span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {cmd.hasParameters && (
-                        <div className="flex items-center gap-1">
-                          <Settings className="h-3 w-3 text-gray-400" />
-                          {expandedCommand === cmd.id ? (
-                            <ChevronDown className="h-3 w-3 text-gray-400" />
-                          ) : (
-                            <ChevronRight className="h-3 w-3 text-gray-400" />
-                          )}
-                        </div>
-                      )}
-                      {cmd.shortcut && (
-                        <kbd className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">
-                          {cmd.shortcut}
-                        </kbd>
-                      )}
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {cmd.description}
-                    </p>
-                    {(() => {
-                      const opType = getCommandOperationType(cmd.action);
-                      return (
-                        <p className="text-xs text-gray-400 dark:text-gray-500 italic">
-                          {opType.description}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                </div>
-              </button>
-              
-              {/* Parameter options */}
-              {cmd.hasParameters && expandedCommand === cmd.id && (
-                <div className="mt-1 ml-11 mr-2 p-2 bg-gray-50 dark:bg-gray-900 rounded-md border border-gray-200 dark:border-gray-700">
-                  <div className="flex flex-wrap gap-1 mb-2">
-                    {cmd.parameters?.map((param) => (
-                      <button
-                        key={param}
-                        onClick={() => executeCommandWithParameter(cmd.action, param)}
-                        className="px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                      >
-                        {param}
-                      </button>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => {
-                      setExpandedCommand(null);
-                      onClose();
-                      showCustomInputDialog(cmd.action);
-                    }}
-                    className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors"
-                  >
-                    <Edit3 className="h-3 w-3" />
-                    Custom instructions...
-                  </button>
-                </div>
-              )}
-            </div>
-            ))
-          )}
-        </div>
-        
-        {/* Navigation tips footer */}
-        <div className="px-3 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
-          <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-            <div className="flex items-center justify-between">
-              <span>↑↓ Navigate • Enter Select/Expand • Tab Toggle Options</span>
-              <span>{filterText ? 'Backspace Clear' : 'Type to Filter'}</span>
-            </div>
-            {Object.values(filteredCommands).some(cmd => cmd.hasParameters) && (
-              <div className="text-center text-gray-400">
-                <Settings className="h-3 w-3 inline mr-1" />
-                Commands with gear icon have quick options and custom input
-              </div>
-            )}
+    <div
+      ref={popupRef}
+      className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-600 overflow-hidden"
+      style={{
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        width: '320px',
+        maxHeight: '400px'
+      }}
+    >
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+            Choose a command
+          </h3>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {selectionInfo.hasSelection 
+              ? `${selectionInfo.selectedText.length} chars selected`
+              : `${content.length} chars in document`
+            }
           </div>
         </div>
       </div>
-      
-      {/* Input Dialog for Commands Requiring Parameters */}
-      <Dialog 
-        open={inputDialog.isOpen} 
-        onOpenChange={(open) => setInputDialog(prev => ({ ...prev, isOpen: open }))}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{inputDialog.title}</DialogTitle>
-            <DialogDescription className="text-sm text-gray-600 dark:text-gray-400">
-              {inputDialog.placeholder}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Input
-              value={inputDialog.value}
-              onChange={(e) => setInputDialog(prev => ({ ...prev, value: e.target.value }))}
-              placeholder={inputDialog.placeholder}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const command = inputDialog.command;
-                  const value = inputDialog.value;
-                  setInputDialog(prev => ({ ...prev, isOpen: false }));
-                  onClose(); // Close the slash command menu
-                  executeCommandWithInput(command, value);
-                }
-              }}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => setInputDialog(prev => ({ ...prev, isOpen: false }))}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                const command = inputDialog.command;
-                const value = inputDialog.value;
-                setInputDialog(prev => ({ ...prev, isOpen: false }));
-                onClose(); // Close the slash command menu
-                executeCommandWithInput(command, value);
-              }}
-            >
-              Execute Command
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Enhanced Confirmation Dialog for Destructive Operations */}
-      <AlertDialog 
-        open={confirmationDialog.isOpen} 
-        onOpenChange={(open) => setConfirmationDialog(prev => ({ ...prev, isOpen: open }))}
-      >
-        <AlertDialogContent className="max-w-2xl">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-3 text-lg">
-              <div className="flex-shrink-0 p-2 bg-red-100 dark:bg-red-900/40 rounded-full">
-                <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+
+      {/* Commands */}
+      <div className="max-h-80 overflow-y-auto">
+        {SLASH_COMMANDS.map((command, index) => (
+          <button
+            key={command.id}
+            onClick={() => !isProcessing && handleExecuteCommand(command)}
+            disabled={isProcessing}
+            className={`
+              w-full px-4 py-3 flex items-center gap-3 text-left transition-colors
+              ${index === selectedIndex 
+                ? 'bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-500' 
+                : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+              }
+              ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+            `}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 dark:bg-gray-600">
+              {command.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  {command.title}
+                </span>
+                {command.shortcut && (
+                  <span className="text-xs bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded">
+                    {command.shortcut}
+                  </span>
+                )}
               </div>
-              <div>
-                <div className="text-red-800 dark:text-red-200">⚠️ Document Replacement Warning</div>
-                <div className="text-sm font-normal text-red-600 dark:text-red-400 mt-1">
-                  This will completely replace your entire document
-                </div>
-              </div>
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-              <div className="whitespace-pre-line mb-4">{confirmationDialog.message}</div>
-              
-              {/* Enhanced safety section */}
-              <div className="space-y-3">
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 rounded">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                    <span className="font-semibold text-red-800 dark:text-red-200">High Risk Action</span>
-                  </div>
-                  <p className="text-xs text-red-700 dark:text-red-300">
-                    Your original content will be permanently replaced. This action will modify your entire document, 
-                    which could result in significant changes or loss of specific formatting, style, or content.
-                  </p>
-                </div>
-                
-                <div className="p-3 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-400 rounded">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Shield className="h-4 w-4 text-green-600 dark:text-green-400" />
-                    <span className="font-semibold text-green-800 dark:text-green-200">Recommended Safety Steps</span>
-                  </div>
-                  <ul className="text-xs text-green-700 dark:text-green-300 space-y-1 ml-4">
-                    <li className="list-disc">✅ Copy your document as backup (Ctrl/Cmd+A, Ctrl/Cmd+C)</li>
-                    <li className="list-disc">✅ Select specific text instead for targeted edits</li>
-                    <li className="list-disc">✅ Use "Ideas Only" commands (purple badges) for safe suggestions</li>
-                    <li className="list-disc">✅ Remember you can use /undo immediately after to revert</li>
-                  </ul>
-                </div>
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="gap-3">
-            <AlertDialogCancel 
-              onClick={() => {
-                setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
-              }}
-              className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600"
-            >
-              ❌ Cancel (Recommended)
-            </AlertDialogCancel>
-            <AlertDialogAction 
-              onClick={async () => {
-                const command = confirmationDialog.command;
-                setConfirmationDialog(prev => ({ ...prev, isOpen: false }));
-                onClose(); // Close the slash command menu
-                await executeCommandConfirmed(command);
-              }}
-              className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white font-semibold"
-            >
-              ⚠️ Yes, Replace Entire Document
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                {command.description}
+              </p>
+            </div>
+            {index === selectedIndex && (
+              <ArrowRight className="h-4 w-4 text-blue-500 flex-shrink-0" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
+        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+          <span>↑↓ Navigate • Enter Execute • Esc Close</span>
+          {isProcessing && <span className="text-blue-500">Processing...</span>}
+        </div>
+      </div>
+
+      {/* Processing indicator */}
+      {isProcessing && (
+        <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 flex items-center justify-center">
+          <AIProcessingIndicator 
+            isProcessing={isProcessing} 
+            message="Processing command..." 
+          />
+        </div>
+      )}
+    </div>
   );
 }

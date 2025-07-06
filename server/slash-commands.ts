@@ -1151,13 +1151,14 @@ Format your analysis clearly with headers and bullet points. Be specific and act
           } : undefined
         };
       } else {
-        // For these commands, if no selection, work on entire document but warn user
+        // Safety-first: If no selection, provide guidance instead of replacing entire document
         return {
-          result: generatedText,
-          message: `Applied ${action} to the entire document (no text was selected).`,
+          result: `To use /${action}, please select some text first. This helps ensure only the content you want to change is modified, keeping your document safe.`,
+          message: `Please select text to apply ${action} safely.`,
           replaceSelection: false,
-          replaceEntireContent: true,
-          appendToContent: false
+          replaceEntireContent: false,
+          appendToContent: false,
+          contextOnly: true
         };
       }
     }
@@ -1184,12 +1185,14 @@ Format your analysis clearly with headers and bullet points. Be specific and act
         } : undefined
       };
     } else {
+      // Safety-first: Never replace entire document without explicit selection
       return {
-        result: generatedText,
-        message: `Applied ${action} to your text.`,
+        result: `To use /${action}, please select some text first. This ensures only your intended content is modified.`,
+        message: `Please select text to apply ${action} safely.`,
         replaceSelection: false,
-        replaceEntireContent: true,
-        appendToContent: false
+        replaceEntireContent: false,
+        appendToContent: false,
+        contextOnly: true
       };
     }
   } catch (error: any) {
