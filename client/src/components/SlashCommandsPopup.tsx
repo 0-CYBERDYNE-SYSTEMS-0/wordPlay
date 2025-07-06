@@ -7,7 +7,10 @@ import {
   Lightbulb,
   Pencil,
   Undo,
-  ArrowRight
+  ArrowRight,
+  BarChart2,
+  Image,
+  Table
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -91,12 +94,36 @@ const SLASH_COMMANDS: SlashCommand[] = [
     shortcut: '6'
   },
   {
+    id: 'chart',
+    title: 'Create chart',
+    description: 'Generate interactive chart from data',
+    icon: <BarChart2 className="h-4 w-4" />,
+    action: 'chart',
+    shortcut: '7'
+  },
+  {
+    id: 'image',
+    title: 'Generate image',
+    description: 'Create image from description',
+    icon: <Image className="h-4 w-4" />,
+    action: 'image',
+    shortcut: '8'
+  },
+  {
+    id: 'table',
+    title: 'Create table',
+    description: 'Generate markdown table from content',
+    icon: <Table className="h-4 w-4" />,
+    action: 'table',
+    shortcut: '9'
+  },
+  {
     id: 'undo',
     title: 'Undo',
     description: 'Undo the last change',
     icon: <Undo className="h-4 w-4" />,
     action: 'undo',
-    shortcut: '7'
+    shortcut: '0'
   }
 ];
 
@@ -150,76 +177,165 @@ export default function SlashCommandsPopup({
 
       const { selectedText, hasSelection, start, end } = selectionInfo;
       
-      const response = await apiRequest('POST', '/api/ai/slash-command', {
-        command: command.action,
-        content: content,
-        selectedText: hasSelection ? selectedText : undefined,
-        selectionStart: hasSelection ? start : undefined,
-        selectionEnd: hasSelection ? end : undefined,
-        llmProvider,
-        llmModel,
-        projectId: activeProjectId
-      });
+      // Check if this is an AI content generation command
+      const aiContentCommands = ['chart', 'image', 'table'];
+      const isAIContentCommand = aiContentCommands.includes(command.action);
+      
+      if (isAIContentCommand) {
+        // Route to AI content generation endpoint with smart defaults
+        const requestData: any = {
+          command: command.action,
+          content: content,
+          selectionInfo: {
+            selectedText: hasSelection ? selectedText : '',
+            start: hasSelection ? start : 0,
+            end: hasSelection ? end : 0
+          }
+        };
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Add intelligent defaults for each command type
+        if (command.action === 'chart') {
+          requestData.chartType = 'auto'; // Let AI choose best chart type
+        } else if (command.action === 'image') {
+          requestData.style = 'realistic'; // Default to realistic style
+        } else if (command.action === 'table') {
+          requestData.mode = 'replace'; // Default to replace mode
+          requestData.style = 'simple'; // Default to simple style
+        }
+
+        const response = await apiRequest('POST', '/api/ai/content', requestData);
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return response.json();
+      } else {
+        // Route to regular slash command endpoint
+        const response = await apiRequest('POST', '/api/ai/slash-command', {
+          command: command.action,
+          content: content,
+          selectedText: hasSelection ? selectedText : undefined,
+          selectionStart: hasSelection ? start : undefined,
+          selectionEnd: hasSelection ? end : undefined,
+          llmProvider,
+          llmModel,
+          projectId: activeProjectId
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return response.json();
       }
-
-      return response.json();
     },
     onSuccess: async (data) => {
       if (!data) return; // Undo command
 
-      const responseParser = createAIResponseParser(llmProvider);
-      const parsedResponse = await responseParser.parseResponse(
-        data.result || '', 
-        data.command || 'unknown', 
-        content, 
-        selectionInfo
-      );
-      
-      // Handle different response types
-      if (data.contextOnly) {
-        // Show suggestions in context panel
-        onSuggestions?.(parsedResponse.suggestions || data.result);
+      // Check if this is an AI content generation response
+      const aiContentCommands = ['chart', 'image', 'table'];
+      const isAIContentResponse = data.command && aiContentCommands.includes(data.command);
+
+      if (isAIContentResponse) {
+        // Handle AI content generation responses (chart, image, table)
+        // These responses contain the generated content directly
+        const generatedContent = data.content || data.result || '';
+        
+        if (selectionInfo.hasSelection) {
+          // Replace selected text with generated content
+          const { start, end } = selectionInfo;
+          if (start !== undefined && end !== undefined) {
+            const newContent = content.slice(0, start) + generatedContent + content.slice(end);
+            setContent(newContent);
+            
+            // Update cursor position
+            setTimeout(() => {
+              if (editorRef.current) {
+                const newPosition = start + generatedContent.length;
+                editorRef.current.setSelectionRange(newPosition, newPosition);
+                editorRef.current.focus();
+              }
+            }, 0);
+          }
+        } else {
+          // Insert at current cursor position or append to end
+          const textarea = editorRef.current;
+          if (textarea) {
+            const cursorPos = textarea.selectionStart;
+            const newContent = content.slice(0, cursorPos) + generatedContent + content.slice(cursorPos);
+            setContent(newContent);
+            
+            // Update cursor position
+            setTimeout(() => {
+              const newPosition = cursorPos + generatedContent.length;
+              textarea.setSelectionRange(newPosition, newPosition);
+              textarea.focus();
+            }, 0);
+          } else {
+            // Fallback: append to end
+            const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + generatedContent;
+            setContent(newContent);
+          }
+        }
+
         toast({
-          title: "Suggestions Generated",
-          description: data.message || "Check the context panel for AI suggestions."
+          title: "Content Generated",
+          description: data.message || `${data.command} created successfully.`
         });
-      } else if (data.replaceSelection && selectionInfo.hasSelection) {
-        // Replace selected text
-        const { start, end } = selectionInfo;
-        if (start !== undefined && end !== undefined) {
-          const newContent = content.slice(0, start) + parsedResponse.content + content.slice(end);
+      } else {
+        // Handle regular slash command responses
+        const responseParser = createAIResponseParser(llmProvider);
+        const parsedResponse = await responseParser.parseResponse(
+          data.result || '', 
+          data.command || 'unknown', 
+          content, 
+          selectionInfo
+        );
+        
+        // Handle different response types
+        if (data.contextOnly) {
+          // Show suggestions in context panel
+          onSuggestions?.(parsedResponse.suggestions || data.result);
+          toast({
+            title: "Suggestions Generated",
+            description: data.message || "Check the context panel for AI suggestions."
+          });
+        } else if (data.replaceSelection && selectionInfo.hasSelection) {
+          // Replace selected text
+          const { start, end } = selectionInfo;
+          if (start !== undefined && end !== undefined) {
+            const newContent = content.slice(0, start) + parsedResponse.content + content.slice(end);
+            setContent(newContent);
+            
+            // Update cursor position
+            setTimeout(() => {
+              if (editorRef.current) {
+                const newPosition = start + parsedResponse.content.length;
+                editorRef.current.setSelectionRange(newPosition, newPosition);
+                editorRef.current.focus();
+              }
+            }, 0);
+          }
+        } else if (data.appendToContent) {
+          // Append to end of content
+          const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + parsedResponse.content;
           setContent(newContent);
           
-          // Update cursor position
+          // Move cursor to end
           setTimeout(() => {
             if (editorRef.current) {
-              const newPosition = start + parsedResponse.content.length;
-              editorRef.current.setSelectionRange(newPosition, newPosition);
+              editorRef.current.setSelectionRange(newContent.length, newContent.length);
               editorRef.current.focus();
             }
           }, 0);
         }
-      } else if (data.appendToContent) {
-        // Append to end of content
-        const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + parsedResponse.content;
-        setContent(newContent);
-        
-        // Move cursor to end
-        setTimeout(() => {
-          if (editorRef.current) {
-            editorRef.current.setSelectionRange(newContent.length, newContent.length);
-            editorRef.current.focus();
-          }
-        }, 0);
-      }
 
-      toast({
-        title: "Command Executed",
-        description: data.message || `Applied ${data.command} successfully.`
-      });
+        toast({
+          title: "Command Executed",
+          description: data.message || `Applied ${data.command} successfully.`
+        });
+      }
     },
     onError: (error) => {
       console.error('Slash command error:', error);
@@ -276,12 +392,21 @@ export default function SlashCommandsPopup({
           onClose();
           break;
         default:
-          // Handle number shortcuts
+          // Handle number shortcuts (1-9 and 0)
           const num = parseInt(e.key);
-          if (num >= 1 && num <= SLASH_COMMANDS.length) {
+          if (num >= 1 && num <= 9 && num <= SLASH_COMMANDS.length) {
             e.preventDefault();
             if (!isProcessing) {
               handleExecuteCommand(SLASH_COMMANDS[num - 1]);
+            }
+          } else if (e.key === '0') {
+            // Handle 0 for the last command (undo)
+            e.preventDefault();
+            if (!isProcessing) {
+              const undoCommand = SLASH_COMMANDS.find(cmd => cmd.shortcut === '0');
+              if (undoCommand) {
+                handleExecuteCommand(undoCommand);
+              }
             }
           }
           break;
@@ -378,7 +503,7 @@ export default function SlashCommandsPopup({
       {/* Footer */}
       <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
         <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-          <span>↑↓ Navigate • Enter Execute • Esc Close</span>
+          <span>↑↓ Navigate • 1-9,0 Shortcuts • Enter Execute • Esc Close</span>
           {isProcessing && <span className="text-blue-500">Processing...</span>}
         </div>
       </div>
