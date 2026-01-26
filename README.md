@@ -1,18 +1,9 @@
-```
-                    
-           
-               
-                
-                
-                     
-```
+
 
 <div align="center">
 
-#  **wordPlay** - _The Future of AI-Powered Writing_ 
-
-###  _Where Words Meet Intelligence, and Ideas Come to Life_ 
-
+#  **wordPlay** - _The Future of AI-Powered Writing_
+###  _Where Words Meet Intelligence, and Ideas Come to Life_
 [![ **Modern Stack**](https://img.shields.io/badge/Stack-React%2018%20%2B%20TypeScript%20%2B%20Node.js-blue?style=for-the-badge&logo=react)](https://reactjs.org/)
 [![ **AI Powered**](https://img.shields.io/badge/AI-OpenAI%20%2B%20Ollama%20Enabled-green?style=for-the-badge&logo=openai)](https://openai.com/)
 [![ **Performance**](https://img.shields.io/badge/Speed-Lightning%20Fast-yellow?style=for-the-badge&logo=bolt)](https://vitejs.dev/)
@@ -26,20 +17,17 @@
 
 ---
 
-##  **What Makes wordPlay Special?** 
-
+##  **What Makes wordPlay Special?**
 > **wordPlay isn't just another writing tool.** It's a complete AI-saturated ecosystem that makes writing feel like magic 
 
 ```ascii
    AI Agent →  Research →   Writing →  Analysis →  Publish
     ↓             ↓             ↓            ↓            ↓
  19 Tools    Web Search   Slash Cmd   Metrics    Perfect
-```
 
 ---
 
-##  **Feature Galaxy** 
-
+##  **Feature Galaxy**
 <table>
 <tr>
 <td width="50%" valign="top">
@@ -51,7 +39,6 @@
 + Context-Aware Actions
 + Real-time Collaboration
 + Self-Improving Intelligence
-```
 
 ** Tool Categories:**
 -  **Project Management** (8 tools)
@@ -69,7 +56,6 @@
 + Multi-tab Interface
 + Responsive Design
 + Dark/Light Themes
-```
 
 ** Quick Actions:**
 - `/continue` → Extend writing
@@ -84,7 +70,6 @@
 ---
 
 ##  **Architecture Overview**
-
 <div align="center">
 
 ```mermaid
@@ -103,16 +88,13 @@ graph TB
     style C fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     style E fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
     style F fill:#fff3e0,stroke:#e65100,stroke-width:2px
-```
 
 </div>
 
 ---
 
 ##  **Core Features Deep Dive**
-
 ###  **AI Agent System** - _The Brain of wordPlay_
-
 <details>
 <summary><strong> Click to explore the Agent's superpowers</strong></summary>
 
@@ -170,7 +152,6 @@ The AI Agent is equipped with **19 specialized tools** across 4 categories:
 </details>
 
 ###  **Slash Commands** - _Lightning-Fast AI Actions_
-
 <table>
 <tr><th>Command</th><th> Purpose</th><th> Magic</th></tr>
 <tr><td><code>/continue</code></td><td>Extend writing</td><td> Seamless flow continuation</td></tr>
@@ -185,7 +166,6 @@ The AI Agent is equipped with **19 specialized tools** across 4 categories:
 </table>
 
 ###  **Research & Context System**
-
 > ** The world's knowledge at your fingertips**
 
 ```ascii
@@ -196,14 +176,11 @@ The AI Agent is equipped with **19 specialized tools** across 4 categories:
  • Academic           • Metadata           • Suggestions   
  • News Sources       • Auto-archive       • Integration   
         
-```
 
 ---
 
 ##  **Quick Start Guide**
-
 ###  **Prerequisites**
-
 <table>
 <tr><th> Requirement</th><th> Version</th><th> Notes</th></tr>
 <tr><td><strong>Node.js</strong></td><td>≥ 18.0</td><td>🟢 LTS recommended</td></tr>
@@ -213,7 +190,6 @@ The AI Agent is equipped with **19 specialized tools** across 4 categories:
 </table>
 
 ###  **Installation**
-
 ```bash
 #  Clone the magic
 git clone https://github.com/yourusername/wordPlay.git
@@ -225,16 +201,13 @@ npm install
 #  Configure environment
 cp .env.example .env
 # Edit .env with your settings
-
 #  Setup database
 npm run db:push
 
 #  Launch wordPlay
 npm run dev
-```
 
 ###  **Environment Configuration**
-
 ```env
 #  AI Configuration
 OPENAI_API_KEY=sk-...              # OpenAI API key
@@ -243,15 +216,13 @@ OLLAMA_URL=http://localhost:11434  # Local Ollama server
 #  Database
 DATABASE_URL=postgresql://...      # PostgreSQL connection
 
-#  App Settings  
+#  App Settings
 NODE_ENV=development              # Environment mode
 PORT=5173                         # Development port
-```
 
 ---
 
 ##  **Technology Stack**
-
 <div align="center">
 
 ###  **Frontend Arsenal**
@@ -275,7 +246,6 @@ PORT=5173                         # Development port
 ---
 
 ##  **Performance Metrics**
-
 <table>
 <tr>
 <th width="25%"> Metric</th>
@@ -312,13 +282,11 @@ PORT=5173                         # Development port
 ---
 
 ##  **Use Cases & Workflows**
-
 <details>
 <summary><strong> Academic Writing</strong></summary>
 
 ```ascii
  Research →  Draft →  AI Analysis →  Revision →  Style Check →  Publish
-```
 
 **Perfect for:**
 -  Research papers
@@ -333,7 +301,6 @@ PORT=5173                         # Development port
 
 ```ascii
  Brainstorm →  Write →  AI Enhancement →  Structure →  Polish →  Share
-```
 
 **Perfect for:**
 -  Novels & stories
@@ -348,7 +315,6 @@ PORT=5173                         # Development port
 
 ```ascii
  Template →  Content →  Professional Tone →  Grammar →  Metrics →  Deliver
-```
 
 **Perfect for:**
 -  Reports & proposals
@@ -361,9 +327,7 @@ PORT=5173                         # Development port
 ---
 
 ##  **API Reference**
-
 ###  **AI Agent Endpoints**
-
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Purpose</th><th> Use Case</th></tr>
 <tr><td><code>POST</code></td><td><code>/api/agent/request</code></td><td>Send agent requests</td><td> AI interactions</td></tr>
@@ -373,7 +337,6 @@ PORT=5173                         # Development port
 </table>
 
 ###  **Project Management**
-
 <table>
 <tr><th>Method</th><th>Endpoint</th><th>Purpose</th><th> Use Case</th></tr>
 <tr><td><code>GET</code></td><td><code>/api/projects</code></td><td>List all projects</td><td> Project overview</td></tr>
@@ -385,11 +348,9 @@ PORT=5173                         # Development port
 ---
 
 ##  **Contributing**
-
 > **We  contributors!** Join our mission to revolutionize writing with AI.
 
 ###  **Ways to Contribute**
-
 <table>
 <tr><th> Area</th><th> Skills Needed</th><th> Impact</th></tr>
 <tr><td><strong> AI Features</strong></td><td>Python, TypeScript, LLM APIs</td><td> High</td></tr>
@@ -400,7 +361,6 @@ PORT=5173                         # Development port
 </table>
 
 ###  **Getting Started**
-
 ```bash
 #  Fork the repository
 #  Create feature branch
@@ -409,12 +369,9 @@ git checkout -b feature/amazing-feature
 #  Make your changes
 #  Add tests
 #  Update docs
-
 #  Submit pull request
-```
 
 ###  **Contribution Guidelines**
-
 -  Follow our code style
 -  Add tests for new features  
 -  Update documentation
@@ -424,7 +381,6 @@ git checkout -b feature/amazing-feature
 ---
 
 ##  **Community & Support**
-
 <div align="center">
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord)](https://discord.gg/wordplay)
@@ -432,7 +388,6 @@ git checkout -b feature/amazing-feature
 [![Documentation](https://img.shields.io/badge/Docs-Learn%20More-blue?style=for-the-badge&logo=gitbook)](https://docs.wordplay.ai)
 
 ###  **Connect With Us**
-
 ** Community**: [Discord Server](https://discord.gg/wordplay)  
 ** Support**: support@wordplay.ai  
 ** Issues**: [GitHub Issues](https://github.com/wordplay/issues)  
@@ -442,10 +397,8 @@ git checkout -b feature/amazing-feature
 
 ---
 
-##  **What's Next?** 
-
+##  **What's Next?**
 ###  **Roadmap**
-
 <table>
 <tr><th> Phase</th><th> Features</th><th> Timeline</th></tr>
 <tr>
@@ -483,21 +436,18 @@ git checkout -b feature/amazing-feature
 ---
 
 ##  **License**
-
 <div align="center">
 
 ** MIT License** - See [LICENSE](LICENSE) for details
 
 ```ascii
     Free         Open Source       Community Driven       Fast Growing
-```
 
 ---
 
 ** Star us on GitHub •  Fork for your projects •  Join our community**
 
 ### _Built with  by developers, for developers_
-
 </div>
 
 ---
