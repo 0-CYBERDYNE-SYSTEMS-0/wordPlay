@@ -224,6 +224,21 @@ export function useDocument({
       }
     }
   }, [debouncedContent, debouncedTitle, documentId, isDirty, autoSaveEnabled, isSaving]);
+
+  // Warn and flush before closing/reloading when there are unsaved changes, so the
+  // autosave debounce window can't silently drop recent keystrokes. The flush uses
+  // isManual=true so it also attempts when autosave is disabled.
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty && hasInitialized.current) {
+        saveDocument(true).catch(() => {});
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty, saveDocument]);
   
   return {
     title,

@@ -18,31 +18,33 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
 
   const steps = [
     {
-      title: "Welcome to WordPlay",
-      subtitle: "Your AI-powered writing companion",
+      title: "Welcome to wordPlay",
+      subtitle: "A quiet page. Intelligent tools when you need them.",
       content: (
-        <div className="text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
-            <Sparkles className="h-8 w-8 text-primary" />
+        <div className="space-y-5 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--wp-copper)]/12">
+            <Sparkles className="h-7 w-7 text-[var(--wp-copper)]" />
           </div>
-          <p className="text-lg text-gray-600 dark:text-gray-300">
-            Transform your writing with intelligent AI assistance that helps you write better, faster, and more effectively.
+          <p className="text-[15px] leading-relaxed text-stone-600 dark:text-stone-300">
+            Editorial focus for creators — write first, summon AI with{" "}
+            <kbd className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-[12px] dark:bg-stone-800">/</kbd>
+            {" "}for continue, polish, images, and charts.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-            <div className="p-4 border rounded-lg dark:border-gray-700">
-              <BookOpen className="h-6 w-6 text-primary mb-2" />
-              <h4 className="font-medium">Smart Writing</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">AI suggestions as you write</p>
+          <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-[var(--wp-line)] p-4 text-left dark:border-stone-700">
+              <BookOpen className="mb-2 h-5 w-5 text-[var(--wp-copper)]" />
+              <h4 className="text-sm font-medium">Focused writing</h4>
+              <p className="mt-1 text-[12px] text-stone-500">Paper-like canvas, no chrome noise</p>
             </div>
-            <div className="p-4 border rounded-lg dark:border-gray-700">
-              <Search className="h-6 w-6 text-primary mb-2" />
-              <h4 className="font-medium">Research Assistant</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Find and cite sources automatically</p>
+            <div className="rounded-xl border border-[var(--wp-line)] p-4 text-left dark:border-stone-700">
+              <Search className="mb-2 h-5 w-5 text-[var(--wp-teal)]" />
+              <h4 className="text-sm font-medium">Research</h4>
+              <p className="mt-1 text-[12px] text-stone-500">Sources beside the draft</p>
             </div>
-            <div className="p-4 border rounded-lg dark:border-gray-700">
-              <Zap className="h-6 w-6 text-primary mb-2" />
-              <h4 className="font-medium">Quick Commands</h4>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Type "/" for instant AI help</p>
+            <div className="rounded-xl border border-[var(--wp-line)] p-4 text-left dark:border-stone-700">
+              <Zap className="mb-2 h-5 w-5 text-[var(--wp-ink)] dark:text-stone-200" />
+              <h4 className="text-sm font-medium">Slash commands</h4>
+              <p className="mt-1 text-[12px] text-stone-500">Type / for instant AI actions</p>
             </div>
           </div>
         </div>

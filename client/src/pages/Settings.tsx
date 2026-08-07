@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Slider } from "@/components/ui/slider";
+import CustomCommandEditor from "@/components/CustomCommandEditor";
 
 interface SettingsProps {
   onBack: () => void;
@@ -510,6 +511,13 @@ export default function Settings({ onBack }: SettingsProps) {
                 )}
               </div>
             </div>
+          </section>
+
+          <Separator />
+
+          {/* Custom Commands */}
+          <section>
+            <CustomCommandEditor />
           </section>
 
           <Separator />

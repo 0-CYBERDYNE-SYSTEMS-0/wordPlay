@@ -40,7 +40,7 @@ export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
     
     // Initialize new client for image generation
     geminiNew = new GoogleGenAI({ apiKey: geminiKey });
-    console.log('Gemini clients initialized for image generation with 2.0 Flash');
+    console.log('Gemini clients initialized for image generation');
   } else {
     console.warn('Gemini API key not provided - image generation will not work');
   }
@@ -188,7 +188,7 @@ export async function generateImage(request: ImageGenerationRequest): Promise<st
     throw new Error('Gemini client not initialized for image generation');
   }
 
-  console.log('🎨 Starting Gemini 2.0 Flash image generation...');
+  console.log('🎨 Starting Gemini image generation...');
   console.log(`📝 Prompt: "${request.prompt}"`);
   console.log(`🎭 Style: ${request.style}`);
 
@@ -214,94 +214,116 @@ Requirements:
 Create a visually appealing and professional image.`;
 
   try {
-    console.log('📡 Sending request to Gemini 2.0 Flash...');
-    
-    const response = await geminiNew.models.generateContent({
-      model: 'gemini-2.0-flash-preview-image-generation',
-      contents: enhancedPrompt,
-      config: {
-        responseModalities: [Modality.TEXT, Modality.IMAGE],
-      },
-    });
-    
-    console.log('✅ Response received from Gemini');
-    
-    // Process the response to extract image data
-    const candidate = response.candidates?.[0];
-    const parts = candidate?.content?.parts || [];
-    
-    console.log(`📊 Processing ${parts.length} response parts`);
-    
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      
-      if (part.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) {
-        try {
-          console.log(`🖼️  Found image data: ${part.inlineData.mimeType}`);
-          console.log(`📐 Data length: ${part.inlineData.data.length} characters`);
-          
-          // Process and save the image
-          const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
-          console.log(`💾 Image buffer size: ${Math.round(imageBuffer.length / 1024)}KB`);
-          
-          // Check if image is reasonable size (max 10MB)
-          if (imageBuffer.length > 10 * 1024 * 1024) {
-            console.warn(`⚠️  Image too large: ${Math.round(imageBuffer.length / (1024 * 1024))}MB`);
-            throw new Error('Generated image is too large');
+    // Gemini 3.1 Flash-Lite Image (Nano Banana 2 Lite) is the current, stable,
+    // cost-efficient image-generation model. NOTE: the plain "gemini-3.1-flash-lite"
+    // model is text-output only and cannot generate images — the "-image" variant is
+    // required for image generation.
+    const imageModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
+    const imageModels = [imageModel];
+
+    let lastError: any = null;
+
+    for (const model of imageModels) {
+      try {
+        console.log(`📡 Sending request to ${model}...`);
+
+        const response = await geminiNew.models.generateContent({
+          model,
+          contents: enhancedPrompt,
+          config: {
+            responseModalities: [Modality.TEXT, Modality.IMAGE],
+          },
+        });
+
+        console.log(`✅ Response received from ${model}`);
+
+        // Process the response to extract image data
+        const candidate = response.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+
+        console.log(`📊 Processing ${parts.length} response parts`);
+
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+
+          if (part.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) {
+            try {
+              console.log(`🖼️  Found image data: ${part.inlineData.mimeType}`);
+              console.log(`📐 Data length: ${part.inlineData.data.length} characters`);
+
+              // Process and save the image
+              const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+              console.log(`💾 Image buffer size: ${Math.round(imageBuffer.length / 1024)}KB`);
+
+              // Check if image is reasonable size (max 10MB)
+              if (imageBuffer.length > 10 * 1024 * 1024) {
+                console.warn(`⚠️  Image too large: ${Math.round(imageBuffer.length / (1024 * 1024))}MB`);
+                throw new Error('Generated image is too large');
+              }
+
+              const fileExtension = part.inlineData.mimeType.split('/')[1] || 'png';
+              const fileName = `gemini-image-${crypto.randomUUID()}.${fileExtension}`;
+
+              // Create uploads directory if it doesn't exist
+              const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+              if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+                console.log('📁 Created uploads directory');
+              }
+
+              // Save the image file
+              const filePath = path.join(uploadsDir, fileName);
+              fs.writeFileSync(filePath, imageBuffer);
+
+              console.log(`✅ Image saved successfully: ${fileName}`);
+              console.log(`📂 Full path: ${filePath}`);
+
+              // Return markdown with relative URL
+              const imageUrl = `/uploads/${fileName}`;
+              const altText = request.prompt.substring(0, 100);
+              const result = `![${altText}](${imageUrl})`;
+
+              console.log(`📤 Returning markdown result: ${result}`);
+              return result;
+
+            } catch (saveError: any) {
+              console.error('❌ Error processing image:', saveError);
+              // Throw so the caller surfaces a proper error instead of inserting
+              // error text into the document.
+              throw new Error(saveError.message || 'Could not process generated image');
+            }
+          } else if (part.text) {
+            console.log(`📝 Text part: ${part.text.substring(0, 100)}...`);
           }
-          
-          const fileExtension = part.inlineData.mimeType.split('/')[1] || 'png';
-          const fileName = `gemini-image-${crypto.randomUUID()}.${fileExtension}`;
-          
-          // Create uploads directory if it doesn't exist
-          const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-          if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-            console.log('📁 Created uploads directory');
-          }
-          
-          // Save the image file
-          const filePath = path.join(uploadsDir, fileName);
-          fs.writeFileSync(filePath, imageBuffer);
-          
-          console.log(`✅ Image saved successfully: ${fileName}`);
-          console.log(`📂 Full path: ${filePath}`);
-          
-          // Return markdown with relative URL
-          const imageUrl = `/uploads/${fileName}`;
-          const altText = request.prompt.substring(0, 100);
-          const result = `![${altText}](${imageUrl})`;
-          
-          console.log(`📤 Returning markdown result: ${result}`);
-          return result;
-          
-        } catch (saveError: any) {
-          console.error('❌ Error processing image:', saveError);
-          return `**Image Generation Error**: ${saveError.message || 'Could not process generated image'}\n\n*Please try again with a simpler image description.*`;
         }
-      } else if (part.text) {
-        console.log(`📝 Text part: ${part.text.substring(0, 100)}...`);
+
+        console.warn(`❌ No image data found in response from ${model}`);
+        lastError = new Error(`No image data found in Gemini response from ${model}`);
+      } catch (error: any) {
+        console.error(`❌ Error generating image with ${model}:`, error);
+        lastError = error;
       }
     }
 
-    console.error('❌ No image data found in Gemini response');
-    throw new Error('No image data found in Gemini response');
-    
-  } catch (error: any) {
-    console.error('❌ Error generating image with Gemini 2.0 Flash:', error);
-    
-    // Provide more specific error messages
-    if (error.message?.includes('content policy') || error.message?.includes('safety')) {
+    // Map the last failure to a helpful message
+    const error = lastError || new Error('Unknown image generation failure');
+    const rawMessage = error.message || '';
+    const apiStatus = typeof error.status === 'number' ? error.status : null;
+
+    if (rawMessage.includes('content policy') || rawMessage.includes('safety')) {
       throw new Error('Image request rejected due to content policy. Please try a different description.');
-    } else if (error.message?.includes('rate limit') || error.message?.includes('quota')) {
-      throw new Error('Rate limit exceeded. Please try again in a moment.');
-    } else if (error.message?.includes('not supported')) {
-      throw new Error('Image generation not available in your region. Please check Gemini 2.0 Flash availability.');
-    } else if (error.message?.includes('responseModalities')) {
+    } else if (apiStatus === 429 || rawMessage.includes('quota') || rawMessage.includes('rate limit')) {
+      throw new Error('Gemini image generation quota exceeded. Check the API key quota/billing, then try again.');
+    } else if (apiStatus === 404 || rawMessage.includes('not found')) {
+      throw new Error(`The image model "${imageModel}" is not available for this Gemini API key. Set GEMINI_IMAGE_MODEL to a supported image model (e.g. gemini-3.1-flash-lite-image).`);
+    } else if (rawMessage.includes('responseModalities')) {
       throw new Error('Gemini model configuration error. The service may be temporarily unavailable.');
     } else {
-      throw new Error(`Failed to generate image: ${error.message || 'Unknown error'}`);
+      throw new Error(`Failed to generate image: ${rawMessage || 'Unknown error'}`);
     }
+  } catch (error: any) {
+    console.error('❌ AI content generation error:', error);
+    throw error;
   }
 }
 

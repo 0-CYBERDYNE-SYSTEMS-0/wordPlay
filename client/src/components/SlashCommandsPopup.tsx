@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Type, 
-  Sparkles, 
-  CheckSquare, 
-  FileText, 
-  Lightbulb,
-  Pencil,
+import {
+  Type,
+  Sparkles,
+  CheckSquare,
+  FileText,
+  List,
   Undo,
   ArrowRight,
   BarChart2,
@@ -70,28 +69,20 @@ const SLASH_COMMANDS: SlashCommand[] = [
     shortcut: '3'
   },
   {
-    id: 'summarize',
-    title: 'Summarize',
-    description: 'Create a concise summary',
-    icon: <FileText className="h-4 w-4" />,
-    action: 'summarize',
+    id: 'bullets',
+    title: 'Bullet points',
+    description: 'Convert selected text into bullet points',
+    icon: <List className="h-4 w-4" />,
+    action: 'bullets',
     shortcut: '4'
   },
   {
-    id: 'rewrite',
-    title: 'Rewrite',
-    description: 'Rewrite the selected text',
-    icon: <Pencil className="h-4 w-4" />,
-    action: 'rewrite',
+    id: 'format',
+    title: 'Format document',
+    description: 'Improve structure and formatting',
+    icon: <FileText className="h-4 w-4" />,
+    action: 'format',
     shortcut: '5'
-  },
-  {
-    id: 'suggest',
-    title: 'Get ideas',
-    description: 'Generate ideas and suggestions',
-    icon: <Lightbulb className="h-4 w-4" />,
-    action: 'suggest',
-    shortcut: '6'
   },
   {
     id: 'chart',
@@ -99,7 +90,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Generate interactive chart from data',
     icon: <BarChart2 className="h-4 w-4" />,
     action: 'chart',
-    shortcut: '7'
+    shortcut: '6'
   },
   {
     id: 'image',
@@ -107,7 +98,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Create image from description',
     icon: <Image className="h-4 w-4" />,
     action: 'image',
-    shortcut: '8'
+    shortcut: '7'
   },
   {
     id: 'table',
@@ -115,7 +106,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
     description: 'Generate markdown table from content',
     icon: <Table className="h-4 w-4" />,
     action: 'table',
-    shortcut: '9'
+    shortcut: '8'
   },
   {
     id: 'undo',
@@ -144,6 +135,7 @@ export default function SlashCommandsPopup({
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const lastCommandRef = useRef<string>('');
   const { toast } = useToast();
   const { settings } = useSettings();
   const { startProcessing, stopProcessing } = useApiProcessing();
@@ -170,86 +162,61 @@ export default function SlashCommandsPopup({
   // Execute slash command
   const executeCommandMutation = useMutation({
     mutationFn: async (command: SlashCommand) => {
-      if (command.action === 'undo') {
-        onUndo?.();
-        return null;
-      }
-
       const { selectedText, hasSelection, start, end } = selectionInfo;
-      
-      // Check if this is an AI content generation command
-      const aiContentCommands = ['chart', 'image', 'table'];
-      const isAIContentCommand = aiContentCommands.includes(command.action);
-      
-      if (isAIContentCommand) {
-        // Route to AI content generation endpoint with smart defaults
-        const requestData: any = {
-          command: command.action,
-          content: content,
-          selectionInfo: {
-            selectedText: hasSelection ? selectedText : '',
-            start: hasSelection ? start : 0,
-            end: hasSelection ? end : 0
-          }
-        };
+      lastCommandRef.current = command.action;
 
-        // Add intelligent defaults for each command type
-        if (command.action === 'chart') {
-          requestData.chartType = 'auto'; // Let AI choose best chart type
-        } else if (command.action === 'image') {
-          requestData.style = 'realistic'; // Default to realistic style
-        } else if (command.action === 'table') {
-          requestData.mode = 'replace'; // Default to replace mode
-          requestData.style = 'simple'; // Default to simple style
-        }
+      // All commands use /api/ai/slash-command. The server schema requires a
+      // nested selectionInfo object with numeric start/end positions.
+      const requestData: any = {
+        command: command.action,
+        content: content,
+        selectionInfo: {
+          selectedText: hasSelection ? selectedText : '',
+          selectionStart: hasSelection ? start : 0,
+          selectionEnd: hasSelection ? end : 0,
+          beforeSelection: content.slice(0, hasSelection ? start : 0),
+          afterSelection: content.slice(hasSelection ? end : 0)
+        },
+        llmProvider,
+        llmModel,
+        projectId: activeProjectId
+      };
 
-        const response = await apiRequest('POST', '/api/ai/content', requestData);
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return response.json();
-      } else {
-        // Route to regular slash command endpoint
-        const response = await apiRequest('POST', '/api/ai/slash-command', {
-          command: command.action,
-          content: content,
-          selectedText: hasSelection ? selectedText : undefined,
-          selectionStart: hasSelection ? start : undefined,
-          selectionEnd: hasSelection ? end : undefined,
-          llmProvider,
-          llmModel,
-          projectId: activeProjectId
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        return response.json();
+      // Intelligent defaults per AI content command
+      if (command.action === 'chart') {
+        requestData.chartType = 'auto'; // Let AI choose best chart type
+      } else if (command.action === 'image') {
+        requestData.style = 'realistic'; // Default to realistic style
+      } else if (command.action === 'table') {
+        requestData.mode = 'replace'; // Default to replace mode
+        requestData.style = 'simple'; // Default to simple style
       }
+
+      const response = await apiRequest('POST', '/api/ai/slash-command', requestData);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return response.json();
     },
     onSuccess: async (data) => {
-      if (!data) return; // Undo command
+      if (!data) return;
 
-      // Check if this is an AI content generation response
+      const action = lastCommandRef.current;
       const aiContentCommands = ['chart', 'image', 'table'];
-      const isAIContentResponse = data.command && aiContentCommands.includes(data.command);
+      const isAIContentCommand = aiContentCommands.includes(action);
 
-      if (isAIContentResponse) {
-        // Handle AI content generation responses (chart, image, table)
-        // These responses contain the generated content directly
-        const generatedContent = data.content || data.result || '';
-        
+      if (isAIContentCommand) {
+        // AI content generation returns the result directly (markdown image / table / chart)
+        const generatedContent = data.result || '';
+
         if (selectionInfo.hasSelection) {
-          // Replace selected text with generated content
           const { start, end } = selectionInfo;
           if (start !== undefined && end !== undefined) {
             const newContent = content.slice(0, start) + generatedContent + content.slice(end);
             setContent(newContent);
-            
-            // Update cursor position
+
             setTimeout(() => {
               if (editorRef.current) {
                 const newPosition = start + generatedContent.length;
@@ -259,21 +226,18 @@ export default function SlashCommandsPopup({
             }, 0);
           }
         } else {
-          // Insert at current cursor position or append to end
           const textarea = editorRef.current;
           if (textarea) {
             const cursorPos = textarea.selectionStart;
             const newContent = content.slice(0, cursorPos) + generatedContent + content.slice(cursorPos);
             setContent(newContent);
-            
-            // Update cursor position
+
             setTimeout(() => {
               const newPosition = cursorPos + generatedContent.length;
               textarea.setSelectionRange(newPosition, newPosition);
               textarea.focus();
             }, 0);
           } else {
-            // Fallback: append to end
             const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + generatedContent;
             setContent(newContent);
           }
@@ -281,61 +245,71 @@ export default function SlashCommandsPopup({
 
         toast({
           title: "Content Generated",
-          description: data.message || `${data.command} created successfully.`
+          description: `${action} created successfully.`
         });
-      } else {
-        // Handle regular slash command responses
-        const responseParser = createAIResponseParser(llmProvider);
-        const parsedResponse = await responseParser.parseResponse(
-          data.result || '', 
-          data.command || 'unknown', 
-          content, 
-          selectionInfo
-        );
-        
-        // Handle different response types
-        if (data.contextOnly) {
-          // Show suggestions in context panel
-          onSuggestions?.(parsedResponse.suggestions || data.result);
-          toast({
-            title: "Suggestions Generated",
-            description: data.message || "Check the context panel for AI suggestions."
-          });
-        } else if (data.replaceSelection && selectionInfo.hasSelection) {
-          // Replace selected text
-          const { start, end } = selectionInfo;
-          if (start !== undefined && end !== undefined) {
-            const newContent = content.slice(0, start) + parsedResponse.content + content.slice(end);
-            setContent(newContent);
-            
-            // Update cursor position
-            setTimeout(() => {
-              if (editorRef.current) {
-                const newPosition = start + parsedResponse.content.length;
-                editorRef.current.setSelectionRange(newPosition, newPosition);
-                editorRef.current.focus();
-              }
-            }, 0);
-          }
-        } else if (data.appendToContent) {
-          // Append to end of content
-          const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + parsedResponse.content;
+        return;
+      }
+
+      // Regular slash command responses
+      const responseParser = createAIResponseParser(llmProvider);
+      const parsedResponse = await responseParser.parseResponse(
+        data.result || '',
+        action,
+        content,
+        selectionInfo
+      );
+
+      if (data.contextOnly) {
+        onSuggestions?.(parsedResponse.suggestions || data.result);
+        toast({
+          title: "Suggestions Generated",
+          description: data.message || "Check the context panel for suggestions."
+        });
+      } else if (data.replaceSelection) {
+        // Respect smart expansion bounds when the server widened the selection
+        const replaceStart = data.smartExpansion ? data.smartExpansion.expandedStart : selectionInfo.start;
+        const replaceEnd = data.smartExpansion ? data.smartExpansion.expandedEnd : selectionInfo.end;
+        if (typeof replaceStart === 'number' && typeof replaceEnd === 'number') {
+          const newContent = content.slice(0, replaceStart) + parsedResponse.content + content.slice(replaceEnd);
           setContent(newContent);
-          
-          // Move cursor to end
+
           setTimeout(() => {
             if (editorRef.current) {
-              editorRef.current.setSelectionRange(newContent.length, newContent.length);
+              const newPosition = replaceStart + parsedResponse.content.length;
+              editorRef.current.setSelectionRange(newPosition, newPosition);
               editorRef.current.focus();
             }
           }, 0);
         }
+      } else if (data.appendToContent) {
+        const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + parsedResponse.content;
+        setContent(newContent);
 
-        toast({
-          title: "Command Executed",
-          description: data.message || `Applied ${data.command} successfully.`
-        });
+        setTimeout(() => {
+          if (editorRef.current) {
+            editorRef.current.setSelectionRange(newContent.length, newContent.length);
+            editorRef.current.focus();
+          }
+        }, 0);
+      } else if (data.insertAtCursor) {
+        const textarea = editorRef.current;
+        const cursorPos = textarea ? textarea.selectionStart : (selectionInfo.end ?? 0);
+        const newContent = content.slice(0, cursorPos) + parsedResponse.content + content.slice(cursorPos);
+        setContent(newContent);
+
+        setTimeout(() => {
+          if (editorRef.current) {
+            const newPosition = cursorPos + parsedResponse.content.length;
+            editorRef.current.setSelectionRange(newPosition, newPosition);
+            editorRef.current.focus();
+          }
+        }, 0);
       }
+
+      toast({
+        title: "Command Executed",
+        description: data.message || `Applied ${action} successfully.`
+      });
     },
     onError: (error) => {
       console.error('Slash command error:', error);
@@ -357,6 +331,13 @@ export default function SlashCommandsPopup({
 
   // Handle command execution
   const handleExecuteCommand = (command: SlashCommand) => {
+    // Undo is a local editor action — no AI processing needed
+    if (command.action === 'undo') {
+      onUndo?.();
+      onClose();
+      return;
+    }
+
     setIsProcessing(true);
     const id = startProcessing({
       message: `Executing ${command.title}...`,
@@ -433,87 +414,107 @@ export default function SlashCommandsPopup({
 
   if (!isOpen) return null;
 
+  // Clamp menu to viewport on small screens
+  const menuWidth = Math.min(320, typeof window !== 'undefined' ? window.innerWidth - 16 : 320);
+  const left = Math.min(
+    Math.max(8, position.x),
+    typeof window !== 'undefined' ? window.innerWidth - menuWidth - 8 : position.x
+  );
+  const top = Math.min(
+    Math.max(8, position.y),
+    typeof window !== 'undefined' ? window.innerHeight - 120 : position.y
+  );
+
   return (
     <div
       ref={popupRef}
-      className="fixed z-50 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-600 overflow-hidden"
+      className="fixed z-50 overflow-hidden rounded-2xl border border-[var(--wp-line)] bg-[var(--wp-paper-elevated)] shadow-[0_28px_56px_-16px_rgba(26,22,18,0.35)] dark:bg-stone-900 dark:border-stone-700"
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        width: '320px',
-        maxHeight: '400px'
+        left: `${left}px`,
+        top: `${top}px`,
+        width: `${menuWidth}px`,
+        maxHeight: 'min(400px, calc(100vh - 24px))',
       }}
+      role="listbox"
+      aria-label="AI slash commands"
     >
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-            Choose a command
+      <div className="border-b border-[var(--wp-line)] px-4 py-3 dark:border-stone-700">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="font-serif text-[14px] font-semibold tracking-tight text-[var(--wp-ink)] dark:text-stone-50">
+            Commands
           </h3>
-          <div className="text-xs text-gray-500 dark:text-gray-400">
-            {selectionInfo.hasSelection 
-              ? `${selectionInfo.selectedText.length} chars selected`
-              : `${content.length} chars in document`
-            }
+          <div className="text-[11px] tabular-nums text-stone-400">
+            {selectionInfo.hasSelection
+              ? `${selectionInfo.selectedText.length} selected`
+              : `${content.length} chars`}
           </div>
         </div>
+        <p className="mt-0.5 text-[11px] text-stone-500">Write, polish, chart, image, table</p>
       </div>
 
-      {/* Commands */}
-      <div className="max-h-80 overflow-y-auto">
+      <div className="max-h-72 overflow-y-auto minimal-scrollbar">
         {SLASH_COMMANDS.map((command, index) => (
           <button
             key={command.id}
+            type="button"
             onClick={() => !isProcessing && handleExecuteCommand(command)}
             disabled={isProcessing}
             className={`
-              w-full px-4 py-3 flex items-center gap-3 text-left transition-colors
-              ${index === selectedIndex 
-                ? 'bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-500' 
-                : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+              flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors
+              ${index === selectedIndex
+                ? 'bg-[var(--wp-copper)]/10 border-l-2 border-[var(--wp-copper)]'
+                : 'border-l-2 border-transparent hover:bg-stone-50 dark:hover:bg-stone-800/60'
               }
-              ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+              ${isProcessing ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
             `}
+            role="option"
+            aria-selected={index === selectedIndex}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-gray-100 dark:bg-gray-600">
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                index === selectedIndex
+                  ? 'bg-[var(--wp-copper)]/15 text-[var(--wp-copper)]'
+                  : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
+              }`}
+            >
               {command.icon}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
+                <span className="text-[13px] font-medium text-[var(--wp-ink)] dark:text-stone-100">
                   {command.title}
                 </span>
                 {command.shortcut && (
-                  <span className="text-xs bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded">
+                  <span className="rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] text-stone-500 dark:bg-stone-800">
                     {command.shortcut}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+              <p className="mt-0.5 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
                 {command.description}
               </p>
             </div>
             {index === selectedIndex && (
-              <ArrowRight className="h-4 w-4 text-blue-500 flex-shrink-0" />
+              <ArrowRight className="h-4 w-4 shrink-0 text-[var(--wp-copper)]" />
             )}
           </button>
         ))}
       </div>
 
-      {/* Footer */}
-      <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700">
-        <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-          <span>↑↓ Navigate • 1-9,0 Shortcuts • Enter Execute • Esc Close</span>
-          {isProcessing && <span className="text-blue-500">Processing...</span>}
+      <div className="border-t border-[var(--wp-line)] px-3.5 py-2 dark:border-stone-700">
+        <div className="flex items-center justify-between text-[10px] text-stone-400">
+          <span className="truncate">↑↓ · 1–9 · ↵ · Esc</span>
+          {isProcessing && (
+            <span className="text-[var(--wp-copper)]">Working…</span>
+          )}
         </div>
       </div>
 
-      {/* Processing indicator */}
       {isProcessing && (
-        <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 flex items-center justify-center">
-          <AIProcessingIndicator 
-            isProcessing={isProcessing} 
-            message="Processing command..." 
+        <div className="absolute inset-0 flex items-center justify-center bg-[var(--wp-paper)]/70 backdrop-blur-[1px] dark:bg-stone-900/70">
+          <AIProcessingIndicator
+            isProcessing={isProcessing}
+            message="Processing command…"
           />
         </div>
       )}

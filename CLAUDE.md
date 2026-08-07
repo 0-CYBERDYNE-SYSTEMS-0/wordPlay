@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to assistant when working with code in this repository.
+This file provides guidance when working with code in this repository.
 
 ## Development Commands
 
@@ -32,7 +32,7 @@ This is a full-stack TypeScript application with AI-powered writing assistance:
 **Backend** (`server/`):
 - Express.js API server with TypeScript
 - PostgreSQL database with Drizzle ORM
-- AI integration with OpenAI and Ollama support
+- AI integration with OpenAI, Gemini, and Ollama support
 - File operations, web search, and AI agent capabilities
 
 **Database** (`shared/schema.ts`):
@@ -43,7 +43,7 @@ This is a full-stack TypeScript application with AI-powered writing assistance:
 
 **AI Integration**:
 - Slash commands trigger AI operations (`/continue`, `/improve`, `/summarize`, etc.)
-- Model selection: `qwen3:0.6b` for Ollama, `gpt-4.1-nano` for OpenAI
+- Multiple LLM providers: OpenAI, Google Gemini, and Ollama for local models
 - AI agent with 19 specialized tools across project management, research, writing, and text analysis
 - Context panel displays AI reasoning separately from final document content
 
@@ -74,8 +74,10 @@ The AI system operates through:
 Required environment variables:
 - `DATABASE_URL` - PostgreSQL connection string
 - `OPENAI_API_KEY` - For OpenAI integration (optional)
+- `PERPLEXITY_API_KEY` - For Perplexity search integration (optional)  
+- `GEMINI_API_KEY` - For Google Gemini integration (optional)
 - `OLLAMA_URL` - For local Ollama server (optional, defaults to localhost:11434)
 - `NODE_ENV` - development/production
-- `PORT` - Server port (defaults in code)
+- `PORT` - Server port (defaults to 5001)
 
 The application is designed to be an AI-saturated writing environment with intuitive background assistance and seamless pipeline integration between all components.

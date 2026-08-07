@@ -2,7 +2,8 @@ import {
   users, type User, type InsertUser,
   projects, type Project, type InsertProject,
   documents, type Document, type InsertDocument,
-  sources, type Source, type InsertSource
+  sources, type Source, type InsertSource,
+  customCommands, type CustomCommand, type InsertCustomCommand
 } from "@shared/schema";
 
 export interface IStorage {
@@ -30,6 +31,13 @@ export interface IStorage {
   getSource(id: number): Promise<Source | undefined>;
   createSource(source: InsertSource): Promise<Source>;
   deleteSource(id: number): Promise<boolean>;
+  
+  // Custom Command operations
+  getCustomCommands(userId: number): Promise<CustomCommand[]>;
+  getCustomCommand(id: number): Promise<CustomCommand | undefined>;
+  createCustomCommand(command: InsertCustomCommand): Promise<CustomCommand>;
+  updateCustomCommand(id: number, command: Partial<CustomCommand>): Promise<CustomCommand | undefined>;
+  deleteCustomCommand(id: number): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
@@ -37,22 +45,26 @@ export class MemStorage implements IStorage {
   private projects: Map<number, Project>;
   private documents: Map<number, Document>;
   private sources: Map<number, Source>;
+  private customCommands: Map<number, CustomCommand>;
   
   private userId: number;
   private projectId: number;
   private documentId: number;
   private sourceId: number;
+  private customCommandId: number;
 
   constructor() {
     this.users = new Map();
     this.projects = new Map();
     this.documents = new Map();
     this.sources = new Map();
+    this.customCommands = new Map();
     
     this.userId = 1;
     this.projectId = 1;
     this.documentId = 1;
     this.sourceId = 1;
+    this.customCommandId = 1;
     
     // Create a default user and project
     const defaultUser: User = {
@@ -224,6 +236,48 @@ export class MemStorage implements IStorage {
 
   async deleteSource(id: number): Promise<boolean> {
     return this.sources.delete(id);
+  }
+
+  // Custom Command operations
+  async getCustomCommands(userId: number): Promise<CustomCommand[]> {
+    return Array.from(this.customCommands.values()).filter(
+      (command) => command.userId === userId && command.isActive
+    );
+  }
+
+  async getCustomCommand(id: number): Promise<CustomCommand | undefined> {
+    return this.customCommands.get(id);
+  }
+
+  async createCustomCommand(insertCommand: InsertCustomCommand): Promise<CustomCommand> {
+    const id = this.customCommandId++;
+    const command: CustomCommand = {
+      ...insertCommand,
+      id,
+      description: insertCommand.description || null,
+      isActive: insertCommand.isActive ?? true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    this.customCommands.set(id, command);
+    return command;
+  }
+
+  async updateCustomCommand(id: number, updates: Partial<CustomCommand>): Promise<CustomCommand | undefined> {
+    const existing = this.customCommands.get(id);
+    if (!existing) return undefined;
+
+    const updated: CustomCommand = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.customCommands.set(id, updated);
+    return updated;
+  }
+
+  async deleteCustomCommand(id: number): Promise<boolean> {
+    return this.customCommands.delete(id);
   }
 }
 

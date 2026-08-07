@@ -91,78 +91,78 @@ interface SettingsContextType {
 }
 
 const defaultSettings: AppSettings = {
-  // User Experience Settings
-  userExperienceMode: 'simple',
+  // User Experience Settings - Ultra Minimalist Defaults
+  userExperienceMode: 'simple', // Start simple, upgrade based on usage
   hasCompletedOnboarding: false,
   
-  // AI Content Generation Settings
-  enableVisualizations: true,
-  enableImageGeneration: true,
+  // AI Content Generation Settings - Minimal & Focused
+  enableVisualizations: true, // Essential for research
+  enableImageGeneration: false, // Disable by default to reduce cognitive load
   
-  // Editor Settings
-  theme: 'system',
-  fontSize: 'medium',
-  fontFamily: 'serif',
-  autosaveInterval: 30000,
-  wordWrapEnabled: true,
-  lineHeight: 'normal',
-  editorWidth: 'normal',
-  showLineNumbers: false,
+  // Editor Settings - Writing-Focused
+  theme: 'system', // Respect user preference
+  fontSize: 'medium', // Comfortable reading
+  fontFamily: 'serif', // Better for long-form writing
+  autosaveInterval: 2000, // Very frequent saves
+  wordWrapEnabled: true, // Always on for natural reading
+  lineHeight: 'relaxed', // Better readability
+  editorWidth: 'normal', // Standard comfortable width
+  showLineNumbers: false, // Reduce visual clutter
   
-  // AI Settings
-  llmProvider: 'openai',
-  llmModel: 'gpt-4.1-mini',
+  // AI Settings - Smart Defaults
+  llmProvider: 'openai', // Default to cloud AI
+  llmModel: 'gpt-4.1-mini', // Fast and capable
   ollamaUrl: 'http://localhost:11434',
   
-  // Reasoning Model Settings
-  showThinkingProcess: false,
-  thinkingStreamDelay: 500,
-  reasoningModelDetection: false,
+  // Reasoning Model Settings - Ambient & Subtle
+  showThinkingProcess: false, // Don't overwhelm users
+  thinkingStreamDelay: 300, // Quick responses
+  reasoningModelDetection: false, // Automatic, invisible to user
   
-  // Custom Instructions
-  systemPrompt: '',
-  writingStyle: '',
-  tonePreference: 'professional',
-  customTone: '',
-  customCommands: [],
+  // Custom Instructions - Minimal & Sensible
+  systemPrompt: '', // Empty = let AI be helpful naturally
+  writingStyle: '', // Let AI adapt to content
+  tonePreference: 'professional', // Safe default
+  customTone: '', // Empty unless user specifies
+  customCommands: [], // Start empty, add as needed
   
-  // Agent Settings
-  autonomyLevel: 'moderate',
-  maxExecutionTime: 5,
-  enableSelfReflection: true,
-  enableLearning: true,
-  enableMemoryPersistence: false,
-  enableChainOfThought: false,
-  toolExecutionDelay: 1000,
-  agentInstructions: '',
+  // Agent Settings - Conservative for New Users
+  autonomyLevel: 'conservative', // Start conservative, allow growth
+  maxExecutionTime: 2, // Quick responses
+  enableSelfReflection: false, // Not needed for simple tasks
+  enableLearning: true, // Learn user preferences
+  enableMemoryPersistence: false, // Respect privacy
+  enableChainOfThought: false, // Keep responses concise
+  toolExecutionDelay: 500, // Visible but not slow
+  agentInstructions: 'Help with writing naturally and subtly. Focus on being helpful without being intrusive.',
   
-  // UI Settings
-  sidebarDefaultOpen: true,
-  contextPanelDefaultOpen: true,
-  enableSounds: true,
-  enableAnimations: true,
-  distractionFreeMode: false,
+  // UI Settings - Distraction-Free by Default
+  sidebarDefaultOpen: false, // Hide initially for focus
+  contextPanelDefaultOpen: false, // Show only when AI has suggestions
+  enableSounds: false, // Reduce audio clutter
+  enableAnimations: true, // Smooth transitions are nice
+  distractionFreeMode: true, // Enable by default for writing focus
   
-  // Writing Settings
-  showWordCount: true,
-  showReadingTime: true,
-  showStyleAnalysis: true,
-  spellCheckEnabled: true,
-  grammarCheckEnabled: true,
-  autoSuggestionsEnabled: true,
-  suggestionDelay: 500,
+  // Writing Settings - Essential Only
+  showWordCount: true, // Useful for progress
+  showReadingTime: false, // Not essential for writing flow
+  showStyleAnalysis: false, // Show only in advanced mode
+  spellCheckEnabled: true, // Always helpful
+  grammarCheckEnabled: false, // Can be intrusive
+  autoSuggestionsEnabled: false, // Let AI be proactive instead
+  suggestionDelay: 200, // Quick when needed
   
-  // Writing Goals
-  dailyWordGoal: 0,
-  enableWordGoal: false,
-  sessionTimeGoal: 0,
-  enableTimeGoal: false,
+  // Writing Goals - Progressive
+  dailyWordGoal: 0, // Set by user if wanted
+  enableWordGoal: false, // Optional motivation
+  sessionTimeGoal: 0, // Not essential
+  enableTimeGoal: false, // Optional
   
-  // Export Settings
-  defaultExportFormat: 'pdf',
-  includeMetadata: true,
-  autoBackupEnabled: false,
-  backupInterval: 24,
+  // Export Settings - Simple & Standard
+  defaultExportFormat: 'pdf', // Most universal
+  includeMetadata: false, // Keep exports clean
+  autoBackupEnabled: false, // Can overwhelm new users
+  backupInterval: 24, // Default daily backup
 };
 
 const SETTINGS_STORAGE_KEY = 'wordplay-settings';

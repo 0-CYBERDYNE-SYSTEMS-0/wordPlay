@@ -5,7 +5,8 @@ import {
   users, type User, type InsertUser,
   projects, type Project, type InsertProject,
   documents, type Document, type InsertDocument,
-  sources, type Source, type InsertSource
+  sources, type Source, type InsertSource,
+  customCommands, type CustomCommand, type InsertCustomCommand
 } from "@shared/schema";
 
 export class PostgresStorage implements IStorage {
@@ -149,6 +150,47 @@ export class PostgresStorage implements IStorage {
 
   async deleteSource(id: number): Promise<boolean> {
     const result = await db.delete(sources).where(eq(sources.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Custom Command operations
+  async getCustomCommands(userId: number): Promise<CustomCommand[]> {
+    return await db.select()
+      .from(customCommands)
+      .where(eq(customCommands.userId, userId))
+      .orderBy(desc(customCommands.createdAt));
+  }
+
+  async getCustomCommand(id: number): Promise<CustomCommand | undefined> {
+    const result = await db.select().from(customCommands).where(eq(customCommands.id, id));
+    return result[0];
+  }
+
+  async createCustomCommand(command: InsertCustomCommand): Promise<CustomCommand> {
+    const result = await db.insert(customCommands).values({
+      ...command,
+      isActive: command.isActive ?? true,
+    }).returning();
+    
+    return result[0];
+  }
+
+  async updateCustomCommand(id: number, commandUpdate: Partial<CustomCommand>): Promise<CustomCommand | undefined> {
+    const updateData = {
+      ...commandUpdate,
+      updatedAt: new Date()
+    };
+    
+    const result = await db.update(customCommands)
+      .set(updateData)
+      .where(eq(customCommands.id, id))
+      .returning();
+    
+    return result[0];
+  }
+
+  async deleteCustomCommand(id: number): Promise<boolean> {
+    const result = await db.delete(customCommands).where(eq(customCommands.id, id)).returning();
     return result.length > 0;
   }
 }

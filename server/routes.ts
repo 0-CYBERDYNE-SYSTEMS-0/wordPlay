@@ -485,8 +485,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      // Import the executeSlashCommand function for regular commands
-      const { executeSlashCommand } = await import("./slash-commands");
+      // Import the executeSlashCommand function for regular commands  
+      const { executeSlashCommand } = await import("./slash-commands-new");
       
       const result = await executeSlashCommand(
         validatedData.command, 
@@ -660,6 +660,193 @@ export async function registerRoutes(app: Express): Promise<Server> {
           "Check firewall settings",
           "Ensure environment variables are properly set"
         ]
+      });
+    }
+  });
+
+  // Custom Command routes
+  app.get("/api/custom-commands", async (req: Request, res: Response) => {
+    const userId = 1; // Using default user for now
+    try {
+      const commands = await storage.getCustomCommands(userId);
+      res.json(commands);
+    } catch (error: any) {
+      console.error("Error fetching custom commands:", error);
+      res.status(500).json({ message: "Failed to fetch custom commands", error: error.message });
+    }
+  });
+
+  app.post("/api/custom-commands", async (req: Request, res: Response) => {
+    const userId = 1; // Using default user for now
+    
+    const commandSchema = z.object({
+      name: z.string().min(1, "Name is required"),
+      trigger: z.string().min(2, "Trigger must be at least 2 characters").startsWith("/", "Trigger must start with /"),
+      promptTemplate: z.string().min(1, "Prompt template is required"),
+      description: z.string().optional(),
+      isActive: z.boolean().optional().default(true)
+    });
+
+    try {
+      const validatedData = commandSchema.parse(req.body);
+      
+      // Import validation function
+      const { validateCustomCommand } = await import("./slash-commands-new");
+      const validation = validateCustomCommand(validatedData);
+      
+      if (!validation.isValid) {
+        return res.status(400).json({ 
+          message: "Invalid custom command",
+          errors: validation.errors 
+        });
+      }
+
+      const command = await storage.createCustomCommand({
+        ...validatedData,
+        userId
+      });
+      
+      res.json(command);
+    } catch (error: any) {
+      console.error("Error creating custom command:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors.map((e: any) => e.message)
+        });
+      }
+      res.status(500).json({ message: "Failed to create custom command", error: error.message });
+    }
+  });
+
+  app.put("/api/custom-commands/:id", async (req: Request, res: Response) => {
+    const commandId = parseInt(req.params.id);
+    
+    const updateSchema = z.object({
+      name: z.string().min(1).optional(),
+      trigger: z.string().min(2).startsWith("/").optional(), 
+      promptTemplate: z.string().min(1).optional(),
+      description: z.string().optional(),
+      isActive: z.boolean().optional()
+    });
+
+    try {
+      const validatedData = updateSchema.parse(req.body);
+      
+      if (validatedData.trigger) {
+        const { validateCustomCommand } = await import("./slash-commands-new");
+        const validation = validateCustomCommand({
+          name: validatedData.name || "temp",
+          trigger: validatedData.trigger,
+          promptTemplate: validatedData.promptTemplate || "temp"
+        });
+        
+        if (!validation.isValid) {
+          return res.status(400).json({ 
+            message: "Invalid custom command", 
+            errors: validation.errors 
+          });
+        }
+      }
+
+      const command = await storage.updateCustomCommand(commandId, validatedData);
+      
+      if (!command) {
+        return res.status(404).json({ message: "Custom command not found" });
+      }
+      
+      res.json(command);
+    } catch (error: any) {
+      console.error("Error updating custom command:", error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors.map((e: any) => e.message)
+        });
+      }
+      res.status(500).json({ message: "Failed to update custom command", error: error.message });
+    }
+  });
+
+  app.delete("/api/custom-commands/:id", async (req: Request, res: Response) => {
+    const commandId = parseInt(req.params.id);
+    
+    try {
+      const deleted = await storage.deleteCustomCommand(commandId);
+      
+      if (!deleted) {
+        return res.status(404).json({ message: "Custom command not found" });
+      }
+      
+      res.json({ message: "Custom command deleted successfully" });
+    } catch (error: any) {
+      console.error("Error deleting custom command:", error);
+      res.status(500).json({ message: "Failed to delete custom command", error: error.message });
+    }
+  });
+
+  // Get available commands (core + custom) for autocomplete/UI
+  app.get("/api/available-commands", async (req: Request, res: Response) => {
+    const userId = 1; // Using default user for now
+    
+    try {
+      const { getAvailableCommands } = await import("./slash-commands-new");
+      const commands = await getAvailableCommands(userId);
+      res.json(commands);
+    } catch (error: any) {
+      console.error("Error fetching available commands:", error);
+      res.status(500).json({ message: "Failed to fetch available commands", error: error.message });
+    }
+  });
+
+  // AI Writing Intent Analysis endpoint for AmbientAI
+  app.post("/api/ai/analyze-writing-intent", async (req: Request, res: Response) => {
+    const analysisSchema = z.object({
+      content: z.string(),
+      cursorPosition: z.number(),
+      selectedText: z.string().optional(),
+      assistanceLevel: z.enum(['minimal', 'moderate', 'comprehensive'])
+    });
+
+    try {
+      const { content, cursorPosition, selectedText, assistanceLevel } = analysisSchema.parse(req.body);
+
+      // Create writing context
+      const wordCount = content.trim().split(/\s+/).filter(word => word.length > 0).length;
+      const characterCount = content.length;
+      const paragraphCount = content.split(/\n\s*\n/).filter(p => p.trim().length > 0).length;
+
+      // Basic writing context
+      const writingContext = {
+        content: content || "",
+        cursorPosition,
+        selectedText,
+        wordCount,
+        characterCount,
+        paragraphCount,
+        lastActivity: new Date(),
+        typingSpeed: 0, // Could be calculated from user behavior
+        isActiveTyping: false,
+        hasUnsavedChanges: false,
+        sessionDuration: 0 // Could be calculated from session start
+      };
+
+      // Use the ContextualAIEngine (client-side) or create a server-side equivalent
+      // For now, we'll use a simplified analysis that can be enhanced
+      const analysis = analyzeWritingIntentSimple(writingContext);
+      const insights = generateContextualInsights(analysis, writingContext, assistanceLevel);
+
+      res.json({
+        analysis,
+        insights,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error("Error in writing intent analysis:", error);
+      res.status(400).json({
+        message: "Failed to analyze writing intent",
+        error: error.message
       });
     }
   });
@@ -916,6 +1103,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // Helper functions for writing intent analysis
+  function analyzeWritingIntentSimple(context: any) {
+    const { content, wordCount, paragraphCount } = context;
+    
+    // Basic content analysis
+    const hasQuestions = content.includes('?');
+    const hasTechnicalTerms = /\b(API|function|algorithm|database|framework|component|system|process|methodology|analysis|synthesis|evaluation|implementation)\b/i.test(content);
+    const hasCreativeWords = /\b(feel|imagine|dream|wonder|imagine|story|character|emotion|sense|moment|suddenly|perhaps|magic)\b/i.test(content);
+    const hasResearchIndicators = /\b(research|study|find|discover|evidence|source|citation|reference|data|statistics)\b/i.test(content);
+
+    let intentType = 'creative-writing';
+    let confidence = 0.5;
+
+    if (hasTechnicalTerms && wordCount > 50) {
+      intentType = 'technical-doc';
+      confidence = 0.8;
+    } else if (hasResearchIndicators) {
+      intentType = 'research';
+      confidence = 0.75;
+    } else if (hasCreativeWords && !hasTechnicalTerms) {
+      intentType = 'creative-writing';
+      confidence = 0.7;
+    }
+
+    let complexity = 'simple';
+    if (wordCount > 200) complexity = 'moderate';
+    if (wordCount > 500 || paragraphCount > 5) complexity = 'complex';
+
+    let mood = 'flowing';
+    const incompletePatterns = content.match(/\.\.\.|—|--|…/g);
+    if (incompletePatterns && incompletePatterns.length > 2) {
+      mood = 'struggling';
+    }
+
+    let assistance = 'minimal';
+    if (mood === 'struggling' || complexity === 'complex') {
+      assistance = 'comprehensive';
+    } else if (wordCount > 100 && (intentType === 'research' || intentType === 'technical-doc')) {
+      assistance = 'moderate';
+    }
+
+    return {
+      type: intentType,
+      complexity,
+      mood,
+      assistance,
+      confidence,
+      reasoning: `Document type: ${intentType} • Length: ${wordCount} words, ${paragraphCount} paragraphs • Complexity: ${complexity} • Current mood: ${mood} • Recommended assistance: ${assistance}`
+    };
+  }
+
+  function generateContextualInsights(analysis: any, context: { content: string; wordCount: number }, assistanceLevel: string) {
+    const insights = [];
+    const { content, wordCount } = context;
+
+    // Always provide continuation suggestions if appropriate
+    if (wordCount > 20 && content.trim().length > 0) {
+      insights.push({
+        id: 'continuation',
+        type: 'continuation',
+        title: getContinuationTitle(analysis.type),
+        suggestion: generateContinuationSuggestion(content, analysis),
+        confidence: calculateContinuationConfidence(analysis, wordCount),
+        preview: getContinuationPreview(content, analysis),
+        reasoning: 'AI detected natural continuation point in writing flow',
+        priority: 'medium',
+        category: 'content'
+      });
+    }
+
+    // Intent-specific insights
+    switch (analysis.type) {
+      case 'creative-writing':
+        if (content.includes('character') || content.includes('persona')) {
+          insights.push({
+            id: 'character-dev',
+            type: 'improvement',
+            title: 'Character Development',
+            suggestion: 'Consider adding a specific character trait or backstory to make them more vivid',
+            confidence: 0.7,
+            preview: '"The protagonist stood at the edge of the forest, remembering..."',
+            reasoning: 'User is developing characters and could benefit from specific details',
+            priority: 'medium',
+            category: 'content'
+          });
+        }
+        break;
+        
+      case 'technical-doc':
+        if (wordCount > 100) {
+          insights.push({
+            id: 'technical-clarity',
+            type: 'improvement',
+            title: 'Technical Clarity',
+            suggestion: 'Consider adding a diagram or example to illustrate complex concepts',
+            confidence: 0.75,
+            preview: 'Consider this structure: Problem → Solution → Example → Benefits',
+            reasoning: 'Technical documentation benefits from visual aids and clear examples',
+            priority: 'high',
+            category: 'structure'
+          });
+        }
+        break;
+        
+      case 'research':
+        insights.push({
+          id: 'research-source',
+          type: 'research',
+          title: 'Source Validation',
+          suggestion: 'Would you like me to search for recent sources on this topic?',
+          confidence: 0.8,
+          preview: 'I can find academic papers and current research to support your points',
+          reasoning: 'Research documents benefit from credible, current sources',
+          priority: 'high',
+          category: 'research'
+        });
+        break;
+    }
+
+    // Style insights for moderate+ assistance
+    if (assistanceLevel !== 'minimal' && wordCount > 50) {
+      const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      const avgSentenceLength = sentences.reduce((acc, sentence) => acc + sentence.split(' ').length, 0) / sentences.length;
+      
+      if (avgSentenceLength > 25) {
+        insights.push({
+          id: 'readability',
+          type: 'improvement',
+          title: 'Improve Readability',
+          suggestion: 'Consider breaking up long sentences for better readability',
+          confidence: 0.7,
+          preview: 'Split complex sentences into shorter, clearer ones',
+          reasoning: 'Long sentences can reduce readability and engagement',
+          priority: 'medium',
+          category: 'style'
+        });
+      }
+    }
+
+    return insights.slice(0, 3); // Return top 3 insights
+  }
+
+  function getContinuationTitle(type: string): string {
+    switch (type) {
+      case 'creative-writing': return 'Continue Story';
+      case 'technical-doc': return 'Expand Technical Detail';
+      case 'research': return 'Add Research Finding';
+      case 'structured-doc': return 'Continue Argument';
+      case 'brainstorm': return 'Brainstorm Ideas';
+      default: return 'Continue Writing';
+    }
+  }
+
+  function generateContinuationSuggestion(content: string, analysis: any): string {
+    const lastParagraph = content.split('\n\n').pop() || '';
+    
+    switch (analysis.type) {
+      case 'creative-writing':
+        return 'Building on the current scene, the next paragraph could explore the character\'s inner thoughts or introduce a new development that moves the story forward.';
+      case 'technical-doc':
+        return 'Following your current explanation, you could provide a practical example, code snippet, or step-by-step instruction that demonstrates the concept.';
+      case 'research':
+        return 'Based on your current point, you could cite a specific study, present supporting evidence, or explore a related finding that strengthens your argument.';
+      default:
+        return 'You could continue developing this idea by adding supporting details, examples, or exploring the logical next step in your reasoning.';
+    }
+  }
+
+  function getContinuationPreview(content: string, analysis: any): string {
+    switch (analysis.type) {
+      case 'creative-writing':
+        return 'However, the memory felt different now...';
+      case 'technical-doc':
+        return 'For example, consider this implementation...';
+      case 'research':
+        return 'According to recent studies (Smith et al., 2024)...';
+      default:
+        return 'This leads to several important implications...';
+    }
+  }
+
+  function calculateContinuationConfidence(analysis: any, wordCount: number): number {
+    let baseConfidence = 0.5;
+    
+    if (wordCount > 100) baseConfidence += 0.2;
+    if (wordCount > 300) baseConfidence += 0.1;
+    
+    if (analysis.type === 'research' || analysis.type === 'technical-doc') {
+      baseConfidence += 0.1;
+    }
+    
+    return Math.min(baseConfidence, 0.9);
+  }
 
   return httpServer;
 }

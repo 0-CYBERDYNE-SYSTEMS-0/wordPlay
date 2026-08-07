@@ -1,11 +1,9 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Settings } from "lucide-react";
-import Header from "@/components/Header";
 import Sidebar from "@/components/Sidebar";
-import Editor from "@/components/Editor";
+import UltraMinimalEditor from "@/components/UltraMinimalEditor";
 import ContextPanel from "@/components/ContextPanel";
-import ResizablePanel from "@/components/ResizablePanel";
+import SmartPanelManager from "@/components/SmartPanelManager";
 import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
@@ -17,11 +15,24 @@ import { useSettings } from "@/providers/SettingsProvider";
 import type { Project, Document } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 
+interface PanelState {
+  sidebar: 'hidden' | 'auto-hide' | 'visible' | 'always-visible';
+  context: 'hidden' | 'contextual' | 'visible' | 'always-visible';
+  header: 'minimal' | 'normal' | 'full';
+  footer?: 'hidden' | 'minimal' | 'normal';
+}
+
 export default function Home() {
   const { settings, updateSettings } = useSettings();
   const { toast } = useToast();
-  const [sidebarOpen, setSidebarOpen] = useState(false); // Default to closed for minimalist experience
-  const [contextPanelOpen, setContextPanelOpen] = useState(false); // Default to closed for focus on writing
+  
+  // UI State Management - Ultra Minimalist Approach
+  const [panelState, setPanelState] = useState<PanelState>({
+    sidebar: 'auto-hide',
+    context: 'contextual',
+    header: 'minimal'
+  });
+  
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [welcomeModalOpen, setWelcomeModalOpen] = useState(!settings.hasCompletedOnboarding);
   const [activeTab, setActiveTab] = useState<"editor" | "research" | "settings">("editor");
@@ -30,24 +41,35 @@ export default function Home() {
   
   // Full screen state management
   const [isFullScreen, setIsFullScreen] = useState(false);
-  const [preFullScreenState, setPreFullScreenState] = useState({
-    sidebarOpen: false,
-    contextPanelOpen: false
+  const [preFullScreenState, setPreFullScreenState] = useState<PanelState>({
+    sidebar: 'auto-hide',
+    context: 'contextual',
+    header: 'minimal'
   });
 
-  // Add state for AI suggestions
+  // AI Suggestions for context panel
   const [aiSuggestions, setAiSuggestions] = useState<string>("");
   
-  // Hover-triggered panel states for minimalist experience
-  const [hoverSidebar, setHoverSidebar] = useState(false);
-  const [hoverContext, setHoverContext] = useState(false);
-  
-  // Focus mode hierarchy for different activities
-  const [focusMode, setFocusMode] = useState<'writing' | 'organization' | 'research' | 'full'>('writing');
+  // Focus mode hierarchy - AI-driven transitions
+  const [focusMode, setFocusMode] = useState<'writing' | 'organizing' | 'researching' | 'settings'>('writing');
   
   // Panel resize state
   const [sidebarWidth, setSidebarWidth] = useState(320);
   const [contextPanelWidth, setContextPanelWidth] = useState(384);
+
+  // Writing context for smart panel management
+  const [writingContext, setWritingContext] = useState({
+    content: '',
+    wordCount: 0,
+    typingActivity: 'idle' as 'idle' | 'active' | 'intense',
+    userMode: 'writing' as 'writing' | 'organizing' | 'researching' | 'settings',
+    hasUnsavedChanges: false,
+    lastActivity: new Date(),
+    aiSuggestionsAvailable: false,
+    isFullScreen: false
+  });
+  const lastContentChangeRef = React.useRef(Date.now());
+  const activityIdleTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch projects
   const { data: projects } = useQuery<Project[]>({
@@ -75,16 +97,48 @@ export default function Home() {
     autosaveInterval: settings.autosaveInterval
   });
 
-  // Handle toggling sidebar
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  // Stable writing-context updates (no lastActivity feedback loop)
+  useEffect(() => {
+    lastContentChangeRef.current = Date.now();
+    const wordCount = content.trim()
+      ? content.trim().split(/\s+/).filter((word) => word.length > 0).length
+      : 0;
 
-  // Handle toggling context panel
-  const toggleContextPanel = () => {
-    console.log("Toggling context panel. Current state:", contextPanelOpen);
-    setContextPanelOpen(!contextPanelOpen);
-  };
+    setWritingContext((prev) => ({
+      ...prev,
+      content,
+      wordCount,
+      typingActivity: 'intense',
+      userMode: focusMode,
+      hasUnsavedChanges: isDirty,
+      lastActivity: new Date(lastContentChangeRef.current),
+      aiSuggestionsAvailable: aiSuggestions.length > 0,
+      isFullScreen,
+    }));
+
+    if (activityIdleTimerRef.current) clearTimeout(activityIdleTimerRef.current);
+    activityIdleTimerRef.current = setTimeout(() => {
+      setWritingContext((prev) => ({
+        ...prev,
+        typingActivity: 'active',
+      }));
+      activityIdleTimerRef.current = setTimeout(() => {
+        setWritingContext((prev) => ({
+          ...prev,
+          typingActivity: 'idle',
+        }));
+      }, 2000);
+    }, 1000);
+
+    return () => {
+      if (activityIdleTimerRef.current) clearTimeout(activityIdleTimerRef.current);
+    };
+  }, [content, isDirty, focusMode, aiSuggestions, isFullScreen]);
+
+  // Smart panel state management
+  const handlePanelStateChange = useCallback((newState: PanelState) => {
+    setPanelState(newState);
+  }, []);
 
   // Handle new project creation
   const handleNewProject = () => {
@@ -92,113 +146,250 @@ export default function Home() {
   };
 
   // Handle project selection
-  const handleSelectProject = (projectId: number) => {
+  const handleSelectProject = async (projectId: number) => {
+    // Flush unsaved edits to the current document before switching, so they aren't dropped
+    try {
+      await saveDocument();
+    } catch {
+      // proceeding with the switch even if the flush fails
+    }
     setActiveProjectId(projectId);
     setActiveDocumentId(null); // Reset active document when changing projects
+    setFocusMode('organizing'); // Switch to organizing mode for project management
   };
 
   // Handle document selection
-  const handleSelectDocument = (documentId: number) => {
+  const handleSelectDocument = async (documentId: number) => {
+    // Flush unsaved edits to the current document before switching, so they aren't dropped
+    try {
+      await saveDocument();
+    } catch {
+      // proceeding with the switch even if the flush fails
+    }
     setActiveDocumentId(documentId);
-    // Automatically switch to editor tab and writing focus mode when a document is selected
+    // Automatically switch to editor and writing focus mode when a document is selected
     setActiveTab("editor");
     setFocusMode("writing");
   };
 
   // Smart focus mode switching based on user activity
   useEffect(() => {
-    if (activeTab === "editor") {
-      setFocusMode("writing");
-    } else if (activeTab === "research") {
-      setFocusMode("research");
-    } else if (activeTab === "settings") {
-      setFocusMode("full");
+    switch (activeTab) {
+      case "editor":
+        setFocusMode("writing");
+        break;
+      case "research":
+        setFocusMode("researching");
+        break;
+      case "settings":
+        setFocusMode("settings");
+        break;
     }
   }, [activeTab]);
 
-  // Determine panel visibility based on focus mode
-  const shouldShowSidebar = () => {
-    switch (focusMode) {
-      case 'writing': return sidebarOpen || hoverSidebar;
-      case 'organization': return true;
-      case 'research': return sidebarOpen || hoverSidebar;
-      case 'full': return sidebarOpen || hoverSidebar;
-      default: return sidebarOpen || hoverSidebar;
-    }
-  };
-
-  const shouldShowContext = () => {
-    switch (focusMode) {
-      case 'writing': return contextPanelOpen || hoverContext;
-      case 'organization': return contextPanelOpen || hoverContext;
-      case 'research': return true;
-      case 'full': return contextPanelOpen || hoverContext;
-      default: return contextPanelOpen || hoverContext;
-    }
-  };
-
-  // Handle full screen toggle
+  // Handle full screen toggle with smart state management
   const toggleFullScreen = () => {
     if (isFullScreen) {
-      // Exiting full screen - restore previous sidebar states
-      setSidebarOpen(preFullScreenState.sidebarOpen);
-      setContextPanelOpen(preFullScreenState.contextPanelOpen);
+      // Exiting full screen - restore previous panel states
+      setPanelState(preFullScreenState);
       setIsFullScreen(false);
     } else {
-      // Entering full screen - save current states and hide sidebars
-      setPreFullScreenState({
-        sidebarOpen,
-        contextPanelOpen
+      // Entering full screen - save current states and switch to writing mode
+      setPreFullScreenState(panelState);
+      setPanelState({
+        sidebar: 'hidden',
+        context: 'hidden',
+        header: 'minimal'
       });
-      setSidebarOpen(false);
-      setContextPanelOpen(false);
+      setFocusMode('writing');
       setIsFullScreen(true);
     }
   };
 
-  // Handle escape key to exit full screen
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isFullScreen) {
-        toggleFullScreen();
-      }
-    };
-
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isFullScreen]);
-
-  // Auto-open context panel when switching to research
-  useEffect(() => {
-    if (activeTab === "research" && !contextPanelOpen) {
-      setContextPanelOpen(true);
-    }
-  }, [activeTab]);
-
-  // Debug logging
-  useEffect(() => {
-    console.log("Home component state:", { 
-      contextPanelOpen, 
-      title: title || "empty", 
-      contentLength: content?.length || 0,
-      settingsContextDefault: settings.contextPanelDefaultOpen 
-    });
-  }, [contextPanelOpen, title, content, settings.contextPanelDefaultOpen]);
-
-  // Handle AI suggestions from slash commands
-  const handleAiSuggestions = (suggestions: string) => {
-    setAiSuggestions(suggestions);
-    // Automatically open context panel to show suggestions
-    if (!contextPanelOpen) {
-      setContextPanelOpen(true);
+  // AI-driven mode transitions
+  const handleModeTransition = (mode: 'writing' | 'organizing' | 'researching' | 'settings') => {
+    setFocusMode(mode);
+    
+    // Map user modes to tabs
+    switch (mode) {
+      case 'writing':
+        setActiveTab('editor');
+        break;
+      case 'researching':
+        setActiveTab('research');
+        break;
+      case 'settings':
+        setActiveTab('settings');
+        break;
+      case 'organizing':
+        // Keep current tab but show sidebar
+        break;
     }
   };
 
-  // If in full screen mode, render only the editor
+  // Handle AI suggestions from components
+  const handleAiSuggestions = (suggestions: string) => {
+    setAiSuggestions(suggestions);
+  };
+
+  // Shell header — always interactive; SmartPanelManager controls height
+  const renderMinimalHeader = () => {
+    const navBtn =
+      "rounded-full px-2.5 py-1.5 text-[12px] sm:text-[13px] text-stone-500 transition-colors hover:bg-stone-100 hover:text-[var(--wp-ink)] dark:hover:bg-stone-800 dark:hover:text-stone-100";
+    const activeNav =
+      "rounded-full px-2.5 py-1.5 text-[12px] sm:text-[13px] bg-[var(--wp-ink)] text-[var(--wp-paper)] dark:bg-stone-100 dark:text-stone-900";
+
+    return (
+      <div className="flex h-full items-center justify-between gap-3 px-3 sm:px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="font-serif text-[15px] font-semibold tracking-tight text-[var(--wp-ink)] dark:text-stone-50 sm:text-base"
+            style={{ letterSpacing: '-0.02em' }}
+          >
+            word<span className="text-[var(--wp-copper)]">Play</span>
+          </span>
+          {activeProject && (
+            <span className="truncate text-[12px] text-stone-400 sm:text-[13px]">
+              <span className="mx-1 text-stone-300 dark:text-stone-600">·</span>
+              {activeProject.name}
+            </span>
+          )}
+        </div>
+        <nav className="flex shrink-0 items-center gap-0.5 sm:gap-1" aria-label="Primary">
+          <button
+            type="button"
+            onClick={() => handleModeTransition('organizing')}
+            className={focusMode === 'organizing' ? activeNav : navBtn}
+          >
+            Projects
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeTransition('writing')}
+            className={focusMode === 'writing' ? activeNav : navBtn}
+          >
+            Write
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeTransition('researching')}
+            className={focusMode === 'researching' ? activeNav : navBtn}
+          >
+            Research
+          </button>
+          <button
+            type="button"
+            onClick={() => handleModeTransition('settings')}
+            className={focusMode === 'settings' ? activeNav : navBtn}
+          >
+            Settings
+          </button>
+        </nav>
+      </div>
+    );
+  };
+
+  // Render the main content based on active tab
+  const renderMainContent = () => {
+    const commonProps = {
+      title,
+      setTitle,
+      content,
+      setContent,
+      isSaving,
+      isDirty,
+      saveError,
+      autoSaveEnabled,
+      saveDocument,
+      llmProvider: settings.llmProvider,
+      llmModel: settings.llmModel,
+      isFullScreen,
+      onToggleFullScreen: toggleFullScreen,
+      onOpenFullFeatures: () => handleModeTransition('settings'),
+      activeProjectId
+    };
+
+    switch (activeTab) {
+      case "editor":
+        return (
+          <UltraMinimalEditor
+            {...commonProps}
+            onSuggestions={handleAiSuggestions}
+          />
+        );
+      
+      case "research":
+        return (
+          <WebSearch 
+            projectId={activeProjectId || undefined}
+            contextPanelOpen={panelState.context === 'visible' || panelState.context === 'always-visible'}
+            onToggleContextPanel={() => {/* AI will handle this */}}
+          />
+        );
+      
+      case "settings":
+        return (
+          <SettingsPanel
+            contextPanelOpen={panelState.context === 'visible' || panelState.context === 'always-visible'}
+            onToggleContextPanel={() => {/* AI will handle this */}}
+          />
+        );
+      
+      default:
+        return (
+          <UltraMinimalEditor
+            {...commonProps}
+          />
+        );
+    }
+  };
+
+  // Always provide panel bodies — SmartPanelManager owns visibility (incl. auto-hide / hover)
+  const panelChildren = {
+    sidebar: (
+      <div className="h-full w-full overflow-hidden">
+        <Sidebar
+          isOpen={true}
+          projects={projects || []}
+          activeProjectId={activeProjectId}
+          activeTab={activeTab}
+          onSelectProject={handleSelectProject}
+          onSelectDocument={handleSelectDocument}
+          onChangeTab={setActiveTab}
+          onClose={() => {
+            setPanelState((prev) => ({ ...prev, sidebar: 'hidden' }));
+          }}
+          userExperienceMode={settings.userExperienceMode}
+          onModeChange={(mode) => updateSettings({ userExperienceMode: mode })}
+        />
+      </div>
+    ),
+
+    context: (
+      <div className="h-full w-full overflow-hidden">
+        <ContextPanel
+          title={title || ""}
+          content={content || ""}
+          documentData={documentData as Document | undefined}
+          activeTab={activeTab}
+          onClose={() => {
+            setPanelState((prev) => ({ ...prev, context: 'hidden' }));
+          }}
+          aiSuggestions={aiSuggestions}
+        />
+      </div>
+    ),
+
+    header: renderMinimalHeader(),
+
+    main: renderMainContent(),
+  };
+
+  // If in full screen mode, render only the ultra-minimal editor
   if (isFullScreen) {
     return (
       <div className="fixed inset-0 z-50 bg-white dark:bg-gray-900">
-        <Editor
+        <UltraMinimalEditor
           title={title}
           setTitle={setTitle}
           content={content}
@@ -210,174 +401,56 @@ export default function Home() {
           saveDocument={saveDocument}
           llmProvider={settings.llmProvider}
           llmModel={settings.llmModel}
-          contextPanelOpen={false}
-          onToggleContextPanel={() => {}}
-          isFullScreen={isFullScreen}
+          isFullScreen={true}
           onToggleFullScreen={toggleFullScreen}
+          onOpenFullFeatures={() => handleModeTransition('settings')}
+          activeProjectId={activeProjectId}
+          onSuggestions={handleAiSuggestions}
         />
-        
-        {/* Floating exit button */}
-        <button
-          onClick={toggleFullScreen}
-          className="fixed top-4 right-4 z-50 p-2 bg-black bg-opacity-20 hover:bg-opacity-30 text-white rounded-full transition-opacity"
-          title="Exit full screen (ESC)"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200 flex flex-col">
-      <Header
-        toggleSidebar={toggleSidebar}
-        toggleContextPanel={toggleContextPanel}
-        onNewProject={handleNewProject}
-        llmProvider={settings.llmProvider}
-        setLlmProvider={(provider) => updateSettings({ llmProvider: provider })}
-        llmModel={settings.llmModel}
-        setLlmModel={(model) => updateSettings({ llmModel: model })}
-        contextPanelOpen={contextPanelOpen}
-        isFullScreen={isFullScreen}
-        onToggleFullScreen={toggleFullScreen}
-        focusMode={focusMode}
-        setFocusMode={setFocusMode}
-      />
-      
-      {/* Main Layout Grid */}
-      <div 
-        className={`app-layout focus-mode-${focusMode} ${shouldShowSidebar() ? 'sidebar-open' : ''} ${shouldShowContext() ? 'context-open' : ''}`}
-        onClick={(e) => {
-          // Close panels when clicking backdrop on mobile
-          if (e.target === e.currentTarget && (sidebarOpen || contextPanelOpen)) {
-            setSidebarOpen(false);
-            setContextPanelOpen(false);
-          }
-        }}
+    <div className="fixed inset-0 flex flex-col bg-[var(--wp-paper)] text-[var(--wp-ink)] transition-colors duration-200 dark:bg-stone-950 dark:text-stone-100">
+      <SmartPanelManager
+        writingContext={writingContext}
+        onPanelStateChange={handlePanelStateChange}
+        userExperienceMode={settings.userExperienceMode}
       >
-        {/* Left Sidebar Hover Zone */}
-        <div 
-          className="fixed left-0 top-16 bottom-0 w-4 z-40 hover-zone"
-          onMouseEnter={() => setHoverSidebar(true)}
-          onMouseLeave={() => setHoverSidebar(false)}
-        />
-        
-        {/* Left Sidebar */}
-        <ResizablePanel
-          side="left"
-          isOpen={shouldShowSidebar()}
-          onResize={setSidebarWidth}
-          storageKey="wordplay-sidebar-width"
-          className={`sidebar-container transition-all duration-200 ${
-            hoverSidebar && !sidebarOpen ? 'hover-reveal' : ''
-          }`}
-        >
-          <div
-            onMouseEnter={() => setHoverSidebar(true)}
-            onMouseLeave={() => setHoverSidebar(false)}
-            className="h-full"
-          >
-            <Sidebar
-              isOpen={shouldShowSidebar()}
-              projects={projects || []}
-              activeProjectId={activeProjectId}
-              activeTab={activeTab}
-              onSelectProject={handleSelectProject}
-              onSelectDocument={handleSelectDocument}
-              onChangeTab={setActiveTab}
-              onClose={() => setSidebarOpen(false)}
-              userExperienceMode={settings.userExperienceMode}
-              onModeChange={(mode) => updateSettings({ userExperienceMode: mode })}
-            />
-          </div>
-        </ResizablePanel>
-
-        {/* Main Content Area */}
-        <main className="main-content">
-          {activeTab === "editor" && (
-            <Editor
-              title={title}
-              setTitle={setTitle}
-              content={content}
-              setContent={setContent}
-              isSaving={isSaving}
-              isDirty={isDirty}
-              saveError={saveError}
-              autoSaveEnabled={autoSaveEnabled}
-              saveDocument={saveDocument}
-              llmProvider={settings.llmProvider}
-              llmModel={settings.llmModel}
-              contextPanelOpen={contextPanelOpen}
-              onToggleContextPanel={toggleContextPanel}
-              isFullScreen={isFullScreen}
-              onToggleFullScreen={toggleFullScreen}
-              onSuggestions={handleAiSuggestions}
-              activeProjectId={activeProjectId}
-            />
-          )}
-          {activeTab === "research" && (
-            <WebSearch 
-              projectId={activeProjectId || undefined}
-              contextPanelOpen={contextPanelOpen}
-              onToggleContextPanel={toggleContextPanel}
-            />
-          )}
-          {activeTab === "settings" && (
-            <SettingsPanel
-              contextPanelOpen={contextPanelOpen}
-              onToggleContextPanel={toggleContextPanel}
-            />
-          )}
-        </main>
-
-        {/* Right Context Panel Hover Zone */}
-        <div 
-          className="fixed right-0 top-16 bottom-0 w-4 z-40 hover-zone"
-          onMouseEnter={() => setHoverContext(true)}
-          onMouseLeave={() => setHoverContext(false)}
-        />
-        
-        {/* Right Context Panel */}
-        <ResizablePanel
-          side="right"
-          isOpen={shouldShowContext()}
-          onResize={setContextPanelWidth}
-          storageKey="wordplay-context-width"
-          className={`context-container transition-all duration-200 ${
-            hoverContext && !contextPanelOpen ? 'hover-reveal' : ''
-          }`}
-        >
-          <div
-            onMouseEnter={() => setHoverContext(true)}
-            onMouseLeave={() => setHoverContext(false)}
-            className="h-full"
-          >
-            <ContextPanel 
-              title={title || ""}
-              content={content || ""}
-              documentData={documentData as Document | undefined}
-              activeTab={activeTab}
-              onClose={toggleContextPanel}
-              aiSuggestions={aiSuggestions}
-            />
-          </div>
-        </ResizablePanel>
-      </div>
+        {panelChildren}
+      </SmartPanelManager>
 
       {/* Modals */}
       <WelcomeModal
         isOpen={welcomeModalOpen}
         onClose={() => setWelcomeModalOpen(false)}
         onComplete={(userType) => {
-          // Adjust default layout based on user type
+          // Adjust default experience based on user preference
           if (userType === 'simple') {
-            setSidebarOpen(false);
-            setContextPanelOpen(false);
-            setActiveTab('editor');
+            setPanelState({
+              sidebar: 'auto-hide',
+              context: 'hidden',
+              header: 'minimal'
+            });
+            updateSettings({ userExperienceMode: 'simple' });
+          } else if (userType === 'advanced') {
+            setPanelState({
+              sidebar: 'visible',
+              context: 'contextual',
+              header: 'normal'
+            });
+            updateSettings({ userExperienceMode: 'advanced' });
+          } else {
+            setPanelState({
+              sidebar: 'always-visible',
+              context: 'always-visible',
+              header: 'full'
+            });
+            updateSettings({ userExperienceMode: 'expert' });
           }
+          setActiveTab('editor');
+          setFocusMode('writing');
         }}
       />
       
@@ -387,10 +460,11 @@ export default function Home() {
         onCreateProject={(project) => {
           setActiveProjectId(project.id);
           setNewProjectModalOpen(false);
+          handleModeTransition('organizing');
         }}
       />
       
-      {/* AI Agent - floating, minimized by default - only in expert mode */}
+      {/* AI Agent - Only show in expert mode for power users */}
       {settings.userExperienceMode === 'expert' && (
         <AIAgent
           currentProject={activeProject}
@@ -539,8 +613,6 @@ export default function Home() {
           }}
         />
       )}
-      
-
     </div>
   );
 }
