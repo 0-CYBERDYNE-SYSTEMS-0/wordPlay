@@ -14,7 +14,8 @@ import {
   initializeAIClients
 } from "./ai-content-generation";
 import { 
-  searchWeb, 
+  searchWeb,
+  SearchError,
   scrapeWebpage 
 } from "./web-search";
 import { 
@@ -241,12 +242,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/ai/analyze-style", async (req: Request, res: Response) => {
     const analyzeSchema = z.object({
-      content: z.string()
+      content: z.string(),
+      llmProvider: z.enum(["openai", "ollama"]).optional(),
+      llmModel: z.string().optional()
     });
     
     try {
-      const { content } = analyzeSchema.parse(req.body);
-      const styleAnalysis = await analyzeTextStyle(content);
+      const { content, llmProvider, llmModel } = analyzeSchema.parse(req.body);
+      const styleAnalysis = await analyzeTextStyle(content, llmProvider, llmModel);
       res.json({ metrics: styleAnalysis });
     } catch (error) {
       console.error("Error in style analysis route:", error);
@@ -295,11 +298,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/process-command", async (req: Request, res: Response) => {
     const commandSchema = z.object({
       content: z.string(),
-      command: z.string()
+      command: z.string(),
+      llmProvider: z.enum(["openai", "ollama"]).optional(),
+      llmModel: z.string().optional()
     });
     
     try {
-      const { content, command } = commandSchema.parse(req.body);
+      const { content, command, llmProvider, llmModel } = commandSchema.parse(req.body);
       
       // Detect if this is a complex editing request that should use the agent
       const isComplexEdit = detectComplexEditingRequest(command);
@@ -373,7 +378,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Default behavior for simple commands
-      const result = await processTextCommand(content, command);
+      const result = await processTextCommand(content, command, llmProvider, llmModel);
       res.json(result);
     } catch (error) {
       console.error("Error in process-command:", error);
@@ -384,12 +389,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/contextual-help", async (req: Request, res: Response) => {
     const helpSchema = z.object({
       content: z.string(),
-      title: z.string()
+      title: z.string(),
+      llmProvider: z.enum(["openai", "ollama"]).optional(),
+      llmModel: z.string().optional()
     });
     
     try {
-      const { content, title } = helpSchema.parse(req.body);
-      const assistance = await generateContextualAssistance(content, title);
+      const { content, title, llmProvider, llmModel } = helpSchema.parse(req.body);
+      const assistance = await generateContextualAssistance(content, title, llmProvider, llmModel);
       res.json(assistance);
     } catch (error) {
       res.status(400).json({ message: "Failed to generate contextual help" });
@@ -407,8 +414,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { query, source } = searchSchema.parse(req.body);
       const results = await searchWeb(query, source);
       res.json(results);
-    } catch (error) {
-      res.status(400).json({ message: "Failed to perform search" });
+    } catch (error: any) {
+      console.error("Error in search route:", error.message);
+      const statusCode = error.statusCode || (error instanceof SearchError ? 502 : 400);
+      res.status(statusCode).json({ message: error.message || "Failed to perform search" });
     }
   });
   
@@ -1007,11 +1016,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agent.setAutonomyLevel(autonomyLevel);
       }
       
-      // Update agent context if provided, including LLM selection
+      // Update agent context if provided, including LLM selection.
+      // The client sends llmProvider/llmModel both nested in `context` and top-level;
+      // prefer the nested (context) values so the user's actual selection wins.
       const updatedContext = {
         ...context,
-        llmProvider,
-        llmModel
+        llmProvider: context?.llmProvider ?? llmProvider,
+        llmModel: context?.llmModel ?? llmModel
       };
       
       await agent.updateContext(updatedContext);

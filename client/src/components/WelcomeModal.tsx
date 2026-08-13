@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, BookOpen, Search, Zap, ArrowRight, ArrowLeft } from "lucide-react";
@@ -52,7 +52,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
     },
     {
       title: "Choose Your Experience",
-      subtitle: "We'll customize WordPlay to match your needs",
+      subtitle: "We'll customize wordPlay to match your needs",
       content: (
         <div className="space-y-4">
           <div 
@@ -104,7 +104,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
                   Full-featured experience with AI agent, research tools, and all capabilities.
                 </p>
                 <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
-                  <div>✓ All 17 slash commands</div>
+                  <div>✓ All 9 slash commands</div>
                   <div>✓ Autonomous AI agent with 19 tools</div>
                   <div>✓ Research integration and source management</div>
                   <div>✓ Advanced text analysis and style metrics</div>
@@ -149,7 +149,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
     },
     {
       title: "Let's Get Started!",
-      subtitle: "Here's how to make the most of WordPlay",
+      subtitle: "Here's how to make the most of wordPlay",
       content: (
         <div className="space-y-6">
           <div className="text-center">
@@ -165,7 +165,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
               {selectedUserType === 'simple' 
                 ? "You'll see a clean, focused writing interface with essential AI features."
                 : selectedUserType === 'advanced'
-                ? "You have access to all WordPlay features including the AI agent and research tools."
+                ? "You have access to all wordPlay features including the AI agent and research tools."
                 : "You have maximum power with AI visualizations, image generation, and advanced content creation capabilities."
               }
             </p>
@@ -232,9 +232,12 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="sr-only">Welcome to WordPlay</DialogTitle>
+          <DialogTitle className="sr-only">Welcome to wordPlay</DialogTitle>
+          <DialogDescription className="sr-only">
+            Set up your wordPlay writing experience
+          </DialogDescription>
         </DialogHeader>
         
         <div className="py-6">
@@ -268,8 +271,8 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
             {steps[step].content}
           </div>
 
-          {/* Navigation */}
-          <div className="flex items-center justify-between">
+          {/* Navigation — pinned at the bottom so Back/Next are always visible */}
+          <div className="sticky bottom-0 -mx-6 -mb-6 mt-auto border-t border-gray-200 dark:border-gray-700 bg-background px-6 py-4 flex items-center justify-between">
             <Button
               variant="ghost"
               onClick={handleBack}

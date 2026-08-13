@@ -35,6 +35,16 @@ interface PerplexityResponse {
   }>;
 }
 
+// Typed error so routes can map failures to honest HTTP status codes.
+export class SearchError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode = 502) {
+    super(message);
+    this.name = 'SearchError';
+    this.statusCode = statusCode;
+  }
+}
+
 // Enhanced web search using Perplexity API
 export async function searchWeb(query: string, source: string = "web"): Promise<{
   results: Array<{
@@ -45,15 +55,18 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
   summary?: string;
   error?: string;
 }> {
-  try {
-    // If no API key, fall back to simulated results
-    if (!PERPLEXITY_CONFIG.apiKey) {
-      console.warn("No PERPLEXITY_API_KEY found, using simulated results");
-      return getSimulatedResults(query);
-    }
+  // No API key → fail loudly instead of fabricating sources.
+  if (!PERPLEXITY_CONFIG.apiKey) {
+    throw new SearchError(
+      'Web search is not configured. Set PERPLEXITY_API_KEY to enable real results.',
+      503
+    );
+  }
 
+  let response;
+  try {
     // Call Perplexity API
-    const response = await fetch(`${PERPLEXITY_CONFIG.baseUrl}/chat/completions`, {
+    response = await fetch(`${PERPLEXITY_CONFIG.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${PERPLEXITY_CONFIG.apiKey}`,
@@ -77,37 +90,30 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
         return_images: false
       })
     });
-
-    if (!response.ok) {
-      throw new Error(`Perplexity API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json() as PerplexityResponse;
-    const content = data.choices[0]?.message?.content || "";
-    
-    // Extract sources from the response content
-    const sources = extractSourcesFromContent(content);
-    
-    // If no sources found in content, create some based on the query
-    if (sources.length === 0) {
-      sources.push(...getDefaultSources(query));
-    }
-
-    return {
-      results: sources,
-      summary: content,
-    };
   } catch (error: any) {
-    console.error("Error in Perplexity search:", error.message);
-    
-    // Fallback to simulated results if Perplexity fails
-    const fallbackResults = getSimulatedResults(query);
-    
-    return {
-      ...fallbackResults,
-      error: `Search service temporarily unavailable: ${error.message}. Showing cached results.`
-    };
+    throw new SearchError(`Could not reach the search service: ${error.message}`, 502);
   }
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new SearchError('Perplexity rejected the API key (401/403). Check PERPLEXITY_API_KEY.', 401);
+    }
+    if (response.status === 429) {
+      throw new SearchError('Perplexity rate limit exceeded (429). Try again later.', 429);
+    }
+    throw new SearchError(`Perplexity API error: ${response.status} ${response.statusText}`, 502);
+  }
+
+  const data = await response.json() as PerplexityResponse;
+  const content = data.choices[0]?.message?.content || "";
+
+  // Extract sources from the response content (real URLs only).
+  const sources = extractSourcesFromContent(content);
+
+  return {
+    results: sources,
+    summary: content,
+  };
 }
 
 // Extract sources/URLs from Perplexity response content
@@ -163,59 +169,6 @@ function extractSourcesFromContent(content: string): Array<{
   });
   
   return sources;
-}
-
-// Get default sources when none are found
-function getDefaultSources(query: string): Array<{
-  title: string;
-  snippet: string;
-  url: string;
-}> {
-  return [
-    {
-      title: `${query} - Wikipedia`,
-      snippet: `Wikipedia article about ${query} with comprehensive background information and references.`,
-      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(query.replace(/\s+/g, '_'))}`
-    },
-    {
-      title: `${query} - Academic Research`,
-      snippet: `Academic research and scholarly articles related to ${query}.`,
-      url: `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`
-    }
-  ];
-}
-
-// Fallback simulated results
-function getSimulatedResults(query: string): {
-  results: Array<{
-    title: string;
-    snippet: string;
-    url: string;
-  }>;
-  summary?: string;
-} {
-  const results = [
-    {
-      title: `${query} - Overview`,
-      snippet: `Comprehensive information about ${query} including key concepts, applications, and recent developments in the field.`,
-      url: "https://example.com/overview"
-    },
-    {
-      title: `${query} - Latest Research`,
-      snippet: `Recent research findings and academic papers related to ${query}, including methodology and conclusions.`,
-      url: "https://example.com/research"
-    },
-    {
-      title: `${query} - Practical Applications`,
-      snippet: `Real-world applications and case studies demonstrating the use of ${query} in various industries.`,
-      url: "https://example.com/applications"
-    }
-  ];
-
-  return {
-    results,
-    summary: `This is simulated research data for "${query}". To get real-time web search results, please configure the PERPLEXITY_API_KEY environment variable.`
-  };
 }
 
 // Enhanced webpage scraping with Mozilla Readability

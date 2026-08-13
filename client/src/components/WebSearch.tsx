@@ -234,13 +234,15 @@ export default function WebSearch({
   });
   
   // Handle search
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const runSearch = () => {
     if (!searchQuery.trim()) return;
-    
     searchMutation.mutate();
   };
-  
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    runSearch();
+  };
   // Handle scraping a webpage
   const handleScrape = (e: React.FormEvent) => {
     e.preventDefault();
@@ -344,7 +346,9 @@ export default function WebSearch({
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                   <Button 
-                    type="submit"
+                    type="button"
+                    onClick={runSearch}
+                    aria-label="Run search"
                     className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
                     disabled={searchMutation.isPending}
                   >

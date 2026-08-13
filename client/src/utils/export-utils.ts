@@ -1,6 +1,6 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
-import * as echarts from 'echarts';
+import type { ECharts } from 'echarts/core';
 
 export interface ExportOptions {
   format: 'pdf' | 'png' | 'jpg' | 'svg';
@@ -23,7 +23,7 @@ export interface DocumentExportOptions extends ExportOptions {
  * Export a chart to various formats with high quality
  */
 export async function exportChart(
-  chartInstance: echarts.ECharts,
+  chartInstance: ECharts,
   options: ExportOptions
 ): Promise<string> {
   const { format, quality, backgroundColor = 'white' } = options;

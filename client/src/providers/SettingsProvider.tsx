@@ -110,8 +110,8 @@ const defaultSettings: AppSettings = {
   showLineNumbers: false, // Reduce visual clutter
   
   // AI Settings - Smart Defaults
-  llmProvider: 'openai', // Default to cloud AI
-  llmModel: 'gpt-4.1-mini', // Fast and capable
+  llmProvider: 'openai', // OpenAI-compatible (defaults to local MLX Gemma E2B via OPENAI_BASE_URL)
+  llmModel: 'mlx-community/gemma-4-e2b-it-4bit', // Local MLX Gemma 4 E2B
   ollamaUrl: 'http://localhost:11434',
   
   // Reasoning Model Settings - Ambient & Subtle

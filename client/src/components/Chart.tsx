@@ -1,7 +1,73 @@
 import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
-import * as echarts from 'echarts';
+// Tree-shaken ECharts — register only what we use (much lighter than `echarts` full bundle)
+import * as echarts from 'echarts/core';
+import {
+  BarChart,
+  LineChart,
+  PieChart,
+  ScatterChart,
+  RadarChart,
+  FunnelChart,
+  GaugeChart,
+  TreemapChart,
+} from 'echarts/charts';
+import {
+  TitleComponent,
+  TooltipComponent,
+  GridComponent,
+  LegendComponent,
+  DataZoomComponent,
+  VisualMapComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  MarkAreaComponent,
+} from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+import { LabelLayout } from 'echarts/features';
 import { useSettings } from '@/providers/SettingsProvider';
 import { exportChart, ExportOptions } from '@/utils/export-utils';
+
+echarts.use([
+  BarChart,
+  LineChart,
+  PieChart,
+  ScatterChart,
+  RadarChart,
+  FunnelChart,
+  GaugeChart,
+  TreemapChart,
+  TitleComponent,
+  TooltipComponent,
+  GridComponent,
+  LegendComponent,
+  DataZoomComponent,
+  VisualMapComponent,
+  MarkLineComponent,
+  MarkPointComponent,
+  MarkAreaComponent,
+  CanvasRenderer,
+  LabelLayout,
+]);
+
+// Premium vivid palette — applied as the default when the LLM config doesn't set colors
+const PREMIUM_PALETTE = [
+  '#6366f1', '#a855f7', '#ec4899', '#f43f5e', '#f97316', '#fbbf24',
+  '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6', '#d946ef', '#eab308',
+];
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const verticalGradient = (color: string, from = 0.55, to = 0.06) =>
+  new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    { offset: 0, color: hexToRgba(color, from) },
+    { offset: 1, color: hexToRgba(color, to) },
+  ]);
 
 interface ChartProps {
   config: any;
@@ -20,21 +86,21 @@ export interface ChartRef {
   resize: () => void;
 }
 
-const Chart = forwardRef<ChartRef, ChartProps>(({ 
-  config, 
-  className = '', 
-  style, 
+const Chart = forwardRef<ChartRef, ChartProps>(({
+  config,
+  className = '',
+  style,
   autoHeight = true,
   minHeight = 400,
   maxHeight = 800,
-  aspectRatio = 16/9,
-  exportQuality = 'high'
+  aspectRatio = 16 / 9,
+  exportQuality = 'high',
 }, ref) => {
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<echarts.ECharts | null>(null);
   const { settings } = useSettings();
   const [dynamicHeight, setDynamicHeight] = useState(500);
-  
+
   // Expose chart methods via ref
   useImperativeHandle(ref, () => ({
     exportChart: async (options: ExportOptions) => {
@@ -48,22 +114,21 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
       if (chartInstance.current) {
         chartInstance.current.resize();
       }
-    }
+    },
   }));
 
   useEffect(() => {
     if (!chartRef.current) return;
 
-    // Initialize chart with ultra-high-quality rendering options
     const pixelRatio = exportQuality === 'ultra' ? 4 : exportQuality === 'high' ? 3 : (window.devicePixelRatio || 2);
     chartInstance.current = echarts.init(chartRef.current, null, {
-      devicePixelRatio: pixelRatio, // Ultra-high DPI support for exports
-      renderer: 'canvas', // Use canvas for better performance and quality
-      useDirtyRect: true, // Performance optimization
+      devicePixelRatio: pixelRatio,
+      renderer: 'canvas',
+      useDirtyRect: true,
       width: 'auto',
-      height: 'auto'
+      height: 'auto',
     });
-    
+
     return () => {
       if (chartInstance.current) {
         chartInstance.current.dispose();
@@ -83,116 +148,157 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
     }
 
     try {
-      console.log('🔧 Chart config received:', typeof config);
-      console.log('📝 Raw config:', config);
-      
       let chartConfig;
-      
+
       // Enhanced config parsing with validation
       if (typeof config === 'string') {
-        // Clean the config string
         let cleanConfig = config.trim();
-        
-        // Remove any markdown code block markers
         cleanConfig = cleanConfig.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
-        
-        // Try to find JSON within the string
         const jsonMatch = cleanConfig.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           cleanConfig = jsonMatch[0];
         }
-        
-        console.log('🧹 Cleaned config:', cleanConfig.substring(0, 300) + '...');
-        
         try {
           chartConfig = JSON.parse(cleanConfig);
         } catch (parseError) {
-          console.error('❌ JSON parse error:', parseError);
-          console.error('Failed to parse:', cleanConfig);
           throw new Error(`Invalid JSON configuration: ${parseError}`);
         }
       } else {
         chartConfig = config;
       }
-      
-      // Validate chart configuration
+
       if (!chartConfig || typeof chartConfig !== 'object') {
         throw new Error('Chart configuration must be an object');
       }
-      
-      console.log('📊 Parsed chart config:', JSON.stringify(chartConfig, null, 2));
-      
-      // Calculate dynamic height based on content
+
+      // Dynamic height based on content
       const calculateDynamicHeight = () => {
         if (!autoHeight) return 500;
-        
         const containerWidth = chartRef.current?.clientWidth || 800;
         const calculatedHeight = Math.max(
           minHeight,
           Math.min(maxHeight, containerWidth / aspectRatio)
         );
-        
-        // Adjust based on data complexity
         const hasMultipleSeries = chartConfig.series?.length > 1;
         const hasLegend = chartConfig.legend;
         const complexityFactor = hasMultipleSeries || hasLegend ? 1.2 : 1;
-        
         return Math.round(calculatedHeight * complexityFactor);
       };
-      
+
       const newHeight = calculateDynamicHeight();
       setDynamicHeight(newHeight);
-      
-      // Enhanced chart configuration with dynamic sizing and premium styling
+
+      // ---- Premium theme: apply vibrant defaults, let explicit LLM config win ----
+      const colors: string[] = chartConfig.color || PREMIUM_PALETTE;
+
+      const enhanceSeries = (series: any[] = [], baseIndex = 0): any[] =>
+        series.map((s, i) => {
+          const idx = (baseIndex + i) % colors.length;
+          const color = colors[idx];
+          const enhanced: any = { ...s };
+
+          if (s.type === 'bar' && !s.itemStyle?.color) {
+            enhanced.itemStyle = {
+              ...s.itemStyle,
+              color: verticalGradient(color, 0.85, 0.15),
+              borderRadius: s.itemStyle?.borderRadius ?? [6, 6, 0, 0],
+            };
+          } else if (s.type === 'line') {
+            enhanced.lineStyle = {
+              width: 3,
+              ...s.lineStyle,
+              color: s.lineStyle?.color ?? color,
+            };
+            if (!s.areaStyle) {
+              enhanced.areaStyle = { color: verticalGradient(color, 0.32, 0) };
+            }
+            enhanced.symbol = s.symbol ?? 'circle';
+            enhanced.symbolSize = s.symbolSize ?? 7;
+            if (!s.itemStyle) enhanced.itemStyle = { color };
+          } else if (s.type === 'scatter') {
+            enhanced.itemStyle = { ...s.itemStyle, color: s.itemStyle?.color ?? color, shadowBlur: 8, shadowColor: hexToRgba(color, 0.4) };
+          } else if (['pie', 'funnel', 'sunburst', 'treemap', 'sankey', 'graph', 'radar'].includes(s.type)) {
+            enhanced.emphasis = {
+              ...s.emphasis,
+              itemStyle: {
+                shadowBlur: 12,
+                shadowColor: 'rgba(0,0,0,0.25)',
+                ...s.emphasis?.itemStyle,
+              },
+            };
+          }
+
+          // Multi-dataset support (e.g. nested pie via datasets)
+          if (s.datasets) {
+            enhanced.datasets = enhanceSeries(s.datasets, idx);
+          }
+          return enhanced;
+        });
+
       const enhancedConfig = {
         ...chartConfig,
-        // Ensure responsive grid with dynamic spacing
+        color: colors,
+        backgroundColor: chartConfig.backgroundColor ?? 'transparent',
         grid: {
           containLabel: true,
           top: Math.max(60, newHeight * 0.12),
           right: Math.max(60, newHeight * 0.1),
           bottom: Math.max(60, newHeight * 0.12),
           left: Math.max(80, newHeight * 0.12),
-          ...chartConfig.grid
+          ...chartConfig.grid,
         },
-        // Ultra-smooth animations with spring physics
         animation: true,
-        animationDuration: 1200,
-        animationEasing: 'elasticOut',
-        animationDelayUpdate: 300,
-        // Premium tooltip with glass-morphism
+        animationDuration: 800,
+        animationEasing: 'cubicOut',
+        animationDelayUpdate: 200,
         tooltip: {
           trigger: 'axis',
-          backgroundColor: settings.theme === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-          borderColor: settings.theme === 'dark' ? '#444' : '#ccc',
+          backgroundColor: settings.theme === 'dark' ? 'rgba(24,24,32,0.96)' : 'rgba(255,255,255,0.96)',
+          borderColor: settings.theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
           borderWidth: 1,
           borderRadius: 12,
-          padding: [12, 16],
+          padding: [10, 14],
+          extraCssText: 'box-shadow: 0 12px 32px rgba(0,0,0,0.18); backdrop-filter: blur(8px);',
           textStyle: {
-            color: settings.theme === 'dark' ? '#fff' : '#333',
+            color: settings.theme === 'dark' ? '#f4f4f5' : '#27272a',
             fontSize: 13,
-            fontWeight: '500'
+            fontWeight: '500',
           },
-          boxShadow: '0 20px 40px rgba(0,0,0,0.15)',
-          ...chartConfig.tooltip
+          ...chartConfig.tooltip,
         },
-        // Enhanced legend with better positioning
         legend: chartConfig.legend ? {
           ...chartConfig.legend,
+          icon: chartConfig.legend.icon ?? 'roundRect',
+          itemWidth: chartConfig.legend.itemWidth ?? 14,
+          itemHeight: chartConfig.legend.itemHeight ?? 8,
           textStyle: {
-            color: settings.theme === 'dark' ? '#ccc' : '#666',
+            color: settings.theme === 'dark' ? '#a1a1aa' : '#71717a',
             fontSize: 12,
             fontWeight: '500',
-            ...chartConfig.legend?.textStyle
-          }
-        } : chartConfig.legend
+            ...chartConfig.legend?.textStyle,
+          },
+        } : undefined,
+        series: enhanceSeries(chartConfig.series),
+        ...(chartConfig.title ? {
+          title: {
+            ...chartConfig.title,
+            textStyle: {
+              color: settings.theme === 'dark' ? '#fafafa' : '#18181b',
+              fontWeight: '700',
+              ...chartConfig.title?.textStyle,
+            },
+            subtextStyle: {
+              color: settings.theme === 'dark' ? '#a1a1aa' : '#71717a',
+              ...chartConfig.title?.subtextStyle,
+            },
+          },
+        } : {}),
       };
-      
-      // Set chart options
+
       chartInstance.current.setOption(enhancedConfig, true);
       console.log('✅ Chart options set successfully');
-      
-      // Enhanced resize handler with debouncing
+
+      // Debounced resize handler
       let resizeTimeout: NodeJS.Timeout;
       const handleResize = () => {
         clearTimeout(resizeTimeout);
@@ -204,9 +310,9 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
           }
         }, 150);
       };
-      
+
       window.addEventListener('resize', handleResize);
-      
+
       return () => {
         window.removeEventListener('resize', handleResize);
         clearTimeout(resizeTimeout);
@@ -214,8 +320,7 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
     } catch (error) {
       console.error('❌ Error rendering chart:', error);
       console.error('Config that caused error:', config);
-      
-      // Show error in chart container
+
       if (chartInstance.current) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         chartInstance.current.setOption({
@@ -223,10 +328,7 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
             text: 'Chart Error',
             left: 'center',
             top: 'middle',
-            textStyle: {
-              color: '#ff4444',
-              fontSize: 18
-            }
+            textStyle: { color: '#ff4444', fontSize: 18 },
           },
           graphic: {
             elements: [{
@@ -236,10 +338,10 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
               style: {
                 text: `Error: ${errorMessage}`,
                 fill: '#888',
-                fontSize: 14
-              }
-            }]
-          }
+                fontSize: 14,
+              },
+            }],
+          },
         });
       }
     }
@@ -248,16 +350,16 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
   // Show loading state when no config
   if (!config) {
     return (
-      <div 
+      <div
         className={`chart-container ${className} flex items-center justify-center`}
-        style={{ 
-          width: '100%', 
+        style={{
+          width: '100%',
           minHeight: `${minHeight}px`,
           height: `${dynamicHeight}px`,
           background: 'transparent',
           borderRadius: '12px',
           border: '2px dashed #ccc',
-          ...style 
+          ...style,
         }}
       >
         <div className="text-center text-gray-500">
@@ -269,18 +371,18 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
   }
 
   return (
-    <div 
-      ref={chartRef} 
+    <div
+      ref={chartRef}
       className={`chart-container ${className}`}
-      style={{ 
-        width: '100%', 
+      style={{
+        width: '100%',
         minHeight: `${minHeight}px`,
         height: `${dynamicHeight}px`,
         background: 'transparent',
         borderRadius: '12px',
         overflow: 'hidden',
         transition: 'height 0.3s ease-in-out',
-        ...style 
+        ...style,
       }}
     />
   );

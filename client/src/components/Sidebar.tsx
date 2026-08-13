@@ -408,6 +408,7 @@ export default function Sidebar({
                           e.stopPropagation();
                           startEditingProject(project);
                         }}
+                        aria-label={`Rename project ${project.name}`}
                         className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                       >
                         <Edit2 className="h-3 w-3" />
@@ -417,6 +418,7 @@ export default function Sidebar({
                           e.stopPropagation();
                           confirmDeleteProject(project.id);
                         }}
+                        aria-label={`Delete project ${project.name}`}
                         className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -510,6 +512,7 @@ export default function Sidebar({
                             e.stopPropagation();
                             startEditingDocument(document);
                           }}
+                          aria-label={`Rename document ${document.title}`}
                           className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                         >
                           <Edit2 className="h-3 w-3" />
@@ -519,6 +522,7 @@ export default function Sidebar({
                             e.stopPropagation();
                             confirmDeleteDocument(document.id);
                           }}
+                          aria-label={`Delete document ${document.title}`}
                           className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
                         >
                           <Trash2 className="h-3 w-3" />

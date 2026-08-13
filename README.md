@@ -74,8 +74,8 @@
 **🎯 Quick Actions:**
 - `/continue` → Extend writing
 - `/improve` → Enhance clarity
-- `/summarize` → Create summaries
-- `/rewrite` → Refresh content
+- `/fix` → Correct grammar
+- `/bullets` → Convert to bullet points
 
 </td>
 </tr>
@@ -183,13 +183,12 @@ The AI Agent is equipped with **19 specialized tools** across 4 categories:
 <tr><th>Command</th><th>🎯 Purpose</th><th>✨ Magic</th></tr>
 <tr><td><code>/continue</code></td><td>Extend writing</td><td>🔮 Seamless flow continuation</td></tr>
 <tr><td><code>/improve</code></td><td>Enhance clarity</td><td>📈 Readability & flow boost</td></tr>
-<tr><td><code>/summarize</code></td><td>Create summaries</td><td>🎯 Key points extraction</td></tr>
-<tr><td><code>/expand</code></td><td>Add detail</td><td>📖 Rich elaboration</td></tr>
-<tr><td><code>/list</code></td><td>Structure content</td><td>📋 Organized formatting</td></tr>
-<tr><td><code>/rewrite</code></td><td>Refresh text</td><td>🔄 Style preservation</td></tr>
-<tr><td><code>/suggest</code></td><td>Generate ideas</td><td>💡 Creative inspiration</td></tr>
-<tr><td><code>/tone</code></td><td>Adjust style</td><td>🎨 Voice modification</td></tr>
 <tr><td><code>/fix</code></td><td>Correct errors</td><td>🛠️ Grammar & clarity</td></tr>
+<tr><td><code>/bullets</code></td><td>Structure content</td><td>📋 Bullet-point formatting</td></tr>
+<tr><td><code>/format</code></td><td>Improve structure</td><td>🧹 Clean formatting</td></tr>
+<tr><td><code>/chart</code></td><td>Visualize data</td><td>📊 Interactive chart</td></tr>
+<tr><td><code>/image</code></td><td>Generate image</td><td>🖼️ AI-generated art</td></tr>
+<tr><td><code>/table</code></td><td>Create table</td><td>📑 Markdown table</td></tr>
 </table>
 
 ### 🔬 **Research & Context System**

@@ -6,6 +6,7 @@ import { Bot, Send, Wrench, Loader2, User, Copy, CheckCircle, AlertCircle, Chevr
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface AIAgentProps {
@@ -158,7 +159,9 @@ export default function AIAgent({
       try {
         const res = await apiRequest("POST", "/api/agent/intelligent-request", {
           request,
-          context: agentContext
+          context: agentContext,
+          llmProvider,
+          llmModel
         });
         return res.json();
       } finally {
@@ -238,9 +241,22 @@ export default function AIAgent({
       };
       setMessages(prev => [...prev, errorMessage]);
 
+      // Map raw provider/JSON errors to friendly, human-readable text.
+      const raw = (errorResponse?.message || error.message || '').toString();
+      let friendly = raw;
+      if (/401|invalid.*key|unauthor/i.test(raw)) {
+        friendly = "The AI provider rejected the API key (401). Check the key in Settings → AI.";
+      } else if (/429|rate limit/i.test(raw)) {
+        friendly = "The AI provider is rate-limiting requests. Wait a moment and try again.";
+      } else if (/503|unavailable|timeout|ECONNREFUSED/i.test(raw)) {
+        friendly = "The AI service is unavailable or timed out. Check that your provider is running (e.g. Ollama).";
+      } else if (/model.*not found|not found.*model/i.test(raw)) {
+        friendly = "The selected AI model isn't available on this provider. Pick another model in Settings → AI.";
+      }
+
       toast({
         title: "Agent Error",
-        description: errorResponse?.message || error.message,
+        description: friendly,
         variant: "destructive"
       });
     }
@@ -335,6 +351,7 @@ export default function AIAgent({
       <div className="fixed bottom-6 right-6 z-50">
         <button
           onClick={() => setIsMinimized(!isMinimized)}
+          aria-label="Toggle wordPlay agent"
           className="w-14 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
           title="wordPlay agent"
         >
@@ -375,6 +392,7 @@ export default function AIAgent({
               </div>
               <button
                 onClick={() => setIsMinimized(true)}
+                aria-label="Close agent"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
                 onMouseDown={(e) => e.stopPropagation()} // Prevent drag when clicking close
               >
@@ -464,11 +482,21 @@ export default function AIAgent({
             {/* Input */}
             <div className="px-4 pb-4 border-t dark:border-gray-700 pt-4">
               <form onSubmit={handleSubmit} className="flex space-x-2">
-                <Input
+                <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about writing..."
-                  className="flex-1"
+                  onKeyDown={(e) => {
+                    // Enter submits, Shift+Enter inserts a newline
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim() && !agentMutation.isPending) {
+                        handleSubmit(e as unknown as React.FormEvent);
+                      }
+                    }
+                  }}
+                  placeholder="Ask about writing... (Enter to send, Shift+Enter for newline)"
+                  rows={1}
+                  className="flex-1 resize-none"
                   disabled={agentMutation.isPending}
                 />
                 <Button

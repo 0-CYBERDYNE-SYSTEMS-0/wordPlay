@@ -3,7 +3,7 @@ import { useSettings } from "@/providers/SettingsProvider";
 import { useProcessing } from "@/providers/ProcessingProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { 
   Command,
   Sun, 
@@ -327,6 +327,9 @@ export default function CommandPalette({
             <Command className="h-4 w-4" />
             Command Palette
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Search and run commands in wordPlay
+          </DialogDescription>
         </DialogHeader>
         
         <div className="p-3 border-b">

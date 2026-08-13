@@ -1,7 +1,12 @@
 import OpenAI from "openai";
 import { storage } from './storage';
 
-const DEFAULT_MODEL = "gpt-4.1-mini";
+const DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-4bit";
+
+// Configurable, interactive-friendly timeout for AI calls (ms). Default 120s so
+// interactive slash commands fail fast instead of hanging ~5 min on undici's
+// default headers timeout.
+const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '120000', 10);
 
 // Core command types
 export type CoreCommandType = 'continue' | 'improve' | 'fix' | 'bullets' | 'table' | 'format';
@@ -19,6 +24,16 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
         model: model,
         prompt: `System: ${systemPrompt}\n\nUser: ${userPrompt}`,
         stream: false,
+        // Disable thinking mode — qwen3.5 / reasoning models spend their whole
+        // token budget on <thinking> and never emit the actual answer. With
+        // think:false they answer directly in ~1s instead of hanging for a
+        // minute and returning empty/truncated reasoning.
+        think: false,
+        options: {
+          num_ctx: 8192, // Keep context small — Ollama's default 32768 makes 2b models crawl
+          num_predict: 2048,
+          temperature: 0.3
+        }
       }),
     });
 
@@ -27,7 +42,10 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
     }
 
     const data = await response.json();
-    return data.response || "";
+    // qwen3.5 / deepseek-r1 style models put their reasoning in `thinking`
+    // and leave `response` empty. Fall back to `thinking` so the pipeline
+    // still returns content (the client extracts <thinking> tags from it).
+    return data.response || data.thinking || "";
   } catch (error) {
     console.error("Error calling Ollama:", error);
     throw error;
@@ -299,7 +317,9 @@ export async function executeCoreCommand(
   }
   
   const openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY || "default_key" 
+    apiKey: process.env.OPENAI_API_KEY || "default_key",
+    baseURL: process.env.OPENAI_BASE_URL || undefined,
+    timeout: AI_REQUEST_TIMEOUT_MS
   });
   
   const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
@@ -391,11 +411,8 @@ export async function executeCoreCommand(
     
   } catch (error: any) {
     console.error(`Error executing core command ${command}:`, error);
-    return {
-      result: smartSelectionInfo.selectedText || "",
-      message: `Error executing ${command}: ${error.message || "Unknown error"}`,
-      replaceSelection: Boolean(smartSelectionInfo.selectedText)
-    };
+    // Re-throw so the route maps this to a real (non-200) HTTP status code.
+    throw error;
   }
 }
 
@@ -454,7 +471,9 @@ ${enhancedContext?.researchContext ? `\nRESEARCH SOURCES:\n${enhancedContext.res
 Follow the custom prompt instructions precisely.${enhancedContext?.researchContext ? `\n\nYou may reference and incorporate information from the research sources above when relevant.` : ''}`;
 
   const openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY || "default_key" 
+    apiKey: process.env.OPENAI_API_KEY || "default_key",
+    baseURL: process.env.OPENAI_BASE_URL || undefined,
+    timeout: AI_REQUEST_TIMEOUT_MS
   });
   
   const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
@@ -505,10 +524,7 @@ Follow the custom prompt instructions precisely.${enhancedContext?.researchConte
     
   } catch (error: any) {
     console.error(`Error executing custom command:`, error);
-    return {
-      result: selectionInfo.selectedText || "",
-      message: `Error executing custom command: ${error.message || "Unknown error"}`,
-      replaceSelection: Boolean(selectionInfo.selectedText)
-    };
+    // Re-throw so the route maps this to a real (non-200) HTTP status code.
+    throw error;
   }
 }

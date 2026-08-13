@@ -15,7 +15,7 @@ export async function executeSlashCommand(
   },
   style: any = {},
   llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel: string = 'gpt-4.1-mini',
+  llmModel: string = 'mlx-community/gemma-4-e2b-it-4bit',
   includeContext: boolean = false,
   projectId?: number,
   userId?: number

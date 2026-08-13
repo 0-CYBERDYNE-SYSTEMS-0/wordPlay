@@ -313,6 +313,7 @@ export default function Editor({
                 size="sm"
                 className="flex items-center"
                 title="Undo (Ctrl+Z)"
+                aria-label="Undo"
               >
                 <Undo className="h-4 w-4" />
               </Button>
@@ -323,11 +324,12 @@ export default function Editor({
                 size="sm"
                 className="flex items-center"
                 title="Redo (Ctrl+Y)"
+                aria-label="Redo"
               >
                 <Redo className="h-4 w-4" />
               </Button>
               {/* History indicator for debugging */}
-              <span className="text-xs text-gray-400 ml-2" title={`History: ${undoRedo.currentIndex + 1}/${undoRedo.historySize}`}>
+              <span className="text-xs text-gray-500 ml-2" title={`History: ${undoRedo.currentIndex + 1}/${undoRedo.historySize}`}>
                 {undoRedo.currentIndex + 1}/{undoRedo.historySize}
               </span>
             </div>

@@ -48,7 +48,7 @@ export default function Settings({ onBack }: SettingsProps) {
       contextPanelDefaultOpen: settings.contextPanelDefaultOpen,
       sidebarDefaultOpen: settings.sidebarDefaultOpen,
       llmProvider: settings.llmProvider,
-      llmModel: settings.llmModel || 'gpt-4.1-mini',
+      llmModel: settings.llmModel || 'mlx-community/gemma-4-e2b-it-4bit',
       ollamaUrl: settings.ollamaUrl || 'http://localhost:11434'
     }
   });
@@ -64,7 +64,7 @@ export default function Settings({ onBack }: SettingsProps) {
     
     // AI Settings
     llmProvider: 'openai',
-    llmModel: 'gpt-4.1-mini',
+    llmModel: 'mlx-community/gemma-4-e2b-it-4bit',
     openaiApiKey: '',
     ollamaUrl: 'http://localhost:11434',
     
@@ -395,6 +395,7 @@ export default function Settings({ onBack }: SettingsProps) {
                     <SelectContent>
                       {settings.llmProvider === 'openai' ? (
                         <>
+                          <SelectItem value="mlx-community/gemma-4-e2b-it-4bit">Gemma 4 E2B (MLX local)</SelectItem>
                           <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
                           <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
                           <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>

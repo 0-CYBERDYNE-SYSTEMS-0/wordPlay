@@ -18,6 +18,10 @@ import {
   analyzeDocument 
 } from "./file-operations";
 
+// Configurable timeout for agent LLM calls (ms). Default 180s so agent runs
+// fail fast instead of hanging on undici's default headers timeout.
+const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '180000', 10);
+
 // Tool interface that the agent can use
 interface AgentTool {
   name: string;
@@ -115,21 +119,23 @@ const VALID_OPENAI_MODELS = [
   'gpt-4.1',
   'gpt-4.1-mini',
   'gpt-4.1-nano',
-  'gpt-4o'
+  'gpt-4o',
+  'mlx-community/gemma-4-e2b-it-4bit'
 ];
 
 // Validate model based on provider
 function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
   if (!model) {
-    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:4b';
+    return provider === 'openai' ? 'mlx-community/gemma-4-e2b-it-4bit' : 'qwen3:4b';
   }
 
   if (provider === 'openai') {
-    return VALID_OPENAI_MODELS.includes(model) ? model : 'gpt-4.1-mini';
+    return VALID_OPENAI_MODELS.includes(model) ? model : 'mlx-community/gemma-4-e2b-it-4bit';
   } else {
-    // For Ollama, use available tool-capable models - prefer qwen3:4b for speed
-    const ollamaToolModels = ['qwen3:4b', 'qwen3:8b', 'okamototk/deepseek-r1:8b', 'qwen2.5-coder:7b', 'granite3.3:8b'];
-    return ollamaToolModels.includes(model) ? model : 'qwen3:4b';
+    // For Ollama, honor whatever non-empty model the user selected.
+    // (Previously this allowlist silently swapped unknown models — e.g. the
+    // QA-tested qwen3.5:0.8b — for qwen3:4b, which broke provider routing.)
+    return model;
   }
 }
 
@@ -2159,7 +2165,9 @@ Remember:
       // Initialize OpenAI client
       const { OpenAI } = await import("openai");
       const openai = new OpenAI({ 
-        apiKey: process.env.OPENAI_API_KEY || "default_key" 
+        apiKey: process.env.OPENAI_API_KEY || "default_key",
+        baseURL: process.env.OPENAI_BASE_URL || undefined,
+        timeout: AI_REQUEST_TIMEOUT_MS
       });
       
       // Convert tools to OpenAI function calling format

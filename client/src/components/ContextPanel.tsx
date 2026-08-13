@@ -306,12 +306,12 @@ export default function ContextPanel({
               Use /improve to enhance writing
             </button>
             <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <BookOpen className="h-3 w-3 mr-1" />
-              Use /outline to structure ideas
+              <FileText className="h-3 w-3 mr-1" />
+              Use /format to structure your document
             </button>
             <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
               <BarChart2 className="h-3 w-3 mr-1" />
-              Use /analyze for style feedback
+              Use /chart to visualize your data
             </button>
           </div>
         </div>

@@ -36,8 +36,10 @@ export default function Home() {
   const [newProjectModalOpen, setNewProjectModalOpen] = useState(false);
   const [welcomeModalOpen, setWelcomeModalOpen] = useState(!settings.hasCompletedOnboarding);
   const [activeTab, setActiveTab] = useState<"editor" | "research" | "settings">("editor");
-  const [activeProjectId, setActiveProjectId] = useState<number | null>(1); // Default project
-  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(1); // Default document
+  // Start with no selection; the project/document lists populate it. This avoids
+  // reloading a stale hardcoded ID (e.g. document 1) that may have been deleted.
+  const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
+  const [activeDocumentId, setActiveDocumentId] = useState<number | null>(null);
   
   // Full screen state management
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -75,6 +77,27 @@ export default function Home() {
   const { data: projects } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
   });
+
+  // Fetch documents for the active project so we can auto-select the first one
+  const { data: projectDocuments } = useQuery<Document[]>({
+    queryKey: [`/api/projects/${activeProjectId}/documents`],
+    enabled: !!activeProjectId,
+  });
+
+  // Auto-select the first project (and its first document) once the lists load.
+  // Previously the app hardcoded project/document id 1, which 404s after the
+  // seed data is deleted — this recovers gracefully on reload.
+  useEffect(() => {
+    if (activeProjectId === null && projects && projects.length > 0) {
+      setActiveProjectId(projects[0].id);
+    }
+  }, [projects, activeProjectId]);
+
+  useEffect(() => {
+    if (activeDocumentId === null && projectDocuments && projectDocuments.length > 0) {
+      setActiveDocumentId(projectDocuments[0].id);
+    }
+  }, [projectDocuments, activeDocumentId]);
 
   // Current active project
   const activeProject = projects?.find(project => project.id === activeProjectId) || null;
@@ -249,7 +272,7 @@ export default function Home() {
             word<span className="text-[var(--wp-copper)]">Play</span>
           </span>
           {activeProject && (
-            <span className="truncate text-[12px] text-stone-400 sm:text-[13px]">
+            <span className="truncate text-[12px] text-stone-500 dark:text-stone-400 sm:text-[13px]">
               <span className="mx-1 text-stone-300 dark:text-stone-600">·</span>
               {activeProject.name}
             </span>

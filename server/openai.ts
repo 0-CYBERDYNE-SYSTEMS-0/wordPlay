@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
-// the newest OpenAI model is "o3-mini" which is available and excels at diverse tasks
-export const DEFAULT_MODEL = "o3-mini";
+// Default local MLX model: Gemma 4 E2B (4-bit, OpenAI-compatible via mlx_lm.server)
+export const DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-4bit";
 const DEFAULT_PROVIDER = "openai";
 
 // Connection test interfaces
@@ -57,8 +57,14 @@ export function prepareO3Parameters(params: any): any {
   return o3Params;
 }
 
+// Configurable timeout for OpenAI-compatible calls (ms). Interactive paths
+// (slash commands) set a shorter one; this is the fallback for module-level use.
+const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '180000', 10);
+
 const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || "default_key" 
+  apiKey: process.env.OPENAI_API_KEY || "default_key",
+  baseURL: process.env.OPENAI_BASE_URL || undefined,
+  timeout: AI_REQUEST_TIMEOUT_MS
 });
 
 // Connection testing utilities
@@ -226,7 +232,7 @@ export function buildOpenAIParams(model: string, baseParams: any): any {
   return params;
 }
 
-async function callOllama(model: string, prompt: string, requestJson: boolean = false): Promise<string> {
+export async function callOllama(model: string, prompt: string, requestJson: boolean = false): Promise<string> {
   try {
     const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
     
@@ -239,9 +245,15 @@ async function callOllama(model: string, prompt: string, requestJson: boolean = 
       model,
       messages,
       stream: false,
+      // Disable thinking mode — qwen3.5 / reasoning models burn their whole
+      // token budget on <thinking> and never emit the actual answer. With
+      // think:false they answer directly in ~1s instead of hanging and
+      // returning empty content.
+      think: false,
       options: {
         temperature: 0.7,
-        top_p: 0.9
+        top_p: 0.9,
+        num_ctx: 8192 // Keep context small — Ollama's 32768 default makes 2b models crawl
       }
     };
     
@@ -385,51 +397,64 @@ export async function generateTextCompletion(
 }
 
 // Analyze the text style in greater detail
-export async function analyzeTextStyle(text: string): Promise<any> {
+export async function analyzeTextStyle(
+  text: string,
+  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmModel?: string
+): Promise<any> {
   try {
-    const requestParams = prepareO3Parameters({
-      model: DEFAULT_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: 
-            `You are a text analysis expert. Analyze the given text and evaluate its style metrics. 
-            Return a JSON object with the following properties:
-            
-            - metrics: An object containing:
-              - formality: 0-100 (how formal the writing is)
-              - complexity: 0-100 (complexity of vocabulary and sentence structure)
-              - coherence: 0-100 (how well the text flows and ideas connect)
-              - engagement: 0-100 (how engaging/interesting the content is)
-              - conciseness: 0-100 (how efficiently ideas are expressed)
-              
-            - readability: An object containing:
-              - score: 0-100 (overall readability score)
-              - grade: string (e.g., "College Level", "High School", etc.)
-            
-            - wordDistribution: An object containing:
-              - unique: number (count of unique words)
-              - repeated: number (count of repeated words)
-              - rare: number (count of uncommon/specialized words)
-              
-            - commonPhrases: Array of strings (frequent phrases or patterns)
-            - suggestions: Array of strings (improvement suggestions)
-            - toneAnalysis: string (detailed analysis of the tone)
-            
-            For short text, make appropriate estimates based on the available content.`
-        },
-        {
-          role: "user",
-          content: text || "Sample text for analysis."
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3
-    });
-    
-    const response = await openai.chat.completions.create(requestParams);
+    const systemPrompt = 
+      `You are a text analysis expert. Analyze the given text and evaluate its style metrics. 
+      Return a JSON object with the following properties:
+      
+      - metrics: An object containing:
+        - formality: 0-100 (how formal the writing is)
+        - complexity: 0-100 (complexity of vocabulary and sentence structure)
+        - coherence: 0-100 (how well the text flows and ideas connect)
+        - engagement: 0-100 (how engaging/interesting the content is)
+        - conciseness: 0-100 (how efficiently ideas are expressed)
+        
+      - readability: An object containing:
+        - score: 0-100 (overall readability score)
+        - grade: string (e.g., "College Level", "High School", etc.)
+      
+      - wordDistribution: An object containing:
+        - unique: number (count of unique words)
+        - repeated: number (count of repeated words)
+        - rare: number (count of uncommon/specialized words)
+        
+      - commonPhrases: Array of strings (frequent phrases or patterns)
+      - suggestions: Array of strings (improvement suggestions)
+      - toneAnalysis: string (detailed analysis of the tone)
+      
+      For short text, make appropriate estimates based on the available content.`;
 
-    const result = JSON.parse(response.choices[0].message.content || '{}');
+    let rawContent = '{}';
+    if (llmProvider === 'ollama') {
+      rawContent = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\nText: ${text || "Sample text for analysis."}`, true);
+    } else {
+      const requestParams = prepareO3Parameters({
+        model: llmModel || DEFAULT_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: text || "Sample text for analysis." }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3
+      });
+
+      const response = await openai.chat.completions.create(requestParams);
+      rawContent = response.choices[0].message.content || '{}';
+    }
+
+    // mlx_lm.server ignores response_format: json_object, so the model may wrap
+    // output in ```json fences — strip them before parsing.
+    const cleaned = rawContent
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/```\s*$/, '')
+      .trim();
+
+    const result = JSON.parse(cleaned);
     
     // If text is very short, provide reasonable default values
     if (!text || text.length < 20) {
@@ -600,38 +625,42 @@ export async function generateSuggestions(
 // Process command-based text manipulations
 export async function processTextCommand(
   content: string,
-  command: string
+  command: string,
+  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmModel?: string
 ): Promise<{ result: string; message: string }> {
   try {
-    const requestParams = prepareO3Parameters({
-      model: DEFAULT_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: `You are an AI assistant that processes text manipulation commands similar to grep and sed.
-          You will receive a document and a command. Parse the command and perform the requested operation on the text.
-          Common commands include:
-          - grep 'pattern': Find and return all instances of a pattern
-          - replace 'old' 'new': Replace all instances of 'old' with 'new'
-          - style analyze: Analyze the writing style
-          - format paragraph: Improve formatting and readability
-          
-          Return a JSON object with two fields:
-          - result: The resulting text after applying the command
-          - message: A description of the changes made`
-        },
-        {
-          role: "user",
-          content: `Document:\n${content}\n\nCommand: ${command}`
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3
-    });
+    const systemPrompt = `You are an AI assistant that processes text manipulation commands similar to grep and sed.
+    You will receive a document and a command. Parse the command and perform the requested operation on the text.
+    Common commands include:
+    - grep 'pattern': Find and return all instances of a pattern
+    - replace 'old' 'new': Replace all instances of 'old' with 'new'
+    - style analyze: Analyze the writing style
+    - format paragraph: Improve formatting and readability
     
-    const response = await openai.chat.completions.create(requestParams);
+    Return a JSON object with two fields:
+    - result: The resulting text after applying the command
+    - message: A description of the changes made`;
 
-    const result = JSON.parse(response.choices[0].message.content || '{"result":"","message":""}');
+    let rawResult = '';
+    if (llmProvider === 'ollama') {
+      rawResult = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\nDocument:\n${content}\n\nCommand: ${command}`, true);
+    } else {
+      const requestParams = prepareO3Parameters({
+        model: llmModel || DEFAULT_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Document:\n${content}\n\nCommand: ${command}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.3
+      });
+
+      const response = await openai.chat.completions.create(requestParams);
+      rawResult = response.choices[0].message.content || '{"result":"","message":""}';
+    }
+
+    const result = JSON.parse(rawResult || '{"result":"","message":""}');
     
     return {
       result: result.result || content,
@@ -649,32 +678,36 @@ export async function processTextCommand(
 // Generate contextual assistance based on the current document
 export async function generateContextualAssistance(
   content: string,
-  title: string
+  title: string,
+  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmModel?: string
 ): Promise<{ message: string; suggestions: string[] }> {
   try {
-    const requestParams = prepareO3Parameters({
-      model: DEFAULT_MODEL,
-      messages: [
-        {
-          role: "system",
-          content: `You are an AI writing assistant that provides contextual help to users based on their current document.
-          Analyze the document content and title, then suggest 3 specific and helpful actions the user might want to take.
-          Return a JSON object with:
-          - message: A helpful message based on what the user is writing
-          - suggestions: An array of 3 specific action items`
-        },
-        {
-          role: "user",
-          content: `Title: ${title}\n\nContent: ${content}`
-        }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.7
-    });
-    
-    const response = await openai.chat.completions.create(requestParams);
+    const systemPrompt = `You are an AI writing assistant that provides contextual help to users based on their current document.
+    Analyze the document content and title, then suggest 3 specific and helpful actions the user might want to take.
+    Return a JSON object with:
+    - message: A helpful message based on what the user is writing
+    - suggestions: An array of 3 specific action items`;
 
-    const result = JSON.parse(response.choices[0].message.content || '{"message":"","suggestions":[]}');
+    let rawResult = '';
+    if (llmProvider === 'ollama') {
+      rawResult = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\nTitle: ${title}\n\nContent: ${content}`, true);
+    } else {
+      const requestParams = prepareO3Parameters({
+        model: llmModel || DEFAULT_MODEL,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Title: ${title}\n\nContent: ${content}` }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.7
+      });
+
+      const response = await openai.chat.completions.create(requestParams);
+      rawResult = response.choices[0].message.content || '{"message":"","suggestions":[]}';
+    }
+
+    const result = JSON.parse(rawResult || '{"message":"","suggestions":[]}');
     
     return {
       message: result.message || "How can I help with your writing?",

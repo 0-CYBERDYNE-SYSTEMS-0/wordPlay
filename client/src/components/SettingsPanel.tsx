@@ -40,6 +40,29 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Test the currently selected provider/model via the server's connection test
+  const testConnection = async () => {
+    setTestingConnection(true);
+    setConnectionStatus(null);
+    try {
+      const res = await fetch('/api/ai/test');
+      const data = await res.json();
+      const provider = settings.llmProvider === 'ollama' ? 'ollama' : 'openai';
+      const status = data[provider];
+      if (status?.available) {
+        setConnectionStatus({ ok: true, message: `${provider === 'ollama' ? 'Ollama' : 'OpenAI'} reachable (${status.latency}ms)` });
+      } else {
+        setConnectionStatus({ ok: false, message: status?.error || `${provider} unavailable` });
+      }
+    } catch (error: any) {
+      setConnectionStatus({ ok: false, message: error.message || 'Connection test failed' });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
 
   // Fetch Ollama models when provider is ollama
   const fetchOllamaModels = async () => {
@@ -360,6 +383,7 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="mlx-community/gemma-4-e2b-it-4bit">Gemma 4 E2B (MLX local)</SelectItem>
                       <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
                       <SelectItem value="gpt-4">GPT-4</SelectItem>
                       <SelectItem value="gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
@@ -395,6 +419,26 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
                   <p className="text-xs text-gray-500">Your API key is stored locally and never shared</p>
                 </div>
               )}
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={testConnection}
+                    disabled={testingConnection}
+                    className="flex items-center gap-2"
+                  >
+                    <Zap className={`h-4 w-4 ${testingConnection ? 'animate-pulse' : ''}`} />
+                    {testingConnection ? 'Testing…' : 'Test connection'}
+                  </Button>
+                  {connectionStatus && (
+                    <span className={`text-xs ${connectionStatus.ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {connectionStatus.message}
+                    </span>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
 
@@ -485,7 +529,7 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
                   />
                   <div className="flex justify-between text-xs text-gray-500 mt-1">
                     <span>5s</span>
-                    <span>{settings.autosaveInterval / 1000}s</span>
+                    <span>{settings.autosaveInterval >= 60 ? `${Math.round(settings.autosaveInterval / 60)}m` : `${settings.autosaveInterval}s`}</span>
                     <span>5m</span>
                   </div>
                 </div>

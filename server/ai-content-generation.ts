@@ -4,7 +4,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { prepareO3Parameters, isO3Model } from './openai';
+import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL } from './openai';
 
 interface TableGenerationRequest {
   text: string;
@@ -31,7 +31,7 @@ let geminiNew: GoogleGenAI | null = null;
 
 export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
   if (openaiKey) {
-    openai = new OpenAI({ apiKey: openaiKey });
+    openai = new OpenAI({ apiKey: openaiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
   }
   
   if (geminiKey) {
@@ -46,11 +46,7 @@ export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
   }
 }
 
-export async function generateTable(request: TableGenerationRequest): Promise<string> {
-  if (!openai) {
-    throw new Error('OpenAI client not initialized');
-  }
-
+export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' = 'openai', llmModel?: string): Promise<string> {
   const systemPrompt = `You are an expert at converting text into well-formatted markdown tables. 
   Analyze the provided text and extract structured information to create a meaningful table.
   
@@ -70,8 +66,17 @@ export async function generateTable(request: TableGenerationRequest): Promise<st
     : `Analyze this text and create a complementary table that augments the information:\n\n${request.text}`;
 
   try {
+    if (llmProvider === 'ollama') {
+      const content = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`);
+      return content || '';
+    }
+
+    if (!openai) {
+      throw new Error('OpenAI client not initialized');
+    }
+
     const requestParams = prepareO3Parameters({
-      model: 'o3-mini',
+      model: llmModel || DEFAULT_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -89,14 +94,9 @@ export async function generateTable(request: TableGenerationRequest): Promise<st
   }
 }
 
-export async function generateChart(request: ChartGenerationRequest): Promise<string> {
+export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' = 'openai', llmModel?: string): Promise<string> {
   console.log('🔧 generateChart called with request:', JSON.stringify(request, null, 2));
   
-  if (!openai) {
-    console.error('❌ OpenAI client not initialized');
-    throw new Error('OpenAI client not initialized');
-  }
-
   const systemPrompt = `You are an expert at creating stunning, Apple-quality ECharts visualizations that rival the best data visualizations from Apple's investor presentations and cutting-edge JavaScript libraries.
 
   CREATE PREMIUM, FUTURISTIC VISUALIZATIONS:
@@ -155,9 +155,23 @@ export async function generateChart(request: ChartGenerationRequest): Promise<st
   const userPrompt = `Create an ECharts configuration for a ${request.chartType} chart from this data:\n\n${request.text}`;
 
   try {
+    if (llmProvider === 'ollama') {
+      console.log('📡 Making Ollama call for chart generation...');
+      const content = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`);
+      const result = `\`\`\`chart
+${content}
+\`\`\``;
+      return result;
+    }
+
+    if (!openai) {
+      console.error('❌ OpenAI client not initialized');
+      throw new Error('OpenAI client not initialized');
+    }
+
     console.log('📡 Making OpenAI API call for chart generation...');
     const requestParams = prepareO3Parameters({
-      model: 'o3-mini',
+      model: llmModel || DEFAULT_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -183,15 +197,8 @@ ${content}
   }
 }
 
+// ---- Local-first image generation: FLUX.2 Klein via mflux bridge (1-step default), Gemini fallback ----
 export async function generateImage(request: ImageGenerationRequest): Promise<string> {
-  if (!geminiNew) {
-    throw new Error('Gemini client not initialized for image generation');
-  }
-
-  console.log('🎨 Starting Gemini image generation...');
-  console.log(`📝 Prompt: "${request.prompt}"`);
-  console.log(`🎭 Style: ${request.style}`);
-
   const stylePrompts = {
     realistic: 'ultra-high quality photorealistic style, 8K resolution, professional DSLR photography, perfect lighting, sharp details, cinematic composition, award-winning photography',
     artistic: 'stunning artistic masterpiece, premium digital art, gallery-quality illustration, rich colors, sophisticated composition, professional artwork, high-end design',
@@ -199,7 +206,6 @@ export async function generateImage(request: ImageGenerationRequest): Promise<st
     icon: 'premium icon design, ultra-modern flat design, Apple-quality vector graphics, pixel-perfect clarity, sophisticated minimalism, high-end brand quality'
   };
 
-  // Enhanced prompt for premium quality results
   const enhancedPrompt = `Create a high-quality image that represents: "${request.prompt}".
 
 Style: ${stylePrompts[request.style]}
@@ -212,6 +218,71 @@ Requirements:
 - Export-ready quality
 
 Create a visually appealing and professional image.`;
+
+  const sizeMap: Record<string, { width: number; height: number }> = {
+    '256x256': { width: 256, height: 256 },
+    '512x512': { width: 512, height: 512 },
+    '1024x1024': { width: 1024, height: 1024 },
+  };
+  const { width, height } = sizeMap[request.size || '512x512'] || sizeMap['512x512'];
+
+  const mfluxUrl = process.env.MFLUX_BRIDGE_URL || 'http://127.0.0.1:4030';
+  const steps = parseInt(process.env.MFLUX_STEPS || '1', 10);
+
+  console.log('🎨 Starting local FLUX.2 Klein image generation (mflux bridge)...');
+  console.log(`📝 Prompt: "${request.prompt}" | Size: ${width}x${height} | Steps: ${steps}`);
+
+  try {
+    const genResponse = await fetch(`${mfluxUrl}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: enhancedPrompt, width, height, steps }),
+    });
+
+    if (!genResponse.ok) {
+      throw new Error(`mflux bridge HTTP ${genResponse.status}`);
+    }
+
+    const data = await genResponse.json();
+    if (!data.image_base64) {
+      throw new Error('No image data in mflux bridge response');
+    }
+
+    const imageBuffer = Buffer.from(data.image_base64, 'base64');
+    console.log(`💾 Local image buffer size: ${Math.round(imageBuffer.length / 1024)}KB (${data.time_seconds ?? '?'}s, ${steps} step${steps === 1 ? '' : 's'})`);
+
+    if (imageBuffer.length > 10 * 1024 * 1024) {
+      throw new Error('Generated image is too large');
+    }
+
+    const fileName = `mflux-image-${crypto.randomUUID()}.png`;
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, imageBuffer);
+
+    console.log(`✅ Local image saved: ${fileName}`);
+    const imageUrl = `/uploads/${fileName}`;
+    // Short, descriptive alt text (≤ ~8 words) instead of a 100-char prompt excerpt
+    const altText = request.prompt.split(/\s+/).slice(0, 8).join(' ') || "Generated image";
+    return `![${altText}](${imageUrl})`;
+  } catch (localError: any) {
+    console.warn(`⚠️ Local FLUX bridge failed (${localError.message}); falling back to Gemini (cloud)`, localError);
+    return generateImageWithGeminiFallback(request, enhancedPrompt);
+  }
+}
+
+async function generateImageWithGeminiFallback(request: ImageGenerationRequest, enhancedPrompt: string): Promise<string> {
+  if (!geminiNew) {
+    throw new Error('Gemini client not initialized for image generation');
+  }
+
+  console.log('🎨 Starting Gemini image generation (fallback)...');
+  console.log(`📝 Prompt: "${request.prompt}"`);
+  console.log(`🎭 Style: ${request.style}`);
 
   try {
     // Gemini 3.1 Flash-Lite Image (Nano Banana 2 Lite) is the current, stable,
@@ -280,7 +351,7 @@ Create a visually appealing and professional image.`;
 
               // Return markdown with relative URL
               const imageUrl = `/uploads/${fileName}`;
-              const altText = request.prompt.substring(0, 100);
+              const altText = request.prompt.split(/\s+/).slice(0, 8).join(' ') || "Generated image";
               const result = `![${altText}](${imageUrl})`;
 
               console.log(`📤 Returning markdown result: ${result}`);
@@ -336,8 +407,8 @@ export async function processAIContentCommand(
   command: string,
   content: string,
   selectionInfo: any,
-  _llmProvider: string, // Prefixed with underscore to indicate intentionally unused
-  _llmModel: string,   // Prefixed with underscore to indicate intentionally unused
+  llmProvider: string = 'openai',
+  llmModel: string = DEFAULT_MODEL,
   openaiKey?: string,
   geminiKey?: string,
   parameters?: any
@@ -346,6 +417,8 @@ export async function processAIContentCommand(
   if (openaiKey || geminiKey) {
     initializeAIClients(openaiKey, geminiKey);
   }
+
+  const provider = llmProvider === 'ollama' ? 'ollama' : 'openai';
 
   const selectedText = selectionInfo.selectedText || content;
 
@@ -358,7 +431,7 @@ export async function processAIContentCommand(
         text: selectedText,
         mode: tableMode,
         style: tableStyle
-      });
+      }, provider, llmModel);
 
     case 'chart':
       console.log('🎯 Processing chart command with parameters:', parameters);
@@ -368,7 +441,7 @@ export async function processAIContentCommand(
       const chartResult = await generateChart({
         text: selectedText,
         chartType: chartType
-      });
+      }, provider, llmModel);
       console.log('📈 Chart generation completed, result length:', chartResult.length);
       return chartResult;
 

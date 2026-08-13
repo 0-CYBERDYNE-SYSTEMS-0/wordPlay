@@ -17,6 +17,8 @@ import {
   Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { Eye, PenLine } from 'lucide-react';
 
 interface UltraMinimalEditorProps {
   title: string;
@@ -65,6 +67,7 @@ export default function UltraMinimalEditor({
   const [slashCommandsOpen, setSlashCommandsOpen] = useState(false);
   const [slashCommandPosition, setSlashCommandPosition] = useState({ x: 0, y: 0 });
   const [showChrome, setShowChrome] = useState(true);
+  const [viewMode, setViewMode] = useState<'write' | 'preview'>('write');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chromeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -240,7 +243,11 @@ export default function UltraMinimalEditor({
     } else {
       downloadFile(`${base}.txt`, fullText, 'text/plain;charset=utf-8');
     }
-  }, [title, content, downloadFile]);
+    toast({
+      title: "Export complete",
+      description: `Downloaded ${base}.${format}`
+    });
+  }, [title, content, downloadFile, toast]);
 
   // Close export menu on outside click
   useEffect(() => {
@@ -399,9 +406,22 @@ export default function UltraMinimalEditor({
       >
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            {renderSaveStatus()}
+            <div className="hidden sm:flex sm:items-center sm:gap-3">{renderSaveStatus()}</div>
+            <div className="sm:hidden">
+              {isDirty ? (
+                <span className="text-[11px] text-[var(--wp-copper)]">Unsaved</span>
+              ) : saveError ? (
+                <span className="text-[11px] text-red-600 dark:text-red-400" title={saveError}>Save failed</span>
+              ) : isSaving ? (
+                <span className="text-[11px] text-[var(--wp-teal)]">Saving…</span>
+              ) : (
+                <span className="text-[11px] text-stone-500">
+                  <CheckCircle className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                </span>
+              )}
+            </div>
             {wordCount > 0 && (
-              <span className="hidden tabular-nums text-[11px] tracking-wide text-stone-400 sm:inline">
+              <span className="hidden tabular-nums text-[11px] tracking-wide text-stone-500 sm:inline">
                 {wordCount.toLocaleString()} {wordCount === 1 ? 'word' : 'words'}
               </span>
             )}
@@ -421,15 +441,43 @@ export default function UltraMinimalEditor({
               {autoSaveEnabled ? 'Autosave' : 'Manual'}
             </span>
 
+            <div className="flex items-center rounded-lg border border-[var(--wp-line)] p-0.5">
+              <Button
+                variant={viewMode === 'write' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('write')}
+                className="h-7 gap-1 px-2 text-[11px]"
+                title="Write (raw markdown source)"
+                aria-label="Write mode"
+              >
+                <PenLine className="h-3 w-3" />
+                <span className="hidden sm:inline">Write</span>
+              </Button>
+              <Button
+                variant={viewMode === 'preview' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setViewMode('preview')}
+                className="h-7 gap-1 px-2 text-[11px]"
+                title="Preview (renders charts, html, json, and code artifacts)"
+                aria-label="Preview mode"
+              >
+                <Eye className="h-3 w-3" />
+                <span className="hidden sm:inline">Preview</span>
+              </Button>
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
               onClick={() => {
-                const ta = textareaRef.current;
-                if (ta) {
-                  ta.focus();
-                  openSlashMenu(ta);
-                }
+                setViewMode('write');
+                requestAnimationFrame(() => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    ta.focus();
+                    openSlashMenu(ta);
+                  }
+                });
               }}
               className="h-9 gap-1 px-2 text-stone-500 hover:text-[var(--wp-ink)] sm:h-8"
               title="AI commands (/)"
@@ -544,6 +592,11 @@ export default function UltraMinimalEditor({
           </div>
         )}
 
+        {viewMode === 'preview' ? (
+          <div className="relative min-h-0 flex-1 overflow-y-auto py-4 sm:py-6 minimal-scrollbar">
+            <MarkdownRenderer content={content} className="writing-preview" />
+          </div>
+        ) : (
         <div className="relative flex min-h-0 flex-1 flex-col py-4 sm:py-6">
           <textarea
             ref={textareaRef}
@@ -572,6 +625,7 @@ export default function UltraMinimalEditor({
             spellCheck
           />
         </div>
+        )}
       </div>
 
       {/* Empty state — non-blocking, bottom hint */}
