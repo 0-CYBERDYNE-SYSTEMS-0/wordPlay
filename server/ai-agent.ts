@@ -39,8 +39,10 @@ interface AgentContext {
   projectDocuments: any[];
   projectSources: any[];
   researchNotes: string;
-  llmProvider?: 'openai' | 'ollama';
+  llmProvider?: 'openai' | 'ollama' | 'gemini';
   llmModel?: string;
+  openaiApiKey?: string;
+  geminiApiKey?: string;
   
   // NEW: Enhanced autonomous capabilities
   executionHistory: ExecutionStep[];
@@ -124,13 +126,18 @@ const VALID_OPENAI_MODELS = [
 ];
 
 // Validate model based on provider
-function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
+function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' | 'gemini' = 'openai'): string {
   if (!model) {
-    return provider === 'openai' ? 'mlx-community/gemma-4-e2b-it-4bit' : 'qwen3:4b';
+    if (provider === 'ollama') return 'qwen3:4b';
+    if (provider === 'gemini') return 'gemini-2.5-flash';
+    return 'mlx-community/gemma-4-e2b-it-4bit';
   }
 
   if (provider === 'openai') {
     return VALID_OPENAI_MODELS.includes(model) ? model : 'mlx-community/gemma-4-e2b-it-4bit';
+  } else if (provider === 'gemini') {
+    // Honor any non-empty Gemini model string (e.g. gemini-2.5-flash / -pro)
+    return model;
   } else {
     // For Ollama, honor whatever non-empty model the user selected.
     // (Previously this allowlist silently swapped unknown models — e.g. the
@@ -1667,7 +1674,8 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
         {}, 
         analysisPrompt,
         this.context.llmProvider,
-        getValidOpenAIModel(this.context.llmModel)
+        getValidOpenAIModel(this.context.llmModel),
+        { openaiApiKey: this.context.openaiApiKey, geminiApiKey: this.context.geminiApiKey }
       );
       
       try {
@@ -2141,6 +2149,9 @@ Remember:
       if (this.context.llmProvider === 'ollama') {
         // Use Ollama for local models with tool calling
         response = await this.processOllamaRequest(systemPrompt, userPrompt, model);
+      } else if (this.context.llmProvider === 'gemini') {
+        // Use Gemini (text models are tool-capable via the SDK)
+        response = await this.processGeminiRequest(systemPrompt, userPrompt, model);
       } else {
         // Use OpenAI API
         response = await this.processOpenAIRequest(systemPrompt, userPrompt, model);
@@ -2165,7 +2176,7 @@ Remember:
       // Initialize OpenAI client
       const { OpenAI } = await import("openai");
       const openai = new OpenAI({ 
-        apiKey: process.env.OPENAI_API_KEY || "default_key",
+        apiKey: this.context.openaiApiKey || process.env.OPENAI_API_KEY || "default_key",
         baseURL: process.env.OPENAI_BASE_URL || undefined,
         timeout: AI_REQUEST_TIMEOUT_MS
       });
@@ -2558,6 +2569,45 @@ Remember:
     const sourceCount = this.context.projectSources.length;
     
     return `Current context: ${project ? `Project "${project.name}"` : 'No project selected'}, ${docCount} documents, ${sourceCount} sources`;
+  }
+
+  // Gemini text processing (no tool-calling loop; returns a single response).
+  private async processGeminiRequest(systemPrompt: string, userPrompt: string, model: string): Promise<AgentResponse> {
+    const startTime = Date.now();
+
+    try {
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const apiKey = this.context.geminiApiKey || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API key not configured. Set GEMINI_API_KEY or enter it in Settings → AI.");
+      }
+
+      const client = new GoogleGenerativeAI(apiKey);
+      const geminiModel = client.getGenerativeModel({ model });
+
+      console.log(`♊ Making Gemini request with model: ${model}`);
+
+      const result = await geminiModel.generateContent(`${systemPrompt}\n\n${userPrompt}`);
+      const content = result.response.text();
+
+      return {
+        content: content || "I couldn't generate a response.",
+        toolResults: [],
+        executionTime: Date.now() - startTime,
+        tokensUsed: 0
+      };
+    } catch (error: any) {
+      console.error('❌ Gemini agent error:', error?.message || error);
+      const msg = (error?.message || String(error)).toLowerCase();
+      if (error?.status === 401 || error?.status === 403 || msg.includes('api key')) {
+        throw new Error("Invalid Gemini API key. Please check your Gemini API key.");
+      } else if (msg.includes('rate limit') || error?.status === 429) {
+        throw new Error("Gemini API rate limit exceeded. Please try again later.");
+      } else if (error?.status === 404 || msg.includes('not found') || msg.includes('model')) {
+        throw new Error(`Gemini model error: ${error?.message || 'model not found'}. Try a different model.`);
+      }
+      throw new Error(`Gemini error: ${error?.message || "Unknown error"}`);
+    }
   }
 }
 

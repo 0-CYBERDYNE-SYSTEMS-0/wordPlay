@@ -74,6 +74,25 @@ function check(name, cond, detail = '') {
   const testJson = await testRes.json().catch(() => null);
   check('/api/ai/test returns openai+ollama status', !!(testJson?.openai && testJson?.ollama), JSON.stringify(testJson).slice(0, 120));
 
+  // 5. /api/ai/test reports gemini status (added with the Gemini text provider)
+  check('/api/ai/test returns gemini status', !!(testJson?.gemini), JSON.stringify(testJson?.gemini || {}).slice(0, 120));
+
+  // 6. search with a per-request key: no key should 503 with a clear message (not fake data)
+  const search = await post('/api/search', { query: 'climate change' });
+  const searchOk = search.status !== 200 || !JSON.stringify(search.json).includes('example.com');
+  check('search without key never returns fake sources', searchOk, `status=${search.status} resp=${JSON.stringify(search.json).slice(0, 160)}`);
+
+  // 7. slash-command accepts gemini provider without crashing on a missing key
+  const gemSlash = await post('/api/ai/slash-command', {
+    command: 'continue',
+    content: 'The quick brown fox',
+    selectionInfo: { selectedText: '', selectionStart: 0, selectionEnd: 0, beforeSelection: '', afterSelection: '' },
+    llmProvider: 'gemini',
+    llmModel: 'gemini-2.5-flash',
+  });
+  const gemSlashOk = gemSlash.status !== 500 && !/Internal/.test(JSON.stringify(gemSlash.json || {}));
+  check('slash-command gemini provider accepted (key error, not crash)', gemSlashOk, `status=${gemSlash.status} resp=${JSON.stringify(gemSlash.json).slice(0, 160)}`);
+
   console.log(`\n${failures === 0 ? 'ALL PASS' : `${failures} FAILURE(S)`}`);
   process.exit(failures === 0 ? 0 : 1);
 })().catch((e) => { console.error('Script error:', e); process.exit(1); });

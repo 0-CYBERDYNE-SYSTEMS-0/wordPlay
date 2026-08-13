@@ -1,13 +1,35 @@
 import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
 // Default local MLX model: Gemma 4 E2B (4-bit, OpenAI-compatible via mlx_lm.server)
 export const DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-4bit";
 const DEFAULT_PROVIDER = "openai";
+export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+
+// Per-request overrides for API keys/endpoints. Values fall back to env vars
+// server-side, so settings-entered keys simply override the environment.
+export interface AIRequestOptions {
+  openaiApiKey?: string;
+  geminiApiKey?: string;
+  baseUrl?: string;
+}
+
+function effectiveOpenAIKey(options?: AIRequestOptions): string {
+  return options?.openaiApiKey || process.env.OPENAI_API_KEY || "default_key";
+}
+
+function effectiveGeminiKey(options?: AIRequestOptions): string {
+  return options?.geminiApiKey || process.env.GEMINI_API_KEY || "";
+}
+
+function effectiveBaseUrl(options?: AIRequestOptions): string | undefined {
+  return options?.baseUrl || process.env.OPENAI_BASE_URL || undefined;
+}
 
 // Connection test interfaces
 export interface AIServiceStatus {
-  service: 'openai' | 'ollama';
+  service: 'openai' | 'ollama' | 'gemini';
   available: boolean;
   error?: string;
   latency?: number;
@@ -177,8 +199,7 @@ export async function testOllamaConnection(): Promise<AIServiceStatus> {
   }
 }
 
-export async function testAIConnections(): Promise<ConnectionTestResult> {
-  const [openaiStatus, ollamaStatus] = await Promise.all([
+export async function testAIConnections(): Promise<ConnectionTestResult> {  const [openaiStatus, ollamaStatus] = await Promise.all([
     testOpenAIConnection(),
     testOllamaConnection()
   ]);
@@ -200,6 +221,39 @@ export async function testAIConnections(): Promise<ConnectionTestResult> {
     ollama: ollamaStatus,
     recommended
   };
+}
+
+export async function testGeminiConnection(): Promise<AIServiceStatus> {
+  const startTime = Date.now();
+
+  if (!process.env.GEMINI_API_KEY) {
+    return {
+      service: 'gemini',
+      available: false,
+      error: 'Gemini API key not configured. Set GEMINI_API_KEY or enter it in Settings → AI.',
+      latency: 0
+    };
+  }
+
+  try {
+    const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = client.getGenerativeModel({ model: DEFAULT_GEMINI_MODEL });
+    const result = await model.generateContent("Reply with the single word: ok");
+    const ok = result.response.text().toLowerCase().includes('ok');
+    return {
+      service: 'gemini',
+      available: ok,
+      latency: Date.now() - startTime,
+      error: ok ? undefined : 'Gemini responded but the content was unexpected.'
+    };
+  } catch (error: any) {
+    return {
+      service: 'gemini',
+      available: false,
+      error: `Gemini API error: ${error?.message || 'Unknown error'}`,
+      latency: Date.now() - startTime
+    };
+  }
 }
 
 // Utility function to build OpenAI API parameters based on model type
@@ -299,23 +353,22 @@ export async function callOllama(model: string, prompt: string, requestJson: boo
 // Enhanced function with automatic fallback
 export async function callAIWithFallback(
   prompt: string,
-  preferredProvider: 'openai' | 'ollama' = 'openai',
+  preferredProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
   model?: string,
-  style?: any
-): Promise<{ result: string; provider: 'openai' | 'ollama'; error?: string }> {
-  const providers: ('openai' | 'ollama')[] = preferredProvider === 'openai' ? ['openai', 'ollama'] : ['ollama', 'openai'];
+  style?: any,
+  options?: AIRequestOptions
+): Promise<{ result: string; provider: 'openai' | 'ollama' | 'gemini'; error?: string }> {
+  const order: ('openai' | 'ollama' | 'gemini')[] =
+    preferredProvider === 'openai' ? ['openai', 'gemini', 'ollama']
+    : preferredProvider === 'ollama' ? ['ollama', 'openai', 'gemini']
+    : ['gemini', 'openai', 'ollama'];
   
   let lastError = '';
   
-  for (const provider of providers) {
+  for (const provider of order) {
     try {
-      if (provider === 'openai') {
-        const result = await generateTextCompletion('', style || {}, prompt, 'openai', model);
-        return { result, provider: 'openai' };
-      } else {
-        const result = await generateTextCompletion('', style || {}, prompt, 'ollama', model);
-        return { result, provider: 'ollama' };
-      }
+      const result = await generateTextCompletion('', style || {}, prompt, provider, model, options);
+      return { result, provider };
     } catch (error: any) {
       lastError = error.message;
       console.warn(`${provider} failed, trying fallback:`, error.message);
@@ -331,8 +384,9 @@ export async function generateTextCompletion(
   content: string,
   style: any,
   prompt: string = "Continue this text in the same style.",
-  llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel?: string
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmModel?: string,
+  options?: AIRequestOptions
 ): Promise<string> {
   if (llmProvider === 'ollama') {
     try {
@@ -346,7 +400,24 @@ export async function generateTextCompletion(
       throw new Error(`Failed to generate text: ${error.message}`);
     }
   }
+
+  if (llmProvider === 'gemini') {
+    return await generateWithGemini(
+      content,
+      style,
+      prompt,
+      llmModel || DEFAULT_GEMINI_MODEL,
+      options
+    );
+  }
+
   try {
+    const openai = new OpenAI({
+      apiKey: effectiveOpenAIKey(options),
+      baseURL: effectiveBaseUrl(options),
+      timeout: AI_REQUEST_TIMEOUT_MS
+    });
+
     const requestParams = prepareO3Parameters({
       model: llmModel || DEFAULT_MODEL,
       messages: [
@@ -396,11 +467,59 @@ export async function generateTextCompletion(
   }
 }
 
+// Gemini text generation (shared prompt convention with the OpenAI path).
+export async function generateWithGemini(
+  content: string,
+  style: any,
+  prompt: string,
+  model: string,
+  options?: AIRequestOptions
+): Promise<string> {
+  const apiKey = effectiveGeminiKey(options);
+  if (!apiKey) {
+    throw new Error("Gemini API key not configured. Set GEMINI_API_KEY or enter it in Settings → AI.");
+  }
+
+  try {
+    const client = new GoogleGenerativeAI(apiKey);
+    const geminiModel = client.getGenerativeModel({ model });
+
+    const systemPrompt = `You are an AI that helps users create high-quality content.
+    You should adapt to their writing style and preferences.
+    Style analysis: ${JSON.stringify(style)}
+
+    CRITICAL INSTRUCTION:
+    - Your final output that should appear in the editor MUST be wrapped in <final_output> tags
+    - Everything else (analysis, thinking, suggestions) will appear in the context panel
+    - Never include XML tags or technical markers in the final output content itself
+
+    Your task is to generate text that continues or expands the provided content while maintaining the same style, tone, and complexity.`;
+
+    const result = await geminiModel.generateContent(
+      `${systemPrompt}\n\n${content}\n\n${prompt}`
+    );
+
+    return result.response.text().trim();
+  } catch (error: any) {
+    console.error("Error generating text with Gemini:", error?.message || error);
+    const msg = (error?.message || String(error)).toLowerCase();
+    if (error?.status === 401 || error?.status === 403 || msg.includes('api key')) {
+      throw new Error("Invalid Gemini API key. Please check your Gemini API key.");
+    } else if (msg.includes('rate limit') || error?.status === 429) {
+      throw new Error("Gemini API rate limit exceeded. Please try again later.");
+    } else if (error?.status === 404 || msg.includes('not found') || msg.includes('model')) {
+      throw new Error(`Gemini model error: ${error?.message || 'model not found'}. Try a different model.`);
+    }
+    throw new Error(`Gemini error: ${error?.message || "Unknown error"}`);
+  }
+}
+
 // Analyze the text style in greater detail
 export async function analyzeTextStyle(
   text: string,
-  llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel?: string
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmModel?: string,
+  options?: AIRequestOptions
 ): Promise<any> {
   try {
     const systemPrompt = 
@@ -432,7 +551,20 @@ export async function analyzeTextStyle(
     let rawContent = '{}';
     if (llmProvider === 'ollama') {
       rawContent = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\nText: ${text || "Sample text for analysis."}`, true);
+    } else if (llmProvider === 'gemini') {
+      rawContent = await generateWithGemini(
+        text || "Sample text for analysis.",
+        {},
+        `${systemPrompt}\n\nReturn only the JSON object.`,
+        llmModel || DEFAULT_GEMINI_MODEL,
+        options
+      );
     } else {
+      const openai = new OpenAI({
+        apiKey: effectiveOpenAIKey(options),
+        baseURL: effectiveBaseUrl(options),
+        timeout: AI_REQUEST_TIMEOUT_MS
+      });
       const requestParams = prepareO3Parameters({
         model: llmModel || DEFAULT_MODEL,
         messages: [
@@ -536,8 +668,9 @@ export async function analyzeTextStyle(
 export async function generateSuggestions(
   content: string,
   style: any,
-  llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel?: string
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmModel?: string,
+  options?: AIRequestOptions
 ): Promise<string[]> {
   if (llmProvider === 'ollama') {
     try {
@@ -592,7 +725,34 @@ export async function generateSuggestions(
       return ["[Unable to generate suggestions. Please try again.]"];
     }
   }
+
+  if (llmProvider === 'gemini') {
+    try {
+      const raw = await generateWithGemini(
+        content,
+        style,
+        `Generate 3 possible continuations or sentence completions that match the writing style. Respond with a JSON object: {"suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"]}`,
+        llmModel || DEFAULT_GEMINI_MODEL,
+        options
+      );
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (Array.isArray(parsed.suggestions)) return parsed.suggestions.slice(0, 3);
+      }
+      return [raw];
+    } catch (error: any) {
+      console.error("Error generating suggestions with Gemini:", error.message);
+      return [];
+    }
+  }
+
   try {
+    const openai = new OpenAI({
+      apiKey: effectiveOpenAIKey(options),
+      baseURL: effectiveBaseUrl(options),
+      timeout: AI_REQUEST_TIMEOUT_MS
+    });
     const requestParams = prepareO3Parameters({
       model: llmModel || DEFAULT_MODEL,
       messages: [
@@ -626,8 +786,9 @@ export async function generateSuggestions(
 export async function processTextCommand(
   content: string,
   command: string,
-  llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel?: string
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmModel?: string,
+  options?: AIRequestOptions
 ): Promise<{ result: string; message: string }> {
   try {
     const systemPrompt = `You are an AI assistant that processes text manipulation commands similar to grep and sed.
@@ -645,7 +806,20 @@ export async function processTextCommand(
     let rawResult = '';
     if (llmProvider === 'ollama') {
       rawResult = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\nDocument:\n${content}\n\nCommand: ${command}`, true);
+    } else if (llmProvider === 'gemini') {
+      rawResult = await generateWithGemini(
+        content,
+        {},
+        `${systemPrompt}\n\nCommand: ${command}\n\nReturn only the JSON object.`,
+        llmModel || DEFAULT_GEMINI_MODEL,
+        options
+      );
     } else {
+      const openai = new OpenAI({
+        apiKey: effectiveOpenAIKey(options),
+        baseURL: effectiveBaseUrl(options),
+        timeout: AI_REQUEST_TIMEOUT_MS
+      });
       const requestParams = prepareO3Parameters({
         model: llmModel || DEFAULT_MODEL,
         messages: [
@@ -679,8 +853,9 @@ export async function processTextCommand(
 export async function generateContextualAssistance(
   content: string,
   title: string,
-  llmProvider: 'openai' | 'ollama' = 'openai',
-  llmModel?: string
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmModel?: string,
+  options?: AIRequestOptions
 ): Promise<{ message: string; suggestions: string[] }> {
   try {
     const systemPrompt = `You are an AI writing assistant that provides contextual help to users based on their current document.
@@ -692,7 +867,20 @@ export async function generateContextualAssistance(
     let rawResult = '';
     if (llmProvider === 'ollama') {
       rawResult = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\nTitle: ${title}\n\nContent: ${content}`, true);
+    } else if (llmProvider === 'gemini') {
+      rawResult = await generateWithGemini(
+        content,
+        {},
+        `${systemPrompt}\n\nTitle: ${title}\n\nReturn only the JSON object.`,
+        llmModel || DEFAULT_GEMINI_MODEL,
+        options
+      );
     } else {
+      const openai = new OpenAI({
+        apiKey: effectiveOpenAIKey(options),
+        baseURL: effectiveBaseUrl(options),
+        timeout: AI_REQUEST_TIMEOUT_MS
+      });
       const requestParams = prepareO3Parameters({
         model: llmModel || DEFAULT_MODEL,
         messages: [

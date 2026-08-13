@@ -14,11 +14,12 @@ export async function executeSlashCommand(
     afterSelection?: string;
   },
   style: any = {},
-  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
   llmModel: string = 'mlx-community/gemma-4-e2b-it-4bit',
   includeContext: boolean = false,
   projectId?: number,
-  userId?: number
+  userId?: number,
+  options?: { openaiApiKey?: string; geminiApiKey?: string }
 ): Promise<{
   result: string;
   message: string;
@@ -45,7 +46,8 @@ export async function executeSlashCommand(
       llmProvider,
       llmModel,
       includeContext,
-      projectId
+      projectId,
+      options
     );
   }
   
@@ -63,7 +65,8 @@ export async function executeSlashCommand(
           llmProvider,
           llmModel,
           includeContext,
-          projectId
+          projectId,
+          options
         );
       }
     } catch (error) {

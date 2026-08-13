@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useApiProcessing } from "@/hooks/use-api-processing";
+import { useSettings } from "@/providers/SettingsProvider";
 import { Document } from "@shared/schema";
 import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code, Lightbulb, ExternalLink, Folder } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -35,6 +36,7 @@ export default function ContextPanel({
   aiSuggestions
 }: ContextPanelProps) {
   const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
+  const { settings } = useSettings();
   const [wordCount, setWordCount] = useState(0);
   const [readingTime, setReadingTime] = useState(0);
   const [paragraphCount, setParagraphCount] = useState(0);
@@ -64,7 +66,11 @@ export default function ContextPanel({
         const payload = {
           content: data?.content || content,
           title,
-          prompt: data?.prompt
+          prompt: data?.prompt,
+          llmProvider: settings.llmProvider,
+          llmModel: settings.llmModel,
+          openaiApiKey: settings.openaiApiKey,
+          geminiApiKey: settings.geminiApiKey
         };
         
         const res = await apiRequest("POST", "/api/ai/contextual-help", payload);
@@ -115,7 +121,11 @@ export default function ContextPanel({
       });
       try {
         const res = await apiRequest("POST", "/api/ai/analyze-style", {
-          content
+          content,
+          llmProvider: settings.llmProvider,
+          llmModel: settings.llmModel,
+          openaiApiKey: settings.openaiApiKey,
+          geminiApiKey: settings.geminiApiKey
         });
         return res.json();
       } catch (error) {

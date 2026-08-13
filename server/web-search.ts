@@ -46,7 +46,11 @@ export class SearchError extends Error {
 }
 
 // Enhanced web search using Perplexity API
-export async function searchWeb(query: string, source: string = "web"): Promise<{
+export async function searchWeb(
+  query: string,
+  source: string = "web",
+  options?: { apiKey?: string; model?: string }
+): Promise<{
   results: Array<{
     title: string;
     snippet: string;
@@ -55,10 +59,13 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
   summary?: string;
   error?: string;
 }> {
+  const apiKey = options?.apiKey || PERPLEXITY_CONFIG.apiKey;
+  const model = options?.model || PERPLEXITY_CONFIG.model;
+
   // No API key → fail loudly instead of fabricating sources.
-  if (!PERPLEXITY_CONFIG.apiKey) {
+  if (!apiKey) {
     throw new SearchError(
-      'Web search is not configured. Set PERPLEXITY_API_KEY to enable real results.',
+      'Web search is not configured. Set PERPLEXITY_API_KEY or enter one in Settings → Research.',
       503
     );
   }
@@ -69,11 +76,11 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
     response = await fetch(`${PERPLEXITY_CONFIG.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${PERPLEXITY_CONFIG.apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: PERPLEXITY_CONFIG.model,
+        model,
         messages: [
           {
             role: "system",
@@ -97,8 +104,7 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
       throw new SearchError('Perplexity rejected the API key (401/403). Check PERPLEXITY_API_KEY.', 401);
-    }
-    if (response.status === 429) {
+    }    if (response.status === 429) {
       throw new SearchError('Perplexity rate limit exceeded (429). Try again later.', 429);
     }
     throw new SearchError(`Perplexity API error: ${response.status} ${response.statusText}`, 502);

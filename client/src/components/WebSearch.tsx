@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock, BarChart2, Sparkles, PanelRightOpen, Folder, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/providers/SettingsProvider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -68,6 +69,7 @@ export default function WebSearch({
   onToggleContextPanel
 }: WebSearchProps) {
   const { toast } = useToast();
+  const { settings } = useSettings();
   const { processedApiRequest } = useApiProcessing();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSource, setSearchSource] = useState("web");
@@ -117,7 +119,9 @@ export default function WebSearch({
     mutationFn: async () => {
       const res = await processedApiRequest("POST", "/api/search", {
         query: searchQuery,
-        source: searchSource
+        source: searchSource,
+        perplexityApiKey: settings.perplexityApiKey,
+        model: settings.researchModel
       }, {
         message: "Searching...",
         type: "research"

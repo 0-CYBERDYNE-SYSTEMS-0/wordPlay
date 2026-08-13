@@ -12,8 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface AIAgentProps {
   currentProject?: any;
   currentDocument?: any;
-  llmProvider?: 'openai' | 'ollama';
+  llmProvider?: 'openai' | 'ollama' | 'gemini';
   llmModel?: string;
+  openaiApiKey?: string;
+  geminiApiKey?: string;
   onToolResult?: (result: any) => void;
   editorState?: {
     title: string;
@@ -59,6 +61,8 @@ export default function AIAgent({
   currentDocument, 
   llmProvider,
   llmModel,
+  openaiApiKey,
+  geminiApiKey,
   onToolResult,
   editorState
 }: AIAgentProps) {
@@ -135,6 +139,8 @@ export default function AIAgent({
     currentDocument,
     llmProvider,
     llmModel,
+    openaiApiKey,
+    geminiApiKey,
     userId: 1,
     editorState
   };
@@ -161,7 +167,9 @@ export default function AIAgent({
           request,
           context: agentContext,
           llmProvider,
-          llmModel
+          llmModel,
+          openaiApiKey,
+          geminiApiKey
         });
         return res.json();
       } finally {

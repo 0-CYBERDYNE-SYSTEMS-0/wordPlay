@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { storage } from './storage';
+import { generateWithGemini, DEFAULT_GEMINI_MODEL, type AIRequestOptions } from './openai';
 
 const DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-4bit";
 
@@ -316,10 +317,11 @@ export async function executeCoreCommand(
     beforeSelection?: string;
     afterSelection?: string;
   },
-  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
-  projectId?: number
+  projectId?: number,
+  options?: { openaiApiKey?: string; geminiApiKey?: string }
 ): Promise<{
   result: string;
   message: string;
@@ -374,7 +376,7 @@ export async function executeCoreCommand(
   }
   
   const openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY || "default_key",
+    apiKey: options?.openaiApiKey || process.env.OPENAI_API_KEY || "default_key",
     baseURL: process.env.OPENAI_BASE_URL || undefined,
     timeout: AI_REQUEST_TIMEOUT_MS
   });
@@ -395,6 +397,14 @@ export async function executeCoreCommand(
         throw new Error("Ollama model name is required");
       }
       generatedText = await callOllama(modelToUse, systemPrompt, userPrompt);
+    } else if (llmProvider === 'gemini') {
+      generatedText = await generateWithGemini(
+        textContext,
+        {},
+        systemPrompt,
+        llmModel || DEFAULT_GEMINI_MODEL,
+        options as AIRequestOptions
+      );
     } else {
       const response = await openai.chat.completions.create({
         model: modelToUse,
@@ -691,10 +701,11 @@ export async function executeCustomCommand(
     beforeSelection?: string;
     afterSelection?: string;
   },
-  llmProvider: 'openai' | 'ollama' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
-  projectId?: number
+  projectId?: number,
+  options?: { openaiApiKey?: string; geminiApiKey?: string }
 ): Promise<{
   result: string;
   message: string;
@@ -735,7 +746,7 @@ ${enhancedContext?.researchContext ? `\nRESEARCH SOURCES:\n${enhancedContext.res
 Follow the custom prompt instructions precisely.${enhancedContext?.researchContext ? `\n\nYou may reference and incorporate information from the research sources above when relevant.` : ''}`;
 
   const openai = new OpenAI({ 
-    apiKey: process.env.OPENAI_API_KEY || "default_key",
+    apiKey: options?.openaiApiKey || process.env.OPENAI_API_KEY || "default_key",
     baseURL: process.env.OPENAI_BASE_URL || undefined,
     timeout: AI_REQUEST_TIMEOUT_MS
   });
@@ -752,6 +763,14 @@ Follow the custom prompt instructions precisely.${enhancedContext?.researchConte
         throw new Error("Ollama model name is required");
       }
       generatedText = await callOllama(modelToUse, systemPrompt, userPrompt);
+    } else if (llmProvider === 'gemini') {
+      generatedText = await generateWithGemini(
+        textContext,
+        {},
+        systemPrompt,
+        llmModel || DEFAULT_GEMINI_MODEL,
+        options as AIRequestOptions
+      );
     } else {
       const response = await openai.chat.completions.create({
         model: modelToUse,
