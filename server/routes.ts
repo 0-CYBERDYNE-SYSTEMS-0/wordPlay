@@ -227,13 +227,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       content: z.string(),
       style: z.any().optional(),
       prompt: z.string().optional(),
-      llmProvider: z.enum(["openai", "ollama"]).optional(),
-      llmModel: z.string().optional()
+      llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
+      llmModel: z.string().optional(),
+      openaiApiKey: z.string().optional(),
+      geminiApiKey: z.string().optional()
     });
     
     try {
-      const { content, style, prompt, llmProvider, llmModel } = generateSchema.parse(req.body);
-      const generatedText = await generateTextCompletion(content, style, prompt, llmProvider, llmModel);
+      const { content, style, prompt, llmProvider, llmModel, openaiApiKey, geminiApiKey } = generateSchema.parse(req.body);
+      const generatedText = await generateTextCompletion(content, style, prompt, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
       res.json({ generated: generatedText });
     } catch (error) {
       res.status(400).json({ message: "Failed to generate text" });
@@ -243,13 +245,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/analyze-style", async (req: Request, res: Response) => {
     const analyzeSchema = z.object({
       content: z.string(),
-      llmProvider: z.enum(["openai", "ollama"]).optional(),
-      llmModel: z.string().optional()
+      llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
+      llmModel: z.string().optional(),
+      openaiApiKey: z.string().optional(),
+      geminiApiKey: z.string().optional()
     });
     
     try {
-      const { content, llmProvider, llmModel } = analyzeSchema.parse(req.body);
-      const styleAnalysis = await analyzeTextStyle(content, llmProvider, llmModel);
+      const { content, llmProvider, llmModel, openaiApiKey, geminiApiKey } = analyzeSchema.parse(req.body);
+      const styleAnalysis = await analyzeTextStyle(content, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
       res.json({ metrics: styleAnalysis });
     } catch (error) {
       console.error("Error in style analysis route:", error);
@@ -282,13 +286,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const suggestSchema = z.object({
       content: z.string(),
       style: z.any().optional(),
-      llmProvider: z.enum(["openai", "ollama"]).optional(),
-      llmModel: z.string().optional()
+      llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
+      llmModel: z.string().optional(),
+      openaiApiKey: z.string().optional(),
+      geminiApiKey: z.string().optional()
     });
     
     try {
-      const { content, style, llmProvider, llmModel } = suggestSchema.parse(req.body);
-      const suggestions = await generateSuggestions(content, style, llmProvider, llmModel);
+      const { content, style, llmProvider, llmModel, openaiApiKey, geminiApiKey } = suggestSchema.parse(req.body);
+      const suggestions = await generateSuggestions(content, style, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
       res.json({ suggestions });
     } catch (error) {
       res.status(400).json({ message: "Failed to generate suggestions" });
@@ -299,12 +305,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const commandSchema = z.object({
       content: z.string(),
       command: z.string(),
-      llmProvider: z.enum(["openai", "ollama"]).optional(),
-      llmModel: z.string().optional()
+      llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
+      llmModel: z.string().optional(),
+      openaiApiKey: z.string().optional(),
+      geminiApiKey: z.string().optional()
     });
     
     try {
-      const { content, command, llmProvider, llmModel } = commandSchema.parse(req.body);
+      const { content, command, llmProvider, llmModel, openaiApiKey, geminiApiKey } = commandSchema.parse(req.body);
       
       // Detect if this is a complex editing request that should use the agent
       const isComplexEdit = detectComplexEditingRequest(command);
@@ -378,7 +386,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Default behavior for simple commands
-      const result = await processTextCommand(content, command, llmProvider, llmModel);
+      const result = await processTextCommand(content, command, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
       res.json(result);
     } catch (error) {
       console.error("Error in process-command:", error);
@@ -390,13 +398,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const helpSchema = z.object({
       content: z.string(),
       title: z.string(),
-      llmProvider: z.enum(["openai", "ollama"]).optional(),
-      llmModel: z.string().optional()
+      llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
+      llmModel: z.string().optional(),
+      openaiApiKey: z.string().optional(),
+      geminiApiKey: z.string().optional()
     });
     
     try {
-      const { content, title, llmProvider, llmModel } = helpSchema.parse(req.body);
-      const assistance = await generateContextualAssistance(content, title, llmProvider, llmModel);
+      const { content, title, llmProvider, llmModel, openaiApiKey, geminiApiKey } = helpSchema.parse(req.body);
+      const assistance = await generateContextualAssistance(content, title, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
       res.json(assistance);
     } catch (error) {
       res.status(400).json({ message: "Failed to generate contextual help" });
@@ -407,12 +417,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/search", async (req: Request, res: Response) => {
     const searchSchema = z.object({
       query: z.string(),
-      source: z.string().optional()
+      source: z.string().optional(),
+      perplexityApiKey: z.string().optional(),
+      model: z.string().optional()
     });
     
     try {
-      const { query, source } = searchSchema.parse(req.body);
-      const results = await searchWeb(query, source);
+      const { query, source, perplexityApiKey, model } = searchSchema.parse(req.body);
+      const results = await searchWeb(query, source, { apiKey: perplexityApiKey, model });
       res.json(results);
     } catch (error: any) {
       console.error("Error in search route:", error.message);
@@ -448,8 +460,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         afterSelection: z.string().optional()
       }),
       style: z.any().optional(),
-      llmProvider: z.enum(['openai', 'ollama']).optional(),
+      llmProvider: z.enum(['openai', 'ollama', 'gemini']).optional(),
       llmModel: z.string().optional(),
+      openaiApiKey: z.string().optional(),
+      geminiApiKey: z.string().optional(),
       includeContext: z.boolean().optional(),
       projectId: z.number().optional(),
       userId: z.number().optional()
@@ -478,9 +492,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             validatedData.selectionInfo,
             validatedData.llmProvider || 'openai',
             validatedData.llmModel || 'gpt-4',
-            process.env.OPENAI_API_KEY,
-            process.env.GEMINI_API_KEY,
-            validatedData.style // Pass style/parameters from request
+            validatedData.openaiApiKey || process.env.OPENAI_API_KEY,
+            validatedData.geminiApiKey || process.env.GEMINI_API_KEY,
+            validatedData.style, // Pass style/parameters from request
+            {
+              geminiApiKey: validatedData.geminiApiKey,
+              imageModel: validatedData.style?.imageModel,
+              // Honor the user's Settings → AI → Image Generation choice:
+              // 'local' = mflux bridge, 'gemini' = cloud. Falls back to local.
+              provider: validatedData.style?.imageProvider === 'gemini' ? 'gemini' : 'local',
+              imageSize: validatedData.style?.imageSize,
+              steps: validatedData.style?.imageSteps,
+            }
           );
           
           console.log('✅ AI content command completed, result length:', result.length);
@@ -506,7 +529,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.llmModel,
         validatedData.includeContext || false,
         validatedData.projectId,
-        validatedData.userId
+        validatedData.userId,
+        { openaiApiKey: validatedData.openaiApiKey, geminiApiKey: validatedData.geminiApiKey }
       );
       
       res.json(result);
@@ -659,7 +683,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/parse-response", async (req: Request, res: Response) => {
     const parsingSchema = z.object({
       prompt: z.string(),
-      llmProvider: z.enum(['openai', 'ollama']),
+      llmProvider: z.enum(['openai', 'ollama', 'gemini']),
       llmModel: z.string(),
       maxTokens: z.number().optional().default(1000)
     });
@@ -706,13 +730,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // AI Connection test endpoint for debugging
   app.get("/api/ai/test", async (req: Request, res: Response) => {
     try {
-      const { testAIConnections } = await import("./openai");
+      const { testAIConnections, testGeminiConnection } = await import("./openai");
       const connectionStatus = await testAIConnections();
+      const geminiStatus = await testGeminiConnection();
       
       res.json({
         status: "success",
         timestamp: new Date().toISOString(),
         ...connectionStatus,
+        gemini: geminiStatus,
         troubleshooting: {
           openai: connectionStatus.openai.available ? null : [
             "Set your OpenAI API key: export OPENAI_API_KEY=your_api_key",
@@ -726,6 +752,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             "Pull a model: ollama pull qwen3:4b",
             "Check server status: curl http://localhost:11434/api/tags",
             "Set custom URL if needed: export OLLAMA_URL=http://your-server:11434"
+          ],
+          gemini: geminiStatus.available ? null : [
+            "Set your Gemini API key: export GEMINI_API_KEY=your_key (or enter it in Settings → AI)",
+            "Get a key at https://aistudio.google.com/apikey"
           ]
         }
       });
@@ -1074,7 +1104,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       autonomyLevel = 'moderate', 
       maxExecutionTime = 300000,
       llmProvider = 'openai',
-      llmModel 
+      llmModel,
+      openaiApiKey,
+      geminiApiKey
     } = req.body; // 5 min default
     
     if (!request) {
@@ -1095,7 +1127,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const updatedContext = {
         ...context,
         llmProvider: context?.llmProvider ?? llmProvider,
-        llmModel: context?.llmModel ?? llmModel
+        llmModel: context?.llmModel ?? llmModel,
+        openaiApiKey: context?.openaiApiKey ?? openaiApiKey,
+        geminiApiKey: context?.geminiApiKey ?? geminiApiKey
       };
       
       await agent.updateContext(updatedContext);

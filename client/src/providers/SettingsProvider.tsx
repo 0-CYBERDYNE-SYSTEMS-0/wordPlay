@@ -7,7 +7,6 @@ export interface AppSettings {
   hasCompletedOnboarding: boolean;
   
   // AI Content Generation Settings
-  geminiApiKey?: string;
   enableVisualizations: boolean;
   enableImageGeneration: boolean;
   
@@ -22,10 +21,19 @@ export interface AppSettings {
   showLineNumbers: boolean;
   
   // AI Settings
-  llmProvider: 'openai' | 'ollama';
+  llmProvider: 'openai' | 'ollama' | 'gemini';
   llmModel: string;
   openaiApiKey?: string;
+  geminiApiKey?: string;
   ollamaUrl: string;
+  perplexityApiKey?: string;
+  researchModel: string;
+  imageProvider: 'local' | 'gemini';
+  imageModel: string;
+  // Local mflux bridge controls
+  imageSteps: number;      // mflux steps (1 = fastest/quality tradeoff, 4 = bridge default)
+  imageSize: '256x256' | '512x512' | '1024x1024';
+  localImageModel: string; // display-only: model loaded in the mflux bridge
   
   // Reasoning Model Settings
   showThinkingProcess: boolean;
@@ -113,6 +121,12 @@ const defaultSettings: AppSettings = {
   llmProvider: 'openai', // OpenAI-compatible (defaults to local MLX Gemma E2B via OPENAI_BASE_URL)
   llmModel: 'mlx-community/gemma-4-e2b-it-4bit', // Local MLX Gemma 4 E2B
   ollamaUrl: 'http://localhost:11434',
+  researchModel: 'sonar', // Perplexity model for web research
+  imageProvider: 'local', // Local mflux bridge first; Gemini fallback
+  imageModel: 'gemini-3.1-flash-lite-image', // Gemini image-capable model
+  imageSteps: 1, // mflux: 1 step = fastest; higher = slower but more refined
+  imageSize: '1024x1024', // default generation resolution
+  localImageModel: 'FLUX.2 Klein 4B (mflux bridge)',
   
   // Reasoning Model Settings - Ambient & Subtle
   showThinkingProcess: false, // Don't overwhelm users

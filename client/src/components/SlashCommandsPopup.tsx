@@ -25,8 +25,10 @@ interface SlashCommandsPopupProps {
   content: string;
   setContent: (content: string) => void;
   editorRef: React.RefObject<HTMLTextAreaElement>;
-  llmProvider: 'openai' | 'ollama';
+  llmProvider: 'openai' | 'ollama' | 'gemini';
   llmModel: string;
+  openaiApiKey?: string;
+  geminiApiKey?: string;
   onSuggestions?: (suggestions: string) => void;
   onUndo?: () => void;
   activeProjectId?: number | null;
@@ -126,6 +128,8 @@ export default function SlashCommandsPopup({
   editorRef, 
   llmProvider, 
   llmModel, 
+  openaiApiKey,
+  geminiApiKey,
   onSuggestions, 
   onUndo, 
   activeProjectId 
@@ -326,6 +330,8 @@ export default function SlashCommandsPopup({
         },
         llmProvider,
         llmModel,
+        openaiApiKey,
+        geminiApiKey,
         projectId: activeProjectId
       };
 
@@ -333,7 +339,14 @@ export default function SlashCommandsPopup({
       if (command.action === 'chart') {
         requestData.chartType = 'auto'; // Let AI choose best chart type
       } else if (command.action === 'image') {
+        // Wire the user's image settings from Settings → AI → Image Generation:
+        // provider (local mflux bridge vs Gemini cloud), Gemini model name,
+        // resolution, and mflux step count.
         requestData.style = 'realistic'; // Default to realistic style
+        requestData.imageProvider = settings.imageProvider || 'local';
+        requestData.imageModel = settings.imageModel || 'gemini-3.1-flash-lite-image';
+        requestData.imageSize = settings.imageSize || '1024x1024';
+        requestData.imageSteps = settings.imageSteps ?? 1;
       } else if (command.action === 'table') {
         requestData.mode = 'replace'; // Default to replace mode
         requestData.style = 'simple'; // Default to simple style

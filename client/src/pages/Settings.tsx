@@ -34,9 +34,18 @@ export default function Settings({ onBack }: SettingsProps) {
     fontSize: z.number().min(10).max(24),
     contextPanelDefaultOpen: z.boolean(),
     sidebarDefaultOpen: z.boolean(),
-    llmProvider: z.enum(['openai', 'ollama']),
+    llmProvider: z.enum(['openai', 'ollama', 'gemini']),
     llmModel: z.string(),
-    ollamaUrl: z.string().url().optional().or(z.literal(''))
+    ollamaUrl: z.string().url().optional().or(z.literal('')),
+    openaiApiKey: z.string().optional(),
+    geminiApiKey: z.string().optional(),
+    perplexityApiKey: z.string().optional(),
+    researchModel: z.string().optional(),
+    imageProvider: z.enum(['local', 'gemini']).optional(),
+    imageModel: z.string().optional(),
+    imageSteps: z.number().optional(),
+    imageSize: z.enum(['256x256', '512x512', '1024x1024']).optional(),
+    localImageModel: z.string().optional()
   });
 
   const form = useForm<z.infer<typeof settingsSchema>>({
@@ -49,7 +58,16 @@ export default function Settings({ onBack }: SettingsProps) {
       sidebarDefaultOpen: settings.sidebarDefaultOpen,
       llmProvider: settings.llmProvider,
       llmModel: settings.llmModel || 'mlx-community/gemma-4-e2b-it-4bit',
-      ollamaUrl: settings.ollamaUrl || 'http://localhost:11434'
+      ollamaUrl: settings.ollamaUrl || 'http://localhost:11434',
+      openaiApiKey: settings.openaiApiKey || '',
+      geminiApiKey: settings.geminiApiKey || '',
+      perplexityApiKey: settings.perplexityApiKey || '',
+      researchModel: settings.researchModel || 'sonar',
+      imageProvider: settings.imageProvider || 'local',
+      imageModel: settings.imageModel || 'gemini-3.1-flash-lite-image',
+      imageSteps: settings.imageSteps ?? 1,
+      imageSize: settings.imageSize || '1024x1024',
+      localImageModel: settings.localImageModel || 'FLUX.2 Klein 4B (mflux bridge)'
     }
   });
 
@@ -66,7 +84,15 @@ export default function Settings({ onBack }: SettingsProps) {
     llmProvider: 'openai',
     llmModel: 'mlx-community/gemma-4-e2b-it-4bit',
     openaiApiKey: '',
+    geminiApiKey: '',
     ollamaUrl: 'http://localhost:11434',
+    perplexityApiKey: '',
+    researchModel: 'sonar',
+    imageProvider: 'local',
+    imageModel: 'gemini-3.1-flash-lite-image',
+    imageSteps: 1,
+    imageSize: '1024x1024',
+    localImageModel: 'FLUX.2 Klein 4B (mflux bridge)',
     
     // UI Settings
     sidebarDefaultOpen: true,
@@ -362,13 +388,14 @@ export default function Settings({ onBack }: SettingsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="llmProvider">LLM Provider</Label>
-                  <Select value={settings.llmProvider} onValueChange={(value) => updateSettings({ llmProvider: value as 'openai' | 'ollama' })}>
+                  <Select value={settings.llmProvider} onValueChange={(value) => updateSettings({ llmProvider: value as 'openai' | 'ollama' | 'gemini' })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="openai">OpenAI</SelectItem>
                       <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                      <SelectItem value="gemini">Gemini</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -401,6 +428,12 @@ export default function Settings({ onBack }: SettingsProps) {
                           <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
                         </>
+                      ) : settings.llmProvider === 'gemini' ? (
+                        <>
+                          <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                          <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
+                          <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
+                        </>
                       ) : ollamaModels.length > 0 ? (
                         ollamaModels.map(model => (
                           <SelectItem key={model} value={model}>{model}</SelectItem>
@@ -431,6 +464,20 @@ export default function Settings({ onBack }: SettingsProps) {
                   <p className="text-sm text-gray-500">Your API key is stored locally and never sent to our servers.</p>
                 </div>
               )}
+
+              {settings.llmProvider === 'gemini' && (
+                <div className="space-y-2">
+                  <Label htmlFor="geminiApiKey">Gemini API Key</Label>
+                  <Input
+                    id="geminiApiKey"
+                    type="password"
+                    placeholder="AIza..."
+                    value={settings.geminiApiKey}
+                    onChange={(e) => updateSettings({ geminiApiKey: e.target.value })}
+                  />
+                  <p className="text-sm text-gray-500">Your API key is stored locally and never sent to our servers.</p>
+                </div>
+              )}
               
               {settings.llmProvider === 'ollama' && (
                 <div className="space-y-2">
@@ -443,6 +490,104 @@ export default function Settings({ onBack }: SettingsProps) {
                   />
                 </div>
               )}
+            </div>
+          </section>
+
+          <Separator />
+
+          {/* Research + Image configuration */}
+          <section>
+            <h2 className="text-xl font-semibold mb-4">Research & Image</h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="perplexityApiKey">Perplexity API Key</Label>
+                  <Input
+                    id="perplexityApiKey"
+                    type="password"
+                    placeholder="pplx-..."
+                    value={settings.perplexityApiKey || ''}
+                    onChange={(e) => updateSettings({ perplexityApiKey: e.target.value })}
+                  />
+                  <p className="text-sm text-gray-500">Web research. Falls back to PERPLEXITY_API_KEY env.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="researchModel">Research Model</Label>
+                  <Select value={settings.researchModel || 'sonar'} onValueChange={(value) => updateSettings({ researchModel: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sonar">Sonar</SelectItem>
+                      <SelectItem value="sonar-pro">Sonar Pro</SelectItem>
+                      <SelectItem value="sonar-reasoning">Sonar Reasoning</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="imageProvider">Image Provider</Label>
+                  <Select value={settings.imageProvider || 'local'} onValueChange={(value) => updateSettings({ imageProvider: value as 'local' | 'gemini' })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="local">Local (mflux FLUX.2 Klein)</SelectItem>
+                      <SelectItem value="gemini">Gemini (cloud)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="imageModel">Image Model (Gemini)</Label>
+                  <Input
+                    id="imageModel"
+                    placeholder="gemini-3.1-flash-lite-image"
+                    value={settings.imageModel || ''}
+                    onChange={(e) => updateSettings({ imageModel: e.target.value })}
+                  />
+                  <p className="text-xs text-gray-500">Must be an image-capable Gemini model. Requires a Gemini API key (or GEMINI_API_KEY env).</p>
+                </div>
+                {settings.imageProvider === 'local' && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Local Model (mflux bridge)</Label>
+                      <div className="rounded-md border border-copper-200 bg-copper-50 px-3 py-2 text-sm text-copper-700">
+                        {settings.localImageModel || 'FLUX.2 Klein 4B (mflux bridge)'}
+                      </div>
+                      <p className="text-xs text-gray-500">Loaded by the mflux bridge at MFLUX_BRIDGE_URL. Fixed model — not switchable per request.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="imageSteps">Steps</Label>
+                      <Select value={String(settings.imageSteps ?? 1)} onValueChange={(v) => updateSettings({ imageSteps: parseInt(v, 10) })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">1 (fastest)</SelectItem>
+                          <SelectItem value="2">2</SelectItem>
+                          <SelectItem value="4">4 (bridge default)</SelectItem>
+                          <SelectItem value="8">8 (highest quality)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-gray-500">Higher steps = slower but more refined images.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="imageSize">Size</Label>
+                      <Select value={settings.imageSize || '1024x1024'} onValueChange={(v) => updateSettings({ imageSize: v as '256x256' | '512x512' | '1024x1024' })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="256x256">256×256</SelectItem>
+                          <SelectItem value="512x512">512×512</SelectItem>
+                          <SelectItem value="1024x1024">1024×1024</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </section>
 

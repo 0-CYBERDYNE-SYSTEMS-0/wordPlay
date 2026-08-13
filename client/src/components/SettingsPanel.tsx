@@ -26,7 +26,9 @@ import {
   Key,
   Server,
   Monitor,
-  Zap
+  Zap,
+  Globe,
+  Image as ImageIcon
 } from "lucide-react";
 
 interface SettingsPanelProps {
@@ -339,13 +341,14 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="llmProvider">AI Provider</Label>
-                <Select value={settings.llmProvider} onValueChange={(value: 'openai' | 'ollama') => updateSettings({ llmProvider: value })}>
+                <Select value={settings.llmProvider} onValueChange={(value: 'openai' | 'ollama' | 'gemini') => updateSettings({ llmProvider: value })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="ollama">Ollama (Local)</SelectItem>
+                    <SelectItem value="gemini">Gemini</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -391,6 +394,17 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
                       <SelectItem value="o1-mini">o1-mini</SelectItem>
                     </SelectContent>
                   </Select>
+                ) : settings.llmProvider === 'gemini' ? (
+                  <Select value={settings.llmModel} onValueChange={(value) => updateSettings({ llmModel: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
+                      <SelectItem value="gemini-2.5-pro">Gemini 2.5 Pro</SelectItem>
+                      <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash</SelectItem>
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <Select value={settings.llmModel} onValueChange={(value) => updateSettings({ llmModel: value })}>
                     <SelectTrigger>
@@ -420,6 +434,19 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
                 </div>
               )}
 
+              {settings.llmProvider === 'gemini' && (
+                <div className="space-y-2">
+                  <Label htmlFor="geminiApiKey">Gemini API Key</Label>
+                  <Input
+                    type="password"
+                    value={settings.geminiApiKey || ''}
+                    onChange={(e) => updateSettings({ geminiApiKey: e.target.value })}
+                    placeholder="AIza..."
+                  />
+                  <p className="text-xs text-gray-500">Your API key is stored locally and never shared</p>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Button
@@ -439,6 +466,120 @@ export default function SettingsPanel({ contextPanelOpen, onToggleContextPanel }
                   )}
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Research (web search) configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                Research
+              </CardTitle>
+              <CardDescription>
+                Configure the web search provider used by the Research tab
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="perplexityApiKey">Perplexity API Key</Label>
+                <Input
+                  type="password"
+                  value={settings.perplexityApiKey || ''}
+                  onChange={(e) => updateSettings({ perplexityApiKey: e.target.value })}
+                  placeholder="pplx-..."
+                />
+                <p className="text-xs text-gray-500">Used for web research. Stored locally; falls back to the PERPLEXITY_API_KEY env var.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="researchModel">Research Model</Label>
+                <Select value={settings.researchModel} onValueChange={(value) => updateSettings({ researchModel: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sonar">Sonar</SelectItem>
+                    <SelectItem value="sonar-pro">Sonar Pro</SelectItem>
+                    <SelectItem value="sonar-reasoning">Sonar Reasoning</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Image generation configuration */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Image Generation
+              </CardTitle>
+              <CardDescription>
+                Choose where /image creates images
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="imageProvider">Image Provider</Label>
+                <Select value={settings.imageProvider} onValueChange={(value: 'local' | 'gemini') => updateSettings({ imageProvider: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="local">Local (mflux FLUX.2 Klein)</SelectItem>
+                    <SelectItem value="gemini">Gemini (cloud)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="imageModel">Image Model (Gemini)</Label>
+                <Input
+                  value={settings.imageModel || ''}
+                  onChange={(e) => updateSettings({ imageModel: e.target.value })}
+                  placeholder="gemini-3.1-flash-lite-image"
+                />
+                <p className="text-xs text-gray-500">Must be an image-capable Gemini model. Requires a Gemini API key (or GEMINI_API_KEY env).</p>
+              </div>
+
+              {settings.imageProvider === 'local' && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Local Model (mflux bridge)</Label>
+                    <div className="rounded-md border border-copper-200 bg-copper-50 px-3 py-2 text-sm text-copper-700">
+                      {settings.localImageModel || 'FLUX.2 Klein 4B (mflux bridge)'}
+                    </div>
+                    <p className="text-xs text-gray-500">Loaded by the mflux bridge at MFLUX_BRIDGE_URL. Fixed model — not switchable per request.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imageSteps">Steps</Label>
+                    <Select value={String(settings.imageSteps ?? 1)} onValueChange={(v) => updateSettings({ imageSteps: parseInt(v, 10) })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1 (fastest)</SelectItem>
+                        <SelectItem value="2">2</SelectItem>
+                        <SelectItem value="4">4 (bridge default)</SelectItem>
+                        <SelectItem value="8">8 (highest quality)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500">Higher steps = slower but more refined images.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="imageSize">Size</Label>
+                    <Select value={settings.imageSize || '1024x1024'} onValueChange={(v: '256x256' | '512x512' | '1024x1024') => updateSettings({ imageSize: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="256x256">256×256</SelectItem>
+                        <SelectItem value="512x512">512×512</SelectItem>
+                        <SelectItem value="1024x1024">1024×1024</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
 

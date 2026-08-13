@@ -46,7 +46,7 @@ export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
   }
 }
 
-export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' = 'openai', llmModel?: string): Promise<string> {
+export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
   const systemPrompt = `You are an expert at converting text into well-formatted markdown tables. 
   Analyze the provided text and extract structured information to create a meaningful table.
   
@@ -94,7 +94,7 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
   }
 }
 
-export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' = 'openai', llmModel?: string): Promise<string> {
+export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
   console.log('🔧 generateChart called with request:', JSON.stringify(request, null, 2));
   
   const systemPrompt = `You are an expert at creating stunning, Apple-quality ECharts visualizations that rival the best data visualizations from Apple's investor presentations and cutting-edge JavaScript libraries.
@@ -198,7 +198,17 @@ ${content}
 }
 
 // ---- Local-first image generation: FLUX.2 Klein via mflux bridge (1-step default), Gemini fallback ----
-export async function generateImage(request: ImageGenerationRequest): Promise<string> {
+export interface ImageGenerationOptions {
+  geminiApiKey?: string;
+  imageModel?: string;
+  // When 'gemini', skip the local mflux bridge and generate with Gemini directly.
+  provider?: 'local' | 'gemini';
+  // Local mflux bridge controls (defaults from env / constants)
+  imageSize?: string;
+  steps?: number;
+}
+
+export async function generateImage(request: ImageGenerationRequest, options?: ImageGenerationOptions): Promise<string> {
   const stylePrompts = {
     realistic: 'ultra-high quality photorealistic style, 8K resolution, professional DSLR photography, perfect lighting, sharp details, cinematic composition, award-winning photography',
     artistic: 'stunning artistic masterpiece, premium digital art, gallery-quality illustration, rich colors, sophisticated composition, professional artwork, high-end design',
@@ -227,16 +237,28 @@ Create a visually appealing and professional image.`;
   const { width, height } = sizeMap[request.size || '512x512'] || sizeMap['512x512'];
 
   const mfluxUrl = process.env.MFLUX_BRIDGE_URL || 'http://127.0.0.1:4030';
-  const steps = parseInt(process.env.MFLUX_STEPS || '1', 10);
+  // Per-request steps from Settings win; otherwise env MFLUX_STEPS (default 1).
+  const steps = options?.steps ?? parseInt(process.env.MFLUX_STEPS || '1', 10);
+  // Per-request size from Settings wins; otherwise the request size (default 512x512).
+  const genSize = options?.imageSize || request.size || '512x512';
+  const genDimensions = sizeMap[genSize] || sizeMap['512x512'];
+  const genWidth = genDimensions.width;
+  const genHeight = genDimensions.height;
+
+  // When the user selected Gemini for images, skip the local bridge entirely.
+  if (options?.provider === 'gemini') {
+    console.log('🎨 Image provider set to Gemini — skipping local mflux bridge.');
+    return generateImageWithGeminiFallback(request, enhancedPrompt, options);
+  }
 
   console.log('🎨 Starting local FLUX.2 Klein image generation (mflux bridge)...');
-  console.log(`📝 Prompt: "${request.prompt}" | Size: ${width}x${height} | Steps: ${steps}`);
+  console.log(`📝 Prompt: "${request.prompt}" | Size: ${genWidth}x${genHeight} | Steps: ${steps}`);
 
   try {
     const genResponse = await fetch(`${mfluxUrl}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: enhancedPrompt, width, height, steps }),
+      body: JSON.stringify({ prompt: enhancedPrompt, width: genWidth, height: genHeight, steps }),
     });
 
     if (!genResponse.ok) {
@@ -271,12 +293,20 @@ Create a visually appealing and professional image.`;
     return `![${altText}](${imageUrl})`;
   } catch (localError: any) {
     console.warn(`⚠️ Local FLUX bridge failed (${localError.message}); falling back to Gemini (cloud)`, localError);
-    return generateImageWithGeminiFallback(request, enhancedPrompt);
+    return generateImageWithGeminiFallback(request, enhancedPrompt, options);
   }
 }
 
-async function generateImageWithGeminiFallback(request: ImageGenerationRequest, enhancedPrompt: string): Promise<string> {
-  if (!geminiNew) {
+async function generateImageWithGeminiFallback(
+  request: ImageGenerationRequest,
+  enhancedPrompt: string,
+  options?: ImageGenerationOptions
+): Promise<string> {
+  // Use the per-request key when provided; otherwise the module-level client
+  // (initialized from env at startup) is used.
+  const apiKey = options?.geminiApiKey || process.env.GEMINI_API_KEY;
+  const client = apiKey ? new GoogleGenAI({ apiKey }) : geminiNew;
+  if (!client) {
     throw new Error('Gemini client not initialized for image generation');
   }
 
@@ -289,7 +319,7 @@ async function generateImageWithGeminiFallback(request: ImageGenerationRequest, 
     // cost-efficient image-generation model. NOTE: the plain "gemini-3.1-flash-lite"
     // model is text-output only and cannot generate images — the "-image" variant is
     // required for image generation.
-    const imageModel = process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
+    const imageModel = options?.imageModel || process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
     const imageModels = [imageModel];
 
     let lastError: any = null;
@@ -298,7 +328,7 @@ async function generateImageWithGeminiFallback(request: ImageGenerationRequest, 
       try {
         console.log(`📡 Sending request to ${model}...`);
 
-        const response = await geminiNew.models.generateContent({
+        const response = await client.models.generateContent({
           model,
           contents: enhancedPrompt,
           config: {
@@ -411,14 +441,15 @@ export async function processAIContentCommand(
   llmModel: string = DEFAULT_MODEL,
   openaiKey?: string,
   geminiKey?: string,
-  parameters?: any
+  parameters?: any,
+  options?: ImageGenerationOptions
 ): Promise<string> {
   // Initialize clients if not already done
   if (openaiKey || geminiKey) {
     initializeAIClients(openaiKey, geminiKey);
   }
 
-  const provider = llmProvider === 'ollama' ? 'ollama' : 'openai';
+  const provider = llmProvider === 'ollama' ? 'ollama' : llmProvider === 'gemini' ? 'gemini' : 'openai';
 
   const selectedText = selectionInfo.selectedText || content;
 
@@ -470,13 +501,15 @@ export async function processAIContentCommand(
       }
       
       const imageStyle = parameters?.style || 'artistic';
-      const imageSize = parameters?.size || '1024x1024';
+      // Size: per-request Settings value (options.imageSize) wins; fall back to
+      // the style params, then the classic default.
+      const imageSize = options?.imageSize || parameters?.size || '1024x1024';
       
       return await generateImage({
         prompt: imagePrompt,
         style: imageStyle,
         size: imageSize
-      });
+      }, options);
 
     default:
       throw new Error(`Unknown AI content command: ${command}`);
