@@ -147,6 +147,9 @@ export default function SlashCommandsPopup({
   const { toast } = useToast();
   const { settings } = useSettings();
   const { startProcessing, stopProcessing } = useApiProcessing();
+  // Track the command currently being executed so the processing overlay can
+  // show command-specific detail (e.g. image provider/model/size/steps).
+  const [activeCommand, setActiveCommand] = useState<SlashCommand | null>(null);
 
   // Type-to-filter: match on title or action
   const filteredCommands = SLASH_COMMANDS.filter(c =>
@@ -560,6 +563,7 @@ export default function SlashCommandsPopup({
     },
     onSettled: () => {
       setIsProcessing(false);
+      setActiveCommand(null);
       if (processingId) {
         stopProcessing(processingId);
         setProcessingId(null);
@@ -578,6 +582,7 @@ export default function SlashCommandsPopup({
     }
 
     setIsProcessing(true);
+    setActiveCommand(command);
     const id = startProcessing({
       message: `Executing ${command.title}...`,
       type: 'ai-command',
@@ -585,6 +590,13 @@ export default function SlashCommandsPopup({
     });
     setProcessingId(id);
     executeCommandMutation.mutate(command);
+
+    // Image generation can take 30-60s locally. Don't block the editor with a
+    // full-screen popup for the whole wait — close the menu immediately and
+    // let the image appear in the editor (with a toast) when it's ready.
+    if (command.action === 'image') {
+      onClose();
+    }
   };
 
   // Keyboard navigation + type-to-filter
@@ -781,15 +793,41 @@ export default function SlashCommandsPopup({
 
       {isProcessing && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--wp-paper)]/70 backdrop-blur-[1px] dark:bg-stone-900/70">
-          <AIProcessingIndicator
-            isProcessing={isProcessing}
-            message={elapsedSeconds >= 10 ? `Still working… ${elapsedSeconds}s` : "Processing command…"}
-          />
+          {activeCommand?.action === 'image' ? (
+            // Dedicated image-generation overlay — tells the user exactly what
+            // is running (provider/model/size/steps) since local mflux can
+            // take 30-60s and a bare spinner reads as "stuck".
+            <div className="flex flex-col items-center gap-3 px-4 py-2 text-center">
+              <AIProcessingIndicator
+                isProcessing
+                message={elapsedSeconds >= 10 ? `Generating image… ${elapsedSeconds}s` : 'Generating image…'}
+              />
+              <div className="rounded-lg border border-[var(--wp-line)] bg-[var(--wp-paper-elevated)] px-3.5 py-2.5 text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
+                <div className="mb-1 font-medium text-[var(--wp-ink)] dark:text-stone-100">
+                  {settings.imageProvider === 'gemini' ? 'Gemini (cloud)' : 'FLUX.2 Klein 4B · local mflux'}
+                </div>
+                <div className="flex flex-wrap justify-center gap-x-3 gap-y-0.5">
+                  <span>Model: {settings.imageProvider === 'gemini' ? settings.imageModel || 'gemini-3.1-flash-lite-image' : 'FLUX.2-klein-4B'}</span>
+                  <span>Size: {settings.imageSize || '1024x1024'}</span>
+                  <span>Steps: {settings.imageSteps ?? 1}</span>
+                </div>
+              </div>
+              <p className="max-w-[260px] text-[10px] leading-snug text-stone-400">
+                Local generation can take 30–60s. The image will appear in the editor when ready.
+              </p>
+            </div>
+          ) : (
+            <AIProcessingIndicator
+              isProcessing
+              message={elapsedSeconds >= 10 ? `Still working… ${elapsedSeconds}s` : "Processing command…"}
+            />
+          )}
           <button
             type="button"
             onClick={() => {
               abortRef.current?.abort();
               setIsProcessing(false);
+              setActiveCommand(null);
               if (processingId) {
                 stopProcessing(processingId);
                 setProcessingId(null);
