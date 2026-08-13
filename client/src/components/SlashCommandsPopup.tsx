@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
 import { useApiProcessing } from '@/hooks/use-api-processing';
 import AIProcessingIndicator from './AIProcessingIndicator';
 import { createAIResponseParser, type ParsedAIResponse } from '@/lib/aiResponseParser';
@@ -132,13 +131,35 @@ export default function SlashCommandsPopup({
   activeProjectId 
 }: SlashCommandsPopupProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [query, setQuery] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const lastCommandRef = useRef<string>('');
+  // Moment the menu opened. Used to ignore the keystroke that opened it —
+  // the '/' keydown is still propagating to the document-level listener
+  // below, which would otherwise swallow it into the type-to-filter query.
+  const openedAtRef = useRef(0);
   const { toast } = useToast();
   const { settings } = useSettings();
   const { startProcessing, stopProcessing } = useApiProcessing();
+
+  // Type-to-filter: match on title or action
+  const filteredCommands = SLASH_COMMANDS.filter(c =>
+    c.title.toLowerCase().includes(query.toLowerCase()) ||
+    c.action.toLowerCase().includes(query.toLowerCase())
+  );
+
+  // Reset query + selection whenever the menu opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setQuery('');
+      setSelectedIndex(0);
+      // Stamp the open time so the type-to-filter handler below can drop
+      // the very keystroke that opened the menu (the '/' itself).
+      openedAtRef.current = performance.now();
+    }
+  }, [isOpen]);
 
   // Get selected text or determine context
   const getSelectionInfo = () => {
@@ -158,6 +179,11 @@ export default function SlashCommandsPopup({
   };
 
   const selectionInfo = getSelectionInfo();
+
+  // AbortController for the in-flight command fetch (FIX-07: cancel support)
+  const abortRef = useRef<AbortController | null>(null);
+  // Elapsed-time tracking so the loading state communicates progress after ~10s
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Execute slash command
   const executeCommandMutation = useMutation({
@@ -192,13 +218,40 @@ export default function SlashCommandsPopup({
         requestData.style = 'simple'; // Default to simple style
       }
 
-      const response = await apiRequest('POST', '/api/ai/slash-command', requestData);
+      // Cancel any stale request, then wire up a fresh one
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      setElapsedSeconds(0);
+      const elapsedTimer = window.setInterval(() => {
+        setElapsedSeconds(s => s + 1);
+      }, 1000);
+
+      try {
+        const res = await fetch('/api/ai/slash-command', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestData),
+          credentials: 'include',
+          signal: controller.signal
+        });
+
+        if (!res.ok) {
+          let message = `Request failed (${res.status})`;
+          try {
+            const body = await res.json();
+            if (body?.message) message = body.message;
+            else if (body?.error) message = body.error;
+          } catch {}
+          throw new Error(message);
+        }
+
+        return await res.json();
+      } finally {
+        window.clearInterval(elapsedTimer);
+        abortRef.current = null;
       }
-
-      return response.json();
     },
     onSuccess: async (data) => {
       if (!data) return;
@@ -211,15 +264,22 @@ export default function SlashCommandsPopup({
         // AI content generation returns the result directly (markdown image / table / chart)
         const generatedContent = data.result || '';
 
+        // Images must always land on their own line as a separate block —
+        // never spliced mid-sentence. Tables/charts keep the previous behavior.
+        const isImage = action === 'image';
+        const blockContent = isImage
+          ? `\n\n${generatedContent}\n\n`
+          : generatedContent;
+
         if (selectionInfo.hasSelection) {
           const { start, end } = selectionInfo;
           if (start !== undefined && end !== undefined) {
-            const newContent = content.slice(0, start) + generatedContent + content.slice(end);
+            const newContent = content.slice(0, start) + blockContent + content.slice(end);
             setContent(newContent);
 
             setTimeout(() => {
               if (editorRef.current) {
-                const newPosition = start + generatedContent.length;
+                const newPosition = start + blockContent.length;
                 editorRef.current.setSelectionRange(newPosition, newPosition);
                 editorRef.current.focus();
               }
@@ -229,11 +289,11 @@ export default function SlashCommandsPopup({
           const textarea = editorRef.current;
           if (textarea) {
             const cursorPos = textarea.selectionStart;
-            const newContent = content.slice(0, cursorPos) + generatedContent + content.slice(cursorPos);
+            const newContent = content.slice(0, cursorPos) + blockContent + content.slice(cursorPos);
             setContent(newContent);
 
             setTimeout(() => {
-              const newPosition = cursorPos + generatedContent.length;
+              const newPosition = cursorPos + blockContent.length;
               textarea.setSelectionRange(newPosition, newPosition);
               textarea.focus();
             }, 0);
@@ -311,11 +371,17 @@ export default function SlashCommandsPopup({
         description: data.message || `Applied ${action} successfully.`
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
+      // Don't toast a noisy abort error — the user cancelled on purpose.
+      if (error?.name === 'AbortError' || error?.code === 20) {
+        console.log('Slash command cancelled by user');
+        return;
+      }
       console.error('Slash command error:', error);
+      const message = error instanceof Error ? error.message : "An unexpected error occurred.";
       toast({
         title: "Command Failed",
-        description: error instanceof Error ? error.message : "An unexpected error occurred.",
+        description: message,
         variant: "destructive"
       });
     },
@@ -348,7 +414,7 @@ export default function SlashCommandsPopup({
     executeCommandMutation.mutate(command);
   };
 
-  // Keyboard navigation
+  // Keyboard navigation + type-to-filter
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
@@ -356,39 +422,61 @@ export default function SlashCommandsPopup({
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault();
-          setSelectedIndex(prev => prev > 0 ? prev - 1 : SLASH_COMMANDS.length - 1);
+          setSelectedIndex(prev => prev > 0 ? prev - 1 : Math.max(filteredCommands.length - 1, 0));
           break;
         case 'ArrowDown':
           e.preventDefault();
-          setSelectedIndex(prev => prev < SLASH_COMMANDS.length - 1 ? prev + 1 : 0);
+          setSelectedIndex(prev => prev < filteredCommands.length - 1 ? prev + 1 : 0);
           break;
         case 'Enter':
           e.preventDefault();
-          if (!isProcessing) {
-            handleExecuteCommand(SLASH_COMMANDS[selectedIndex]);
+          if (!isProcessing && filteredCommands[selectedIndex]) {
+            handleExecuteCommand(filteredCommands[selectedIndex]);
           }
           break;
         case 'Escape':
           e.preventDefault();
           onClose();
           break;
+        case 'Backspace':
+          e.preventDefault();
+          setQuery(prev => prev.slice(0, -1));
+          setSelectedIndex(0);
+          break;
         default:
-          // Handle number shortcuts (1-9 and 0)
-          const num = parseInt(e.key);
-          if (num >= 1 && num <= 9 && num <= SLASH_COMMANDS.length) {
-            e.preventDefault();
-            if (!isProcessing) {
-              handleExecuteCommand(SLASH_COMMANDS[num - 1]);
-            }
-          } else if (e.key === '0') {
-            // Handle 0 for the last command (undo)
-            e.preventDefault();
-            if (!isProcessing) {
-              const undoCommand = SLASH_COMMANDS.find(cmd => cmd.shortcut === '0');
-              if (undoCommand) {
-                handleExecuteCommand(undoCommand);
+          // Handle number shortcuts (1-9 and 0) — only when not filtering
+          if (!query) {
+            const num = parseInt(e.key);
+            if (num >= 1 && num <= 9 && num <= SLASH_COMMANDS.length) {
+              e.preventDefault();
+              if (!isProcessing) {
+                handleExecuteCommand(SLASH_COMMANDS[num - 1]);
               }
+              break;
+            } else if (e.key === '0') {
+              // Handle 0 for the last command (undo)
+              e.preventDefault();
+              if (!isProcessing) {
+                const undoCommand = SLASH_COMMANDS.find(cmd => cmd.shortcut === '0');
+                if (undoCommand) {
+                  handleExecuteCommand(undoCommand);
+                }
+              }
+              break;
             }
+          }
+
+          // Type-to-filter: consume a single printable character (never let it
+          // reach the textarea) and append it to the filter query. The
+          // keystroke that opened the menu (the '/') is still propagating to
+          // this document-level listener — drop it so it doesn't get searched.
+          if (
+            e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey &&
+            e.timeStamp - openedAtRef.current > 50
+          ) {
+            e.preventDefault();
+            setQuery(prev => prev + e.key);
+            setSelectedIndex(0);
           }
           break;
       }
@@ -396,7 +484,7 @@ export default function SlashCommandsPopup({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, isProcessing]);
+  }, [isOpen, selectedIndex, isProcessing, filteredCommands.length, query]);
 
   // Close on outside click
   useEffect(() => {
@@ -453,57 +541,65 @@ export default function SlashCommandsPopup({
       </div>
 
       <div className="max-h-72 overflow-y-auto minimal-scrollbar">
-        {SLASH_COMMANDS.map((command, index) => (
-          <button
-            key={command.id}
-            type="button"
-            onClick={() => !isProcessing && handleExecuteCommand(command)}
-            disabled={isProcessing}
-            className={`
-              flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors
-              ${index === selectedIndex
-                ? 'bg-[var(--wp-copper)]/10 border-l-2 border-[var(--wp-copper)]'
-                : 'border-l-2 border-transparent hover:bg-stone-50 dark:hover:bg-stone-800/60'
-              }
-              ${isProcessing ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
-            `}
-            role="option"
-            aria-selected={index === selectedIndex}
-          >
-            <div
-              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                index === selectedIndex
-                  ? 'bg-[var(--wp-copper)]/15 text-[var(--wp-copper)]'
-                  : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
-              }`}
+        {filteredCommands.length === 0 ? (
+          <div className="px-3.5 py-6 text-center text-[12px] text-stone-500">
+            No commands match “{query}”
+          </div>
+        ) : (
+          filteredCommands.map((command, index) => (
+            <button
+              key={command.id}
+              type="button"
+              onClick={() => !isProcessing && handleExecuteCommand(command)}
+              disabled={isProcessing}
+              className={`
+                flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors
+                ${index === selectedIndex
+                  ? 'bg-[var(--wp-copper)]/10 border-l-2 border-[var(--wp-copper)]'
+                  : 'border-l-2 border-transparent hover:bg-stone-50 dark:hover:bg-stone-800/60'
+                }
+                ${isProcessing ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
+              `}
+              role="option"
+              aria-selected={index === selectedIndex}
             >
-              {command.icon}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-[var(--wp-ink)] dark:text-stone-100">
-                  {command.title}
-                </span>
-                {command.shortcut && (
-                  <span className="rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] text-stone-500 dark:bg-stone-800">
-                    {command.shortcut}
-                  </span>
-                )}
+              <div
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  index === selectedIndex
+                    ? 'bg-[var(--wp-copper)]/15 text-[var(--wp-copper)]'
+                    : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
+                }`}
+              >
+                {command.icon}
               </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
-                {command.description}
-              </p>
-            </div>
-            {index === selectedIndex && (
-              <ArrowRight className="h-4 w-4 shrink-0 text-[var(--wp-copper)]" />
-            )}
-          </button>
-        ))}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-medium text-[var(--wp-ink)] dark:text-stone-100">
+                    {command.title}
+                  </span>
+                  {command.shortcut && (
+                    <span className="rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-[10px] text-stone-500 dark:bg-stone-800">
+                      {command.shortcut}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-[11px] leading-snug text-stone-500 dark:text-stone-400">
+                  {command.description}
+                </p>
+              </div>
+              {index === selectedIndex && (
+                <ArrowRight className="h-4 w-4 shrink-0 text-[var(--wp-copper)]" />
+              )}
+            </button>
+          ))
+        )}
       </div>
 
       <div className="border-t border-[var(--wp-line)] px-3.5 py-2 dark:border-stone-700">
         <div className="flex items-center justify-between text-[10px] text-stone-400">
-          <span className="truncate">↑↓ · 1–9 · ↵ · Esc</span>
+          <span className="truncate">
+            {query ? `Filtering “${query}”` : '↑↓ · 1–9 · ↵ · Esc'}
+          </span>
           {isProcessing && (
             <span className="text-[var(--wp-copper)]">Working…</span>
           )}
@@ -511,11 +607,26 @@ export default function SlashCommandsPopup({
       </div>
 
       {isProcessing && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[var(--wp-paper)]/70 backdrop-blur-[1px] dark:bg-stone-900/70">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--wp-paper)]/70 backdrop-blur-[1px] dark:bg-stone-900/70">
           <AIProcessingIndicator
             isProcessing={isProcessing}
-            message="Processing command…"
+            message={elapsedSeconds >= 10 ? `Still working… ${elapsedSeconds}s` : "Processing command…"}
           />
+          <button
+            type="button"
+            onClick={() => {
+              abortRef.current?.abort();
+              setIsProcessing(false);
+              if (processingId) {
+                stopProcessing(processingId);
+                setProcessingId(null);
+              }
+              onClose();
+            }}
+            className="rounded-md border border-[var(--wp-line)] px-3 py-1.5 text-[11px] text-stone-600 transition-colors hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-800"
+          >
+            Cancel
+          </button>
         </div>
       )}
     </div>

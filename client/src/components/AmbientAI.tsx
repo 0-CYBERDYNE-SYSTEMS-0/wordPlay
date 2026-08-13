@@ -196,14 +196,14 @@ export default function AmbientAI({
       role="complementary"
       aria-label="Writing suggestions"
     >
-      <div className="overflow-hidden rounded-2xl border border-[var(--wp-line)] bg-[var(--wp-paper)] shadow-[0_24px_48px_-12px_rgba(26,22,18,0.28)] dark:bg-[var(--wp-ink)] dark:border-stone-700">
+      <div className="overflow-hidden rounded-2xl border border-[var(--wp-line)] bg-[var(--wp-paper-elevated)] shadow-[0_28px_56px_-16px_rgba(26,22,18,0.35)] dark:bg-stone-900 dark:border-stone-700">
         <div className="flex items-center justify-between gap-2 border-b border-[var(--wp-line)] px-3.5 py-2.5 dark:border-stone-700">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--wp-copper)]/12 text-[var(--wp-copper)]">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--wp-copper)]/15 text-[var(--wp-copper)]">
               <Sparkles className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[13px] font-medium tracking-tight text-[var(--wp-ink)] dark:text-stone-100">
+              <p className="truncate font-serif text-[14px] font-semibold tracking-tight text-[var(--wp-ink)] dark:text-stone-50">
                 Quiet assist
               </p>
               <p className="text-[11px] text-stone-500 dark:text-stone-400">{moodLabel}</p>
@@ -265,7 +265,7 @@ export default function AmbientAI({
                     <Button
                       size="sm"
                       onClick={() => handleApplyInsight(insight)}
-                      className="h-7 rounded-full bg-[var(--wp-ink)] px-3 text-[11px] font-medium text-[var(--wp-paper)] hover:bg-[var(--wp-ink)]/90 dark:bg-stone-100 dark:text-stone-900"
+                      className="h-7 rounded-full bg-[var(--wp-copper)] px-3 text-[11px] font-medium text-white hover:bg-[var(--wp-copper)]/90 dark:bg-[var(--wp-copper)] dark:text-white dark:hover:bg-[var(--wp-copper)]/90"
                     >
                       Insert
                     </Button>
@@ -273,7 +273,7 @@ export default function AmbientAI({
                       variant="ghost"
                       size="sm"
                       onClick={() => setInsights((prev) => prev.filter((i) => i.id !== insight.id))}
-                      className="h-7 px-2 text-[11px] text-stone-500"
+                      className="h-7 px-2 text-[11px] text-stone-500 hover:text-[var(--wp-ink)] dark:hover:text-stone-200"
                     >
                       Skip
                     </Button>
@@ -294,7 +294,7 @@ export default function AmbientAI({
               setInsights([]);
               setIsVisible(false);
             }}
-            className="inline-flex items-center gap-1 text-[11px] text-stone-500 transition-colors hover:text-[var(--wp-ink)] dark:hover:text-stone-200"
+            className="inline-flex items-center gap-1 text-[11px] text-stone-500 transition-colors hover:text-[var(--wp-copper)] dark:text-stone-400 dark:hover:text-[var(--wp-copper)]"
           >
             <X className="h-3 w-3" />
             Dismiss
