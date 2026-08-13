@@ -185,6 +185,127 @@ export default function SlashCommandsPopup({
   // Elapsed-time tracking so the loading state communicates progress after ~10s
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  // Streams a core command (Ollama) via /api/ai/slash-command/stream and
+  // applies each token to the editor live. Returns the final behavior object
+  // (same shape as the non-streaming route) so onSuccess can finish the
+  // post-processing.
+  const streamCommand = async (
+    requestData: any,
+    controller: AbortController,
+    hasSelection: boolean,
+    start: number | undefined,
+    end: number | undefined
+  ) => {
+    const res = await fetch('/api/ai/slash-command/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestData),
+      credentials: 'include',
+      signal: controller.signal
+    });
+
+    if (!res.ok) {
+      let message = `Request failed (${res.status})`;
+      try {
+        const body = await res.json();
+        if (body?.message) message = body.message;
+      } catch {}
+      throw new Error(message);
+    }
+    if (!res.body) throw new Error('Streaming not supported by server');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    // Progressive editor state — start from the original content with the
+    // selection range cleared (the AI output grows into that span).
+    let streamedText = '';
+    let appliedContent = content;
+    let appliedStart = (hasSelection ? start : start) ?? (editorRef.current?.selectionStart ?? 0); // cursor position for insert-at-cursor
+    let behavior: any = null;
+
+    const applyChunk = (text: string) => {
+      streamedText += text;
+      // Rebuild: content before + streamed output + content after the
+      // selection/insertion point. Using the ORIGINAL content means the
+      // editor shows the AI text appearing live in place of the selection.
+      const before = requestData.content.slice(0, appliedStart);
+      const after = requestData.content.slice(hasSelection ? end : appliedStart);
+      appliedContent = before + streamedText + after;
+      setContent(appliedContent);
+      // Keep the textarea caret at the end of the streamed text
+      if (editorRef.current) {
+        editorRef.current.setSelectionRange(before.length + streamedText.length, before.length + streamedText.length);
+      }
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIdx;
+        while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, newlineIdx).trim();
+          buffer = buffer.slice(newlineIdx + 1);
+          if (!line) continue;
+          let data: any;
+          try {
+            data = JSON.parse(line);
+          } catch {
+            continue; // partial line — wait for more
+          }
+          if (data.chunk) {
+            applyChunk(data.chunk);
+          } else if (data.done) {
+            behavior = data.behavior || {};
+            // If the server said the final result differs (e.g. no selection),
+            // overwrite the streamed content with the authoritative result.
+            if (behavior.result && behavior.result !== streamedText) {
+              const before = requestData.content.slice(0, appliedStart);
+              const after = requestData.content.slice(hasSelection ? end : appliedStart);
+              setContent(before + behavior.result + after);
+            }
+          }
+        }
+      }
+
+      // Flush any trailing line that arrived without a newline (the final
+      // {"done":true,...} line often lands in the last chunk without \n).
+      if (buffer.trim()) {
+        try {
+          const data = JSON.parse(buffer.trim());
+          if (data.done) {
+            behavior = data.behavior || {};
+            if (behavior.result && behavior.result !== streamedText) {
+              const before = requestData.content.slice(0, appliedStart);
+              const after = requestData.content.slice(hasSelection ? end : appliedStart);
+              setContent(before + behavior.result + after);
+            }
+          }
+        } catch {
+          // ignore malformed trailing data
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return {
+      result: streamedText,
+      message: behavior?.message || 'Applied command.',
+      replaceSelection: behavior?.replaceSelection,
+      appendToContent: behavior?.appendToContent,
+      insertAtCursor: behavior?.insertAtCursor,
+      contextOnly: behavior?.contextOnly,
+      smartExpansion: behavior?.smartExpansion,
+      // Mark that we already streamed into the editor — onSuccess must not
+      // re-apply the replacement.
+      streamed: true
+    };
+  };
+
   // Execute slash command
   const executeCommandMutation = useMutation({
     mutationFn: async (command: SlashCommand) => {
@@ -228,7 +349,17 @@ export default function SlashCommandsPopup({
         setElapsedSeconds(s => s + 1);
       }, 1000);
 
+      // Streaming path: Ollama + core commands stream tokens into the editor
+      // live via /api/ai/slash-command/stream (NDJSON). AI content commands
+      // (table/chart/image) and OpenAI still use the single-shot endpoint.
+      const isAIContentCommand = ['chart', 'image', 'table'].includes(command.action);
+      const canStream = llmProvider === 'ollama' && !isAIContentCommand && command.action !== 'undo';
+
       try {
+        if (canStream) {
+          return await streamCommand(requestData, controller, hasSelection, start, end);
+        }
+
         const res = await fetch('/api/ai/slash-command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -318,6 +449,35 @@ export default function SlashCommandsPopup({
         content,
         selectionInfo
       );
+
+      // Streaming path already applied the text to the editor live — only
+      // parse for the context panel / suggestions and toast.
+      if (data.streamed) {
+        if (data.contextOnly) {
+          onSuggestions?.(parsedResponse.suggestions || data.result);
+          toast({
+            title: "Suggestions Generated",
+            description: data.message || "Check the context panel for suggestions."
+          });
+        } else {
+          // Clean the streamed content of XML tags that may have been
+          // rendered live (the model sometimes streams <thinking>/<final_output>
+          // tags before the text). Re-apply the cleaned version.
+          if (parsedResponse.content && parsedResponse.content !== data.result) {
+            const applyStart = data.smartExpansion ? data.smartExpansion.expandedStart : selectionInfo.start;
+            const applyEnd = data.smartExpansion ? data.smartExpansion.expandedEnd : selectionInfo.end;
+            if (typeof applyStart === 'number' && typeof applyEnd === 'number') {
+              const newContent = content.slice(0, applyStart) + parsedResponse.content + content.slice(applyEnd);
+              setContent(newContent);
+            }
+          }
+          toast({
+            title: "Command Executed",
+            description: data.message || `Applied ${action} successfully.`
+          });
+        }
+        return;
+      }
 
       if (data.contextOnly) {
         onSuggestions?.(parsedResponse.suggestions || data.result);
@@ -555,7 +715,7 @@ export default function SlashCommandsPopup({
               className={`
                 flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors
                 ${index === selectedIndex
-                  ? 'bg-[var(--wp-copper)]/10 border-l-2 border-[var(--wp-copper)]'
+                  ? 'bg-copper-100 border-l-2 border-[var(--wp-copper)]'
                   : 'border-l-2 border-transparent hover:bg-stone-50 dark:hover:bg-stone-800/60'
                 }
                 ${isProcessing ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}
@@ -566,7 +726,7 @@ export default function SlashCommandsPopup({
               <div
                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
                   index === selectedIndex
-                    ? 'bg-[var(--wp-copper)]/15 text-[var(--wp-copper)]'
+                    ? 'bg-copper-100 text-[var(--wp-copper)]'
                     : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
                 }`}
               >

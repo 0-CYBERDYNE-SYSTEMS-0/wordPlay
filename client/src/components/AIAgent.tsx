@@ -352,7 +352,7 @@ export default function AIAgent({
         <button
           onClick={() => setIsMinimized(!isMinimized)}
           aria-label="Toggle wordPlay agent"
-          className="w-14 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
+          className="w-14 h-14 bg-[var(--wp-copper)] hover:bg-copper-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
           title="wordPlay agent"
         >
           <Bot className="w-6 h-6" />
@@ -384,7 +384,7 @@ export default function AIAgent({
               onMouseDown={handleMouseDown}
             >
               <div className="flex items-center space-x-2">
-                <Bot className="h-5 w-5 text-blue-500" />
+                <Bot className="h-5 w-5 text-[var(--wp-copper)]" />
                 <span className="font-semibold text-gray-900 dark:text-gray-100">AI Writing Assistant</span>
                 <div className="text-xs text-gray-500 dark:text-gray-400 ml-2">
                   {isDragging ? 'Dragging...' : 'Drag to move'}
@@ -418,7 +418,7 @@ export default function AIAgent({
                   <div key={message.id} className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
                       {message.type === "user" && (
-                        <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center">
+                        <div className="h-6 w-6 rounded-full bg-[var(--wp-copper)] flex items-center justify-center">
                           <User className="h-3 w-3 text-white" />
                         </div>
                       )}

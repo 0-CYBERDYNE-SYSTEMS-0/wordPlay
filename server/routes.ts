@@ -582,6 +582,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Streaming slash command endpoint — pipes Ollama tokens to the client as
+  // NDJSON lines so the editor renders text live instead of waiting for the
+  // full completion. Each line: {"chunk":"..."} for text, and a final
+  // {"done":true,"behavior":{...}} line with the same metadata shape as the
+  // non-streaming route.
+  app.post("/api/ai/slash-command/stream", async (req: Request, res: Response) => {
+    const streamSchema = z.object({
+      command: z.string(),
+      content: z.string(),
+      selectionInfo: z.object({
+        selectedText: z.string(),
+        selectionStart: z.number(),
+        selectionEnd: z.number(),
+        beforeSelection: z.string().optional(),
+        afterSelection: z.string().optional()
+      }),
+      llmModel: z.string().optional(),
+      includeContext: z.boolean().optional(),
+      projectId: z.number().optional(),
+      userId: z.number().optional()
+    });
+
+    try {
+      const validatedData = streamSchema.parse(req.body);
+      const { streamCoreCommand } = await import("./slash-commands-minimal");
+
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('X-Accel-Buffering', 'no');
+
+      // Only core commands stream (Ollama-only for now; OpenAI streaming can
+      // be added later). AI content commands (table/chart/image) fall back to
+      // the non-streaming route from the client.
+      const coreCommands = ['continue', 'improve', 'fix', 'bullets', 'table', 'format'];
+      if (!coreCommands.includes(validatedData.command)) {
+        res.write(JSON.stringify({ done: true, behavior: { result: '', message: `Streaming not supported for /${validatedData.command}`, contextOnly: true } }) + '\n');
+        res.end();
+        return;
+      }
+      if (!validatedData.llmModel) {
+        res.write(JSON.stringify({ done: true, behavior: { result: '', message: 'No model specified for streaming.', contextOnly: true } }) + '\n');
+        res.end();
+        return;
+      }
+
+      const generator = streamCoreCommand(
+        validatedData.command as any,
+        validatedData.content,
+        validatedData.selectionInfo,
+        validatedData.llmModel,
+        validatedData.includeContext || false,
+        validatedData.projectId
+      );
+
+      for await (const item of generator) {
+        if (typeof item === 'string') {
+          res.write(JSON.stringify({ chunk: item }) + '\n');
+        } else {
+          res.write(JSON.stringify({ done: true, behavior: item.behavior }) + '\n');
+        }
+      }
+      res.end();
+    } catch (error: any) {
+      console.error("Error streaming slash command:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: error.message || "Failed to stream slash command" });
+      } else {
+        res.write(JSON.stringify({ done: true, behavior: { result: '', message: error.message || 'Stream failed', contextOnly: true } }) + '\n');
+        res.end();
+      }
+    }
+  });
+
   // AI Response parsing endpoint for intelligent content handling
   app.post("/api/ai/parse-response", async (req: Request, res: Response) => {
     const parsingSchema = z.object({

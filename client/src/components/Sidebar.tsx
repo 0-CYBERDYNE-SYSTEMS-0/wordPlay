@@ -392,7 +392,7 @@ export default function Sidebar({
                     onClick={() => onSelectProject(project.id)}
                     className={`p-3 rounded-lg text-sm cursor-pointer transition-colors flex items-center justify-between ${
                       project.id === activeProjectId
-                        ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                        ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)] border border-copper-300 dark:border-copper-300"
                         : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                     }`}
                   >
@@ -577,7 +577,7 @@ export default function Sidebar({
             <div 
               className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
                 activeTab === "editor"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]"
                   : "hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
               onClick={() => onChangeTab("editor")}
@@ -591,7 +591,7 @@ export default function Sidebar({
               <div 
                 className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
                   activeTab === "research"
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]"
                     : "hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
                 onClick={() => onChangeTab("research")}
@@ -606,7 +606,7 @@ export default function Sidebar({
               <div 
                 className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
                   activeTab === "settings"
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]"
                     : "hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
                 onClick={() => onChangeTab("settings")}
@@ -631,7 +631,7 @@ export default function Sidebar({
                 key={mode}
                 className={`flex items-center p-2 rounded-lg text-sm cursor-pointer transition-colors ${
                   userExperienceMode === mode
-                    ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                    ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)] border border-copper-300 dark:border-copper-300"
                     : "hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
                 onClick={() => onModeChange(mode)}
@@ -641,7 +641,7 @@ export default function Sidebar({
                 {mode === 'expert' && <Star className="h-3 w-3 mr-2" />}
                 <span className="capitalize">{mode}</span>
                 {userExperienceMode === mode && (
-                  <CheckCircle className="h-3 w-3 ml-auto text-blue-600 dark:text-blue-400" />
+                  <CheckCircle className="h-3 w-3 ml-auto text-[var(--wp-copper)] dark:text-[var(--wp-copper)]" />
                 )}
               </div>
             ))}

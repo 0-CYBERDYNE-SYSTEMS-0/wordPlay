@@ -348,12 +348,12 @@ export default function CustomCommandEditor() {
         </div>
         <div className="grid gap-3">
           {coreCommands.map((command) => (
-            <Card key={command.trigger} className="border border-blue-100 bg-blue-50/30">
+            <Card key={command.trigger} className="border border-copper-200 bg-copper-50">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <code className="text-sm font-mono bg-blue-100 px-2 py-1 rounded">
+                      <code className="text-sm font-mono bg-copper-100 px-2 py-1 rounded">
                         {command.trigger}
                       </code>
                       <span className="font-medium">{command.name}</span>

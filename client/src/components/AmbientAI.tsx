@@ -199,7 +199,7 @@ export default function AmbientAI({
       <div className="overflow-hidden rounded-2xl border border-[var(--wp-line)] bg-[var(--wp-paper-elevated)] shadow-[0_28px_56px_-16px_rgba(26,22,18,0.35)] dark:bg-stone-900 dark:border-stone-700">
         <div className="flex items-center justify-between gap-2 border-b border-[var(--wp-line)] px-3.5 py-2.5 dark:border-stone-700">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--wp-copper)]/15 text-[var(--wp-copper)]">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-copper-100 text-[var(--wp-copper)]">
               <Sparkles className="h-3.5 w-3.5" />
             </span>
             <div className="min-w-0">
@@ -265,7 +265,7 @@ export default function AmbientAI({
                     <Button
                       size="sm"
                       onClick={() => handleApplyInsight(insight)}
-                      className="h-7 rounded-full bg-[var(--wp-copper)] px-3 text-[11px] font-medium text-white hover:bg-[var(--wp-copper)]/90 dark:bg-[var(--wp-copper)] dark:text-white dark:hover:bg-[var(--wp-copper)]/90"
+                      className="h-7 rounded-full bg-[var(--wp-copper)] px-3 text-[11px] font-medium text-white hover:bg-copper-500 dark:bg-[var(--wp-copper)] dark:text-white dark:hover:bg-copper-500"
                     >
                       Insert
                     </Button>

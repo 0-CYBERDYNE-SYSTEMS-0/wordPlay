@@ -588,7 +588,7 @@ export default function UltraMinimalEditor({
               }}
               aria-label="Document title"
             />
-            <div className="mx-auto mt-4 h-px w-12 bg-[var(--wp-copper)]/50" />
+            <div className="mx-auto mt-4 h-px w-12 bg-copper-300" />
           </div>
         )}
 

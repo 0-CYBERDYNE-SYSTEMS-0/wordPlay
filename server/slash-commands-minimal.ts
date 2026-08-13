@@ -11,6 +11,25 @@ const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '120
 // Core command types
 export type CoreCommandType = 'continue' | 'improve' | 'fix' | 'bullets' | 'table' | 'format';
 
+// Shared Ollama request body (streaming + non-streaming use identical options)
+function buildOllamaRequestBody(model: string, systemPrompt: string, userPrompt: string, stream: boolean) {
+  return {
+    model: model,
+    prompt: `System: ${systemPrompt}\n\nUser: ${userPrompt}`,
+    stream,
+    // Disable thinking mode — qwen3.5 / reasoning models spend their whole
+    // token budget on <thinking> and never emit the actual answer. With
+    // think:false they answer directly in ~1s instead of hanging for a
+    // minute and returning empty/truncated reasoning.
+    think: false,
+    options: {
+      num_ctx: 8192, // Keep context small — Ollama's default 32768 makes 2b models crawl
+      num_predict: 2048,
+      temperature: 0.3
+    }
+  };
+}
+
 // Helper function to call Ollama API
 async function callOllama(model: string, systemPrompt: string, userPrompt: string): Promise<string> {
   try {
@@ -20,21 +39,7 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: model,
-        prompt: `System: ${systemPrompt}\n\nUser: ${userPrompt}`,
-        stream: false,
-        // Disable thinking mode — qwen3.5 / reasoning models spend their whole
-        // token budget on <thinking> and never emit the actual answer. With
-        // think:false they answer directly in ~1s instead of hanging for a
-        // minute and returning empty/truncated reasoning.
-        think: false,
-        options: {
-          num_ctx: 8192, // Keep context small — Ollama's default 32768 makes 2b models crawl
-          num_predict: 2048,
-          temperature: 0.3
-        }
-      }),
+      body: JSON.stringify(buildOllamaRequestBody(model, systemPrompt, userPrompt, false)),
     });
 
     if (!response.ok) {
@@ -49,6 +54,58 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
   } catch (error) {
     console.error("Error calling Ollama:", error);
     throw error;
+  }
+}
+
+// Streaming variant — calls Ollama with stream:true and yields each text chunk.
+// Used by /api/ai/slash-command/stream so the editor can render tokens as they
+// arrive instead of waiting for the full completion.
+export async function* streamOllama(
+  model: string,
+  systemPrompt: string,
+  userPrompt: string
+): AsyncGenerator<string> {
+  const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+  const response = await fetch(`${ollamaUrl}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(buildOllamaRequestBody(model, systemPrompt, userPrompt, true)),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama API error: ${response.statusText}`);
+  }
+  if (!response.body) {
+    throw new Error('Ollama stream returned no body');
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // Ollama NDJSON: one JSON object per line
+      let newlineIdx;
+      while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newlineIdx).trim();
+        buffer = buffer.slice(newlineIdx + 1);
+        if (!line) continue;
+        try {
+          const data = JSON.parse(line);
+          if (data.response) yield data.response;
+          if (data.done) return;
+        } catch {
+          // Partial/invalid JSON line — skip; the stream continues.
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
 }
 
@@ -413,6 +470,213 @@ export async function executeCoreCommand(
     console.error(`Error executing core command ${command}:`, error);
     // Re-throw so the route maps this to a real (non-200) HTTP status code.
     throw error;
+  }
+}
+
+// Streaming variant of executeCoreCommand for Ollama — yields the raw text
+// chunks as they arrive so the editor can render tokens live. The final
+// behavior metadata (replace/append/insert) is returned as the last yield.
+export async function* streamCoreCommand(
+  command: CoreCommandType,
+  content: string,
+  selectionInfo: {
+    selectedText: string;
+    selectionStart: number;
+    selectionEnd: number;
+    beforeSelection?: string;
+    afterSelection?: string;
+  },
+  llmModel: string,
+  includeContext: boolean = false,
+  projectId?: number
+): AsyncGenerator<string | { done: boolean; behavior: any }> {
+  // Smart text selection for improve/fix commands
+  let smartSelectionInfo = { ...selectionInfo };
+  let expansionApplied = 'none';
+  let expandedStart = selectionInfo.selectionStart;
+  let expandedEnd = selectionInfo.selectionEnd;
+
+  const shouldExpandSelection = (
+    ['improve', 'fix'].includes(command) &&
+    (
+      !selectionInfo.selectedText ||
+      selectionInfo.selectedText.trim().length < 10
+    )
+  );
+
+  if (shouldExpandSelection) {
+    const expansion = expandSelectionIntelligently(content, selectionInfo);
+    if (expansion.expansionApplied !== 'none' && expansion.expandedText.trim().length > 0) {
+      smartSelectionInfo = {
+        ...selectionInfo,
+        selectedText: expansion.expandedText,
+        selectionStart: expansion.expandedStart,
+        selectionEnd: expansion.expandedEnd,
+        beforeSelection: content.substring(0, expansion.expandedStart),
+        afterSelection: content.substring(expansion.expandedEnd)
+      };
+      expansionApplied = expansion.expansionApplied;
+      expandedStart = expansion.expandedStart;
+      expandedEnd = expansion.expandedEnd;
+    }
+  }
+
+  let enhancedContext: any = null;
+  if (includeContext) {
+    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId);
+  }
+
+  const textContext = smartSelectionInfo.selectedText || content;
+  const systemPrompt = createCoreCommandPrompt(command, textContext, smartSelectionInfo, enhancedContext);
+  const userPrompt = `${command === 'continue' ? 'Continue' : 'Process'} this content:\n\n${textContext}`;
+
+  console.log(`Streaming core command: ${command} (ollama)`);
+
+  // Filter the model's raw stream: strip <thinking>...</thinking> blocks and
+  // the <final_output> wrapper tags so the editor only ever receives the
+  // actual content — no XML tags flash on screen during streaming.
+  //
+  // Ollama streams token fragments (e.g. "<th", "inking", ">"), so tags are
+  // split across chunks. We accumulate a tail and only emit text that is
+  // provably outside any tag construct.
+  let generatedText = "";
+  let inThinking = false;
+  let tail = ""; // holds chars that might be the start of a tag
+  const TAG_STARTS = ['<thinking>', '<final_output>', '</final_output>', '</thinking>'];
+
+  for await (const chunk of streamOllama(llmModel, systemPrompt, userPrompt)) {
+    let combined = tail + chunk;
+    tail = '';
+    let emit = '';
+    let i = 0;
+
+    while (i < combined.length) {
+      if (inThinking) {
+        // Skip until </thinking> — the closing tag may be split across chunks
+        // (e.g. "</th", "inking", ">"), so scan with a moving lookahead.
+        const closeIdx = combined.indexOf('</thinking>', i);
+        if (closeIdx !== -1) {
+          i = closeIdx + '</thinking>'.length;
+          inThinking = false;
+          continue;
+        }
+        // Partial closing tag at the end? Hold up to 11 chars in tail so the
+        // next chunk can complete it.
+        const possibleClose = combined.slice(i).toLowerCase();
+        const closeTag = '</thinking>';
+        let holdLen = 0;
+        for (let n = Math.min(possibleClose.length, closeTag.length); n >= 1; n--) {
+          if (closeTag.startsWith(possibleClose.slice(-n))) { holdLen = n; break; }
+        }
+        if (holdLen > 0) {
+          // Only hold if it's at the very end (could continue next chunk)
+          if (possibleClose.length - holdLen === 0 || combined.slice(i).endsWith(possibleClose.slice(-holdLen))) {
+            tail = possibleClose.slice(-holdLen);
+            i = combined.length;
+            continue;
+          }
+        }
+        i = combined.length;
+        continue;
+      }
+
+      const remaining = combined.slice(i);
+      const ltIdx = remaining.indexOf('<');
+      if (ltIdx === -1) {
+        // No '<' — emit everything except a small tail (in case a '<' would
+        // arrive at the very start of the next chunk).
+        const keepFrom = Math.max(0, remaining.length - 12);
+        emit += remaining.slice(0, keepFrom);
+        tail = remaining.slice(keepFrom);
+        i = combined.length;
+        continue;
+      }
+
+      const beforeTag = remaining.slice(0, ltIdx);
+      if (beforeTag) {
+        emit += beforeTag;
+        i += ltIdx;
+        continue;
+      }
+
+      // At a '<' — check whether it's (a) a full known tag, (b) a partial
+      // tag that needs more chunks, or (c) a plain '<' in the text.
+      const fromHere = remaining;
+      const matched = TAG_STARTS.find(t => fromHere.toLowerCase().startsWith(t.toLowerCase()));
+      if (matched) {
+        if (matched === '<thinking>') inThinking = true;
+        i += matched.length;
+        continue;
+      }
+      // Partial tag start: '<' followed by 't' (think) or 'f' (final) or '/'.
+      // Hold it in the tail until we can decide. Cap at 14 chars so a plain
+      // '<t' in prose still streams.
+      const nextTwo = fromHere.slice(1, 2).toLowerCase();
+      const couldBeTag = nextTwo === 't' || nextTwo === 'f' || nextTwo === '/';
+      if (couldBeTag && fromHere.length <= 14) {
+        tail = fromHere;
+        i = combined.length;
+        continue;
+      }
+      // Plain '<' that isn't a tag — emit it
+      emit += '<';
+      i += 1;
+    }
+
+    if (emit.length > 0) {
+      generatedText += emit;
+      yield emit;
+    }
+  }
+
+  // Flush any remaining tail (text that wasn't a tag)
+  if (tail && !TAG_STARTS.some(t => tail.toLowerCase().startsWith(t.toLowerCase()))) {
+    generatedText += tail;
+    yield tail;
+  }
+
+  // If the model never emitted <final_output> (plain response), generatedText
+  // already holds the clean text.
+
+  // Final behavior metadata — mirrors executeCoreCommand's switch
+  switch (command) {
+    case 'continue':
+      yield { done: true, behavior: { result: generatedText, message: 'Extended your writing with new content.', appendToContent: true } };
+      break;
+    case 'improve':
+    case 'fix':
+      if (smartSelectionInfo.selectedText) {
+        let message = `Applied ${command} to the selected text.`;
+        if (expansionApplied !== 'none') {
+          message = `Applied ${command} to the current ${expansionApplied} (smart expansion applied).`;
+        }
+        yield {
+          done: true,
+          behavior: {
+            result: generatedText,
+            message,
+            replaceSelection: true,
+            smartExpansion: expansionApplied !== 'none' ? { applied: expansionApplied, expandedStart, expandedEnd } : undefined
+          }
+        };
+      } else {
+        yield {
+          done: true,
+          behavior: {
+            result: `To use /${command}, please select some text first. This helps ensure only the content you want to change is modified.`,
+            message: `Please select text to apply ${command} safely.`,
+            contextOnly: true
+          }
+        };
+      }
+      break;
+    case 'bullets':
+    case 'table':
+    case 'format':
+      yield { done: true, behavior: { result: generatedText, message: `Generated ${command} format and inserted at cursor position.`, insertAtCursor: true } };
+      break;
+    default:
+      yield { done: true, behavior: { result: generatedText, message: `Applied ${command} successfully.`, replaceSelection: Boolean(smartSelectionInfo.selectedText) } };
   }
 }
 

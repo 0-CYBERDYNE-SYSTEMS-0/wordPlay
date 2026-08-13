@@ -339,7 +339,7 @@ export default function Editor({
               onClick={onToggleFullScreen}
               variant="ghost"
               size="sm"
-              className={`flex items-center ${isFullScreen ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : ''}`}
+              className={`flex items-center ${isFullScreen ? 'bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]' : ''}`}
               title={isFullScreen ? "Exit full screen" : "Enter full screen"}
             >
               {isFullScreen ? <Minimize className="h-4 w-4 mr-1" /> : <Maximize className="h-4 w-4 mr-1" />}

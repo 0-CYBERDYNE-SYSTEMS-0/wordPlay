@@ -67,7 +67,7 @@ export default function Header({
   return (
     <>
       <header className={`border-b dark:border-gray-800 bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-50 transition-all duration-200 ${
-        isAnyProcessing ? 'border-blue-200 dark:border-blue-800 shadow-blue-500/10' : ''
+        isAnyProcessing ? 'border-copper-300 dark:border-copper-300 shadow-copper-100' : ''
       }`}>
         <div className="w-full px-4 py-3 flex items-center justify-between">
           {/* Left side - Logo */}
@@ -82,13 +82,13 @@ export default function Header({
           <div className="flex-1 flex justify-center">
             {isAnyProcessing && currentOperation && (
               <div 
-                className="flex items-center space-x-3 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-full border border-blue-200 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                className="flex items-center space-x-3 px-4 py-2 bg-copper-100 dark:bg-copper-100 rounded-full border border-copper-300 dark:border-copper-300 cursor-pointer hover:bg-copper-100 dark:hover:bg-copper-200 transition-colors"
                 onClick={() => setShowDetails(!showDetails)}
               >
-                <Brain className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <Brain className="h-4 w-4 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]" />
                 <div className="flex flex-col items-start min-w-0">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100 truncate">
+                    <span className="text-sm font-medium text-[var(--wp-copper)] dark:text-[var(--wp-copper)] truncate">
                       {currentOperation.message}
                     </span>
                     {currentOperation.progress > 0 && (
@@ -180,7 +180,7 @@ export default function Header({
                 <div key={operation.id} className="p-3 rounded-lg border bg-card">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
-                      {operation.status === 'active' && <Brain className="h-4 w-4 text-blue-500 animate-pulse" />}
+                      {operation.status === 'active' && <Brain className="h-4 w-4 text-[var(--wp-copper)] animate-pulse" />}
                       {operation.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {operation.status === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
                       <span className="text-sm font-medium">{operation.message}</span>

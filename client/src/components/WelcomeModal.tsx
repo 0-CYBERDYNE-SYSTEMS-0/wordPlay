@@ -22,7 +22,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
       subtitle: "A quiet page. Intelligent tools when you need them.",
       content: (
         <div className="space-y-5 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[var(--wp-copper)]/12">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-copper-100">
             <Sparkles className="h-7 w-7 text-[var(--wp-copper)]" />
           </div>
           <p className="text-[15px] leading-relaxed text-stone-600 dark:text-stone-300">
@@ -95,8 +95,8 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
             onClick={() => setSelectedUserType('advanced')}
           >
             <div className="flex items-start space-x-4">
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center flex-shrink-0">
-                <Zap className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              <div className="w-12 h-12 bg-copper-100 dark:bg-copper-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                <Zap className="h-6 w-6 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]" />
               </div>
               <div className="flex-1">
                 <h3 className="text-lg font-semibold mb-2">Advanced Mode</h3>

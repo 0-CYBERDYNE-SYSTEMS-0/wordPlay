@@ -131,7 +131,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
           
           // Enhanced blockquotes
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-blue-400 dark:border-blue-500 pl-4 py-2 my-4 italic text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 rounded-r-lg">
+            <blockquote className="border-l-4 border-copper-400 dark:border-copper-400 pl-4 py-2 my-4 italic text-gray-600 dark:text-gray-400 bg-copper-100 dark:bg-copper-100 rounded-r-lg">
               {children}
             </blockquote>
           ),
@@ -151,7 +151,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
                 return (
                   <div className="my-8 p-6 rounded-2xl bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 shadow-2xl border border-gray-100 dark:border-gray-700 group">
                     <div className="mb-4 text-base font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <div className="w-2 h-2 bg-[var(--wp-copper)] rounded-full"></div>
                       Interactive Visualization
                     </div>
                     <div className="bg-white/50 dark:bg-black/20 rounded-xl p-2 backdrop-blur-sm">
@@ -216,7 +216,7 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
           a: ({ children, href, ...props }) => (
             <a 
               href={href}
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline font-medium transition-colors"
+              className="text-[var(--wp-copper)] dark:text-[var(--wp-copper)] hover:text-copper-500 dark:hover:text-copper-500 hover:underline font-medium transition-colors"
               target={href?.startsWith('http') ? '_blank' : undefined}
               rel={href?.startsWith('http') ? 'noopener noreferrer' : undefined}
               {...props}

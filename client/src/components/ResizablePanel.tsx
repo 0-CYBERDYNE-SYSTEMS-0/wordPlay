@@ -270,9 +270,9 @@ export default function ResizablePanel({
         {/* Visual drag handle */}
         <div 
           className={cn(
-            'absolute inset-y-0 w-1 bg-transparent group-hover:bg-blue-300 dark:group-hover:bg-blue-600',
+            'absolute inset-y-0 w-1 bg-transparent group-hover:bg-copper-300 dark:group-hover:bg-copper-300',
             'transition-colors duration-150',
-            (isDragging || isHovering) && 'bg-blue-400 dark:bg-blue-500',
+            (isDragging || isHovering) && 'bg-copper-400 dark:bg-copper-500',
             disabled && 'bg-gray-300 dark:bg-gray-600'
           )}
         />
@@ -296,7 +296,7 @@ export default function ResizablePanel({
       
       {/* Visual feedback during drag */}
       {isDragging && (
-        <div className="absolute inset-0 bg-blue-50 dark:bg-blue-900/20 pointer-events-none opacity-50" />
+        <div className="absolute inset-0 bg-copper-100 dark:bg-copper-100 pointer-events-none opacity-50" />
       )}
     </div>
   );

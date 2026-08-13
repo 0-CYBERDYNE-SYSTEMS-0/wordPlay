@@ -24,7 +24,7 @@ export default function HelpTooltip({
           <div className={`relative group ${className}`}>
             {children}
             <div className="absolute -top-1 -right-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <HelpCircle className="h-4 w-4 text-blue-500 bg-white rounded-full" />
+              <HelpCircle className="h-4 w-4 text-[var(--wp-copper)] bg-white rounded-full" />
             </div>
           </div>
         </TooltipTrigger>
@@ -61,14 +61,14 @@ export function GuidedHint({ children, hint, onDismiss, showHint = true }: Guide
   return (
     <div className="relative">
       {children}
-      <div className="absolute top-full left-0 mt-2 p-3 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg shadow-sm max-w-xs z-10">
+      <div className="absolute top-full left-0 mt-2 p-3 bg-copper-100 dark:bg-copper-100 border border-copper-300 dark:border-copper-300 rounded-lg shadow-sm max-w-xs z-10">
         <div className="flex items-start space-x-2">
-          <div className="flex-1 text-sm text-blue-800 dark:text-blue-200">
+          <div className="flex-1 text-sm text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">
             {hint}
           </div>
           <button
             onClick={handleDismiss}
-            className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-200"
+            className="text-[var(--wp-copper)] dark:text-[var(--wp-copper)] hover:text-copper-500 dark:hover:text-copper-500"
           >
             <X className="h-4 w-4" />
           </button>

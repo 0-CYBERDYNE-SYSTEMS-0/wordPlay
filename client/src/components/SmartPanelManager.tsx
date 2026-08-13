@@ -233,7 +233,7 @@ export default function SmartPanelManager({
       {/* Desktop hover edge for auto-hide sidebar */}
       {!isMobile && currentState.sidebar === 'auto-hide' && !showSidebar && (
         <div
-          className="fixed left-0 top-0 bottom-0 z-30 w-2 cursor-pointer transition-colors hover:bg-[var(--wp-copper)]/25"
+          className="fixed left-0 top-0 bottom-0 z-30 w-2 cursor-pointer transition-colors hover:bg-copper-200"
           onMouseEnter={() => setHoverSidebar(true)}
           onMouseLeave={() => setHoverSidebar(false)}
           title="Show navigation (⌘B)"

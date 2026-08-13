@@ -392,22 +392,22 @@ export default function WebSearch({
                 <div className="space-y-6">
                   {/* AI Summary Section */}
                   {aiSummary && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="bg-copper-100 dark:bg-copper-100 border border-copper-300 dark:border-copper-300 rounded-lg p-4">
                       <div className="flex items-center mb-3">
-                        <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" />
-                        <h3 className="font-medium text-blue-900 dark:text-blue-100">AI Research Summary</h3>
+                        <Brain className="h-5 w-5 text-[var(--wp-copper)] dark:text-[var(--wp-copper)] mr-2" />
+                        <h3 className="font-medium text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">AI Research Summary</h3>
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <p className="text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-[var(--wp-copper)] dark:text-[var(--wp-copper)] leading-relaxed whitespace-pre-wrap">
                           {aiSummary}
                         </p>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                      <div className="mt-3 pt-3 border-t border-copper-300 dark:border-copper-300">
                         <button
                           onClick={() => setResearchNotes(prev => 
                             prev + `\n\n## Research Summary for "${searchQuery}"\n\n${aiSummary}\n\n---\n`
                           )}
-                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center"
+                          className="text-sm text-[var(--wp-copper)] dark:text-[var(--wp-copper)] hover:underline flex items-center"
                         >
                           <Save className="h-4 w-4 mr-1" />
                           Add summary to notes
@@ -451,7 +451,7 @@ export default function WebSearch({
                               href={cleanUrl(result.url)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-500 hover:underline flex items-center"
+                              className="text-xs text-[var(--wp-copper)] hover:underline flex items-center"
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
                               View Source
@@ -588,7 +588,7 @@ export default function WebSearch({
                                 href={source.url} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
-                                className="text-xs text-blue-500 hover:underline flex items-center mt-1"
+                                className="text-xs text-[var(--wp-copper)] hover:underline flex items-center mt-1"
                               >
                                 <ExternalLink className="h-3 w-3 mr-1" />
                                 {source.url}
