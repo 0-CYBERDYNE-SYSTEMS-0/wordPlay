@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Keyboard, Command, Brain, AlertCircle, CheckCircle, X, RotateCcw } from "lucide-react";
 import CommandPalette from "./CommandPalette";
+import MatteDots from "./MatteDots";
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -82,30 +83,22 @@ export default function Header({
           <div className="flex-1 flex justify-center">
             {isAnyProcessing && currentOperation && (
               <div 
-                className="flex items-center space-x-3 px-4 py-2 bg-copper-100 dark:bg-copper-100 rounded-full border border-copper-300 dark:border-copper-300 cursor-pointer hover:bg-copper-100 dark:hover:bg-copper-200 transition-colors"
+                className="flex items-center gap-2.5 rounded-full border border-copper-300/70 dark:border-copper-300/50 bg-copper-50/80 dark:bg-copper-100/10 px-3 py-1.5 cursor-pointer hover:bg-copper-100/80 dark:hover:bg-copper-100/20 transition-colors"
                 onClick={() => setShowDetails(!showDetails)}
               >
-                <Brain className="h-4 w-4 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]" />
-                <div className="flex flex-col items-start min-w-0">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm font-medium text-[var(--wp-copper)] dark:text-[var(--wp-copper)] truncate">
-                      {currentOperation.message}
-                    </span>
-                    {currentOperation.progress > 0 && (
-                      <Badge variant="secondary" className="text-xs">
-                        {currentOperation.progress}%
-                      </Badge>
-                    )}
-                  </div>
-                  {currentOperation.progress > 0 && (
-                    <Progress 
-                      value={currentOperation.progress} 
-                      className="w-24 h-1 mt-1"
-                    />
-                  )}
-                </div>
+                {/* Low-profile matte dot constellation — shared language for all
+                    processing states across the UI */}
+                <MatteDots size={4} gap={3.5} dotCount={4} label={currentOperation.message} />
+                <span className="text-xs font-medium text-[var(--wp-ink)]/70 dark:text-[var(--wp-ink)]/70 truncate max-w-[180px]">
+                  {currentOperation.message}
+                </span>
+                {currentOperation.progress > 0 && (
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                    {currentOperation.progress}%
+                  </Badge>
+                )}
                 {processingState.activeOperations > 1 && (
-                  <Badge variant="outline" className="text-xs">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
                     +{processingState.activeOperations - 1}
                   </Badge>
                 )}
@@ -180,7 +173,7 @@ export default function Header({
                 <div key={operation.id} className="p-3 rounded-lg border bg-card">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
-                      {operation.status === 'active' && <Brain className="h-4 w-4 text-[var(--wp-copper)] animate-pulse" />}
+                      {operation.status === 'active' && <MatteDots size={3.5} gap={3} dotCount={3} label="Active" />}
                       {operation.status === 'completed' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {operation.status === 'error' && <AlertCircle className="h-4 w-4 text-red-500" />}
                       <span className="text-sm font-medium">{operation.message}</span>

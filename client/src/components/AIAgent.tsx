@@ -5,6 +5,7 @@ import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Bot, Send, Wrench, Loader2, User, Copy, CheckCircle, AlertCircle, ChevronRight, ChevronDown, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import MatteDots from "@/components/MatteDots";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -476,7 +477,7 @@ export default function AIAgent({
                     </div>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                       <div className="flex items-center space-x-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <MatteDots size={4} gap={3} dotCount={4} label="Thinking" />
                         <span className="text-sm">Thinking...</span>
                       </div>
                     </div>

@@ -4,6 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/use-debounce';
 import AmbientAI from '@/components/AmbientAI';
 import SlashCommandsPopup from '@/components/SlashCommandsPopup';
+import MatteDots from '@/components/MatteDots';
 import {
   Save,
   CheckCircle,
@@ -342,7 +343,7 @@ export default function UltraMinimalEditor({
     if (isSaving) {
       return (
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--wp-teal)]">
-          <span className="h-3 w-3 animate-spin rounded-full border border-current border-t-transparent" />
+          <MatteDots size={3.5} gap={3} dotCount={3} label="Saving" />
           Saving
         </div>
       );
@@ -363,7 +364,7 @@ export default function UltraMinimalEditor({
     if (isDirty) {
       return (
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--wp-copper)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--wp-copper)]" />
+          <MatteDots size={3.5} gap={3} dotCount={3} active={false} label="Unsaved" />
           Unsaved
         </div>
       );
