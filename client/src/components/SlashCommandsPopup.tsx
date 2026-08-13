@@ -414,11 +414,32 @@ export default function SlashCommandsPopup({
         // Images must always land on their own line as a separate block —
         // never spliced mid-sentence. Tables/charts keep the previous behavior.
         const isImage = action === 'image';
-        const blockContent = isImage
+        // Charts are NEW blocks — they must NEVER replace existing content
+        // (the user's selection may be the whole doc, which would swallow
+        // text/images). Always insert at the caret or append at the end.
+        const isChart = action === 'chart';
+        const blockContent = (isImage || isChart)
           ? `\n\n${generatedContent}\n\n`
           : generatedContent;
 
-        if (selectionInfo.hasSelection) {
+        // Charts + images: always insert at cursor / end — never replace.
+        if (isChart || isImage) {
+          const textarea = editorRef.current;
+          if (textarea) {
+            const cursorPos = textarea.selectionStart;
+            const newContent = content.slice(0, cursorPos) + blockContent + content.slice(cursorPos);
+            setContent(newContent);
+
+            setTimeout(() => {
+              const newPosition = cursorPos + blockContent.length;
+              textarea.setSelectionRange(newPosition, newPosition);
+              textarea.focus();
+            }, 0);
+          } else {
+            const newContent = content + (content.endsWith('\n') ? '' : '\n\n') + generatedContent;
+            setContent(newContent);
+          }
+        } else if (selectionInfo.hasSelection) {
           const { start, end } = selectionInfo;
           if (start !== undefined && end !== undefined) {
             const newContent = content.slice(0, start) + blockContent + content.slice(end);

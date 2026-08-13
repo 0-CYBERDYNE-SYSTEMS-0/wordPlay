@@ -26,6 +26,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { LabelLayout } from 'echarts/features';
 import { useSettings } from '@/providers/SettingsProvider';
 import { exportChart, ExportOptions } from '@/utils/export-utils';
+import { lenientParse } from '@/lib/lenientJson';
 
 echarts.use([
   BarChart,
@@ -150,7 +151,8 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
     try {
       let chartConfig;
 
-      // Enhanced config parsing with validation
+      // Enhanced config parsing with validation — LLM output is often
+      // near-JSON (unquoted keys, trailing commas); use the lenient parser.
       if (typeof config === 'string') {
         let cleanConfig = config.trim();
         cleanConfig = cleanConfig.replace(/^```[a-zA-Z]*\n/, '').replace(/\n```$/, '');
@@ -159,7 +161,7 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
           cleanConfig = jsonMatch[0];
         }
         try {
-          chartConfig = JSON.parse(cleanConfig);
+          chartConfig = lenientParse(cleanConfig);
         } catch (parseError) {
           throw new Error(`Invalid JSON configuration: ${parseError}`);
         }
