@@ -41,6 +41,8 @@ async function callOllama(model: string, systemPrompt: string, userPrompt: strin
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(buildOllamaRequestBody(model, systemPrompt, userPrompt, false)),
+      // Bound slow local models so commands fail honestly instead of hanging.
+      signal: AbortSignal.timeout(parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '180000', 10)),
     });
 
     if (!response.ok) {

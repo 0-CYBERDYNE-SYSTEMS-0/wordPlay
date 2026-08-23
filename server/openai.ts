@@ -319,7 +319,11 @@ export async function callOllama(model: string, prompt: string, requestJson: boo
     const res = await fetch(`${ollamaUrl}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(requestBody)
+      body: JSON.stringify(requestBody),
+      // Bound the request — without this, a slow local model (e.g. a large
+      // chart/table prompt on a small Ollama model) hangs until undici's
+      // ~5-minute header timeout and the UI shows an endless spinner.
+      signal: AbortSignal.timeout(AI_REQUEST_TIMEOUT_MS)
     });
     
     if (!res.ok) {

@@ -451,8 +451,15 @@ export default function Home() {
       {/* Modals */}
       <WelcomeModal
         isOpen={welcomeModalOpen}
-        onClose={() => setWelcomeModalOpen(false)}
+        onClose={() => {
+          // Closing counts as done — otherwise the welcome modal re-appears
+          // on every reload and can never be permanently dismissed.
+          updateSettings({ hasCompletedOnboarding: true });
+          setWelcomeModalOpen(false);
+        }}
         onComplete={(userType) => {
+          // Mark onboarding complete so the modal doesn't return on reload.
+          updateSettings({ hasCompletedOnboarding: true });
           // Adjust default experience based on user preference
           if (userType === 'simple') {
             setPanelState({
@@ -498,6 +505,7 @@ export default function Home() {
           currentDocument={documentData}
           llmProvider={settings.llmProvider}
           llmModel={settings.llmModel}
+          autonomyLevel={settings.autonomyLevel}
           openaiApiKey={settings.openaiApiKey}
           geminiApiKey={settings.geminiApiKey}
           onToolResult={(result) => {

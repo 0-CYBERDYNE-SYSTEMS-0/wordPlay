@@ -15,6 +15,7 @@ interface AIAgentProps {
   currentDocument?: any;
   llmProvider?: 'openai' | 'ollama' | 'gemini';
   llmModel?: string;
+  autonomyLevel?: 'conservative' | 'moderate' | 'aggressive';
   openaiApiKey?: string;
   geminiApiKey?: string;
   onToolResult?: (result: any) => void;
@@ -62,6 +63,7 @@ export default function AIAgent({
   currentDocument, 
   llmProvider,
   llmModel,
+  autonomyLevel,
   openaiApiKey,
   geminiApiKey,
   onToolResult,
@@ -167,6 +169,7 @@ export default function AIAgent({
         const res = await apiRequest("POST", "/api/agent/intelligent-request", {
           request,
           context: agentContext,
+          autonomyLevel: autonomyLevel ?? 'moderate',
           llmProvider,
           llmModel,
           openaiApiKey,
