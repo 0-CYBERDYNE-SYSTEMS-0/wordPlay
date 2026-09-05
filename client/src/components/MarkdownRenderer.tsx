@@ -1,7 +1,10 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import remarkMath from 'remark-math';
 import rehypeRaw from 'rehype-raw';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // Light build: register only the languages artifacts actually use (full Prism pack is ~400kB)
@@ -39,6 +42,7 @@ SyntaxHighlighter.registerLanguage('markdown', markdown);
 SyntaxHighlighter.registerLanguage('md', markdown);
 import { useSettings } from '@/providers/SettingsProvider';
 import Chart from './Chart';
+import MermaidDiagram from './MermaidDiagram';
 
 interface MarkdownRendererProps {
   content: string;
@@ -53,8 +57,8 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
   return (
     <div className={`prose prose-gray dark:prose-invert max-w-none ${className}`}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeRaw]}
+        remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}
+        rehypePlugins={[rehypeRaw, rehypeKatex]}
         components={{
           // Custom table styling
           table: ({ children }) => (
@@ -136,11 +140,16 @@ export default function MarkdownRenderer({ content, className = "" }: MarkdownRe
             </blockquote>
           ),
           
-          // Code blocks with syntax highlighting and chart rendering
+          // Code blocks with syntax highlighting, chart and mermaid rendering
           code: ({ node, inline, className, children, ...props }: any) => {
             const match = /language-(\w+)/.exec(className || '');
             const language = match ? match[1] : '';
-            
+
+            // Handle mermaid diagram blocks (any LLM can emit these as plain text)
+            if (!inline && language === 'mermaid') {
+              return <MermaidDiagram code={String(children).replace(/\n$/, '')} isDark={isDark} />;
+            }
+
             // Handle chart code blocks
             if (!inline && language === 'chart') {
               try {
