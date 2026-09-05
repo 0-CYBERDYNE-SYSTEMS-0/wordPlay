@@ -25,47 +25,69 @@ import {
   analyzeDocument 
 } from "./file-operations";
 import { z } from "zod";
+import {
+  registerAuthRoutes,
+  requireAuth,
+  resolveUserId,
+  isAuthEnabled,
+} from "./auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
+
+  // When auth is enabled, ownership is enforced: a user may only read/write
+  // projects they own (documents and sources inherit ownership via project).
+  const ownsProject = async (projectId: number, req: Request): Promise<boolean> => {
+    if (!isAuthEnabled()) return true;
+    const project = await storage.getProject(projectId);
+    return !!project && project.userId === resolveUserId(req);
+  };
+
+  // Auth routes first so they stay reachable without a session, then the
+  // guard for everything else under /api and /uploads. Pass-through when
+  // AUTH_PASSWORD is unset (single-user local mode).
+  registerAuthRoutes(app);
+  app.use("/api", requireAuth);
+  app.use("/uploads", requireAuth);
 
   // AI clients initialize lazily from server env — see ai-content-generation.ts.
 
   // Serve uploaded images
   app.use('/uploads', express.static('public/uploads'));
-  
+
   // We've replaced WebSockets with direct API calls
   // This simplifies the architecture and avoids connection issues
 
   // API Routes
   // Projects
   app.get("/api/projects", async (req: Request, res: Response) => {
-    const userId = 1; // Using default user for now
+    const userId = resolveUserId(req);
     const projects = await storage.getProjects(userId);
     res.json(projects);
   });
-  
+
   app.get("/api/projects/:id", async (req: Request, res: Response) => {
     const project = await storage.getProject(parseInt(req.params.id));
-    if (!project) {
+    if (!project || !(await ownsProject(project.id, req))) {
       return res.status(404).json({ message: "Project not found" });
     }
     res.json(project);
   });
-  
+
   app.post("/api/projects", async (req: Request, res: Response) => {
     const projectSchema = z.object({
-      userId: z.number().default(1), // Default user ID
+      userId: z.number().default(1), // Overridden server-side below
       name: z.string().min(1),
       type: z.string().min(1),
       style: z.string().min(1).default("Professional") // Default style
     });
-    
+
     try {
       console.log("Received project data:", req.body); // Debug log
       const validatedData = projectSchema.parse(req.body);
+      validatedData.userId = resolveUserId(req); // The session user owns what they create
       console.log("Validated project data:", validatedData); // Debug log
-      
+
       const project = await storage.createProject(validatedData);
       res.status(201).json(project);
     } catch (error: any) {
@@ -93,6 +115,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const validatedData = projectSchema.parse(req.body);
+      if (!(await ownsProject(parseInt(req.params.id), req))) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       const updatedProject = await storage.updateProject(parseInt(req.params.id), validatedData);
       
       if (!updatedProject) {
@@ -106,6 +131,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.delete("/api/projects/:id", async (req: Request, res: Response) => {
+    if (!(await ownsProject(parseInt(req.params.id), req))) {
+      return res.status(404).json({ message: "Project not found" });
+    }
     const deleted = await storage.deleteProject(parseInt(req.params.id));
     if (!deleted) {
       return res.status(404).json({ message: "Project not found" });
@@ -115,13 +143,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Documents
   app.get("/api/projects/:projectId/documents", async (req: Request, res: Response) => {
+    if (!(await ownsProject(parseInt(req.params.projectId), req))) {
+      return res.status(404).json({ message: "Project not found" });
+    }
     const documents = await storage.getDocuments(parseInt(req.params.projectId));
     res.json(documents);
   });
   
   app.get("/api/documents/:id", async (req: Request, res: Response) => {
     const document = await storage.getDocument(parseInt(req.params.id));
-    if (!document) {
+    if (!document || !(await ownsProject(document.projectId, req))) {
       return res.status(404).json({ message: "Document not found" });
     }
     res.json(document);
@@ -138,6 +169,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const validatedData = documentSchema.parse(req.body);
+      if (!(await ownsProject(validatedData.projectId, req))) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       
       // If word count wasn't provided, calculate it
       if (!validatedData.wordCount) {
@@ -165,14 +199,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { ifUpdatedAt, ...validatedData } = documentSchema.parse(req.body);
       const id = parseInt(req.params.id);
+      const existing = await storage.getDocument(id);
+      if (!existing || !(await ownsProject(existing.projectId, req))) {
+        return res.status(404).json({ message: "Document not found" });
+      }
 
       // Conflict check: if the document changed since the client last saw it,
       // refuse the blind overwrite instead of silently clobbering the other editor.
       if (ifUpdatedAt) {
-        const existing = await storage.getDocument(id);
-        if (!existing) {
-          return res.status(404).json({ message: "Document not found" });
-        }
         const serverUpdatedAt = new Date(existing.updatedAt).toISOString();
         const clientUpdatedAt = new Date(ifUpdatedAt).toISOString();
         if (serverUpdatedAt !== clientUpdatedAt) {
@@ -201,7 +235,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.delete("/api/documents/:id", async (req: Request, res: Response) => {
-    const deleted = await storage.deleteDocument(parseInt(req.params.id));
+    const document = await storage.getDocument(parseInt(req.params.id));
+    if (!document || !(await ownsProject(document.projectId, req))) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+    const deleted = await storage.deleteDocument(document.id);
     if (!deleted) {
       return res.status(404).json({ message: "Document not found" });
     }
@@ -210,6 +248,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Sources
   app.get("/api/projects/:projectId/sources", async (req: Request, res: Response) => {
+    if (!(await ownsProject(parseInt(req.params.projectId), req))) {
+      return res.status(404).json({ message: "Project not found" });
+    }
     const sources = await storage.getSources(parseInt(req.params.projectId));
     res.json(sources);
   });
@@ -225,6 +266,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     try {
       const validatedData = sourceSchema.parse(req.body);
+      if (!(await ownsProject(validatedData.projectId, req))) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       const source = await storage.createSource(validatedData);
       res.status(201).json(source);
     } catch (error) {
@@ -233,7 +277,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.delete("/api/sources/:id", async (req: Request, res: Response) => {
-    const deleted = await storage.deleteSource(parseInt(req.params.id));
+    const source = await storage.getSource(parseInt(req.params.id));
+    if (!source || !(await ownsProject(source.projectId, req))) {
+      return res.status(404).json({ message: "Source not found" });
+    }
+    const deleted = await storage.deleteSource(source.id);
     if (!deleted) {
       return res.status(404).json({ message: "Source not found" });
     }
@@ -331,7 +379,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (isComplexEdit) {
         // Route to agent for targeted editing
         const { createAgent } = await import("./ai-agent");
-        const agent = createAgent(1);
+        const agent = createAgent(resolveUserId(req));
         
         // Update agent context with current content
         await agent.updateContext({
@@ -780,7 +828,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Custom Command routes
   app.get("/api/custom-commands", async (req: Request, res: Response) => {
-    const userId = 1; // Using default user for now
+    const userId = resolveUserId(req);
     try {
       const commands = await storage.getCustomCommands(userId);
       res.json(commands);
@@ -791,7 +839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/custom-commands", async (req: Request, res: Response) => {
-    const userId = 1; // Using default user for now
+    const userId = resolveUserId(req);
     
     const commandSchema = z.object({
       name: z.string().min(1, "Name is required"),
@@ -863,6 +911,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
+      const existingCommand = await storage.getCustomCommand(commandId);
+      if (!existingCommand || (isAuthEnabled() && existingCommand.userId !== resolveUserId(req))) {
+        return res.status(404).json({ message: "Custom command not found" });
+      }
       const command = await storage.updateCustomCommand(commandId, validatedData);
       
       if (!command) {
@@ -886,6 +938,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const commandId = parseInt(req.params.id);
     
     try {
+      const existingCommand = await storage.getCustomCommand(commandId);
+      if (!existingCommand || (isAuthEnabled() && existingCommand.userId !== resolveUserId(req))) {
+        return res.status(404).json({ message: "Custom command not found" });
+      }
       const deleted = await storage.deleteCustomCommand(commandId);
       
       if (!deleted) {
@@ -1036,7 +1092,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const agent = createAgent(1); // Default user ID
+      const agent = createAgent(resolveUserId(req));
       
       // Update agent context if provided
       if (context) {
@@ -1059,7 +1115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     try {
-      const agent = createAgent(1); // Default user ID
+      const agent = createAgent(resolveUserId(req));
       
       // Update agent context if provided
       if (context) {
@@ -1077,7 +1133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { createAgent } = await import("./ai-agent");
     
     try {
-      const agent = createAgent(1);
+      const agent = createAgent(resolveUserId(req));
       const tools = agent.getAvailableTools();
       res.json({ tools });
     } catch (error: any) {
@@ -1089,7 +1145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { createAgent } = await import("./ai-agent");
     
     try {
-      const agent = createAgent(1);
+      const agent = createAgent(resolveUserId(req));
       const summary = agent.getContextSummary();
       res.json({ summary });
     } catch (error: any) {
@@ -1114,7 +1170,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
 
     try {
-      const agent = createAgent(1); // Default user ID
+      const agent = createAgent(resolveUserId(req));
 
       // Set autonomy level for maximum capability
       if (autonomyLevel) {
