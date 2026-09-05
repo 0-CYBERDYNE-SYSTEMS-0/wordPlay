@@ -9,7 +9,7 @@ Guidance for AI coding agents working in this repository. Assumes no prior knowl
 - License: MIT. Package: `wordplay@1.0.0`, ESM (`"type": "module"`).
 - Repo origin: Replit project (`.replit` config present); deployed via Replit autoscale (`npm run build` then `npm run start`).
 - UI component system: shadcn/ui ("new-york" style, neutral base color) — see `components.json`.
-- Additional docs: `README.md` (feature overview + API reference), `CLAUDE.md` (similar agent guidance), `LLM_PIPELINE_FLOW.md` (AI pipeline details), `CONTRIBUTING.md`, `AGENT_FIXES_SUMMARY.md`, `HANDOFF.md` (prioritized UX fix queue from the 2026-08 QA pass — read before touching the editor or AI routing; the current branch `feature/ultra-minimalist-writing` is mid-overhaul of these areas).
+- Additional docs: `README.md` (feature overview + API reference), `CLAUDE.md` (similar agent guidance), `LLM_PIPELINE_FLOW.md` (AI pipeline details), `CONTRIBUTING.md`, `AGENT_FIXES_SUMMARY.md`, `HANDOFF.md` (prioritized UX fix queue from the 2026-08 QA pass — read before touching the editor or AI routing; the current branch `feature/ultra-minimalist-writing` is mid-overhaul of these areas), `SHIP_READINESS.md` (2026-09 pre-ship QA/PM go-no-go report — verdict GO with conditions; live e2e evidence and HANDOFF queue status: 11 DONE / 1 PARTIAL, only FIX-08 restore-last-open-doc remains).
 
 ## Technology Stack
 
@@ -92,6 +92,7 @@ dist/                    Build output (dist/public client assets, dist/index.js 
 
 - **No formal test runner** is configured. `npm run check` (tsc) is the baseline correctness gate — run it after every change.
 - Integration checks are ad-hoc Node scripts at the repo root named `test-<area>.js` (e.g. `node test-openai-agent.js`, `node test-gemini-simple.js`). They expect `.env` configured and the server running (`npm run dev:server`).
+- `node test-ship-readiness.js` is the committed 18-check e2e gate (CRUD, all slash commands, NDJSON streaming, image gen, agent tool loop, search honesty, text ops). Run it against a live dev server; honors `BASE_URL` (default `http://localhost:5001`) and `QA_MODEL` (default `qwen3.5:0.8b`).
 - When adding coverage for a feature, follow the same pattern: create `test-<area>.js` at the root that exercises the running API.
 
 ## Security & Configuration
@@ -104,6 +105,7 @@ dist/                    Build output (dist/public client assets, dist/index.js 
   - `MFLUX_BRIDGE_URL` (default `http://127.0.0.1:4030`), `MFLUX_STEPS` (default 1) — local image generation
   - `OLLAMA_URL` (default `http://localhost:11434`) — local models
   - `GEMINI_IMAGE_MODEL` — must be an image-capable Gemini model (default `gemini-3.1-flash-lite-image`)
+  - `AI_REQUEST_TIMEOUT_MS` (default `180000`) — bounds all AI requests (OpenAI, Ollama, agent loop, slash commands) in `server/openai.ts`, `server/ai-agent.ts`, `server/slash-commands-minimal.ts`
   - `NODE_ENV`, `PORT` (default 5001), `HOST` (default localhost)
 - DB SSL is enabled only when `NODE_ENV=production` (see `server/config.ts`).
 
