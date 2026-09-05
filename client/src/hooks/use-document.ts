@@ -13,6 +13,19 @@ interface UseDocumentProps {
   autosaveInterval?: number;
 }
 
+// Thrown when the server refuses an autosave because another editor changed
+// the document first (HTTP 409 + current server copy in the body).
+export class DocumentConflictError extends Error {
+  currentDocument: any;
+  constructor(currentDocument: any) {
+    super("This document changed on the server while you were editing.");
+    this.currentDocument = currentDocument;
+  }
+}
+
+const toIso = (value: unknown): string | undefined =>
+  value ? new Date(value as string | Date).toISOString() : undefined;
+
 export function useDocument({
   documentId,
   projectId,
@@ -32,6 +45,16 @@ export function useDocument({
   const [lastSavedContent, setLastSavedContent] = useState(initialContent);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  // Server document that a save refused to overwrite (409) — awaiting resolution
+  const [conflict, setConflict] = useState<{ serverDocument: Document } | null>(null);
+  // updatedAt of the last copy we know the server has (basis for conflict checks)
+  const [lastSavedUpdatedAt, setLastSavedUpdatedAt] = useState<string | undefined>(undefined);
+  const lastSavedUpdatedAtRef = useRef<string | undefined>(undefined);
+  const markServerTimestamp = useCallback((value: unknown) => {
+    const iso = toIso(value);
+    lastSavedUpdatedAtRef.current = iso;
+    setLastSavedUpdatedAt(iso);
+  }, []);
   
   // Track if we've initialized from server data
   const hasInitialized = useRef(false);
@@ -114,12 +137,14 @@ export function useDocument({
   const debouncedContent = useDebounce(content, autosaveInterval);
   const debouncedTitle = useDebounce(title, autosaveInterval);
   
-  // Fetch document if documentId is provided
+  // Fetch document if documentId is provided. Polls lightly so teammates'
+  // changes surface while the document is open (adoption is gated on !isDirty).
   const { data: documentData } = useQuery<Document>({
     queryKey: documentId ? [`/api/documents/${documentId}`] : ['no-document'],
-    enabled: !!documentId
+    enabled: !!documentId,
+    refetchInterval: 15000,
   });
-  
+
   // Update local state when document data is fetched
   useEffect(() => {
     if (documentData && !hasInitialized.current) {
@@ -127,11 +152,30 @@ export function useDocument({
       setContent(documentData.content);
       setLastSavedTitle(documentData.title);
       setLastSavedContent(documentData.content);
+      markServerTimestamp(documentData.updatedAt);
       setIsDirty(false);
       setSaveError(null);
       hasInitialized.current = true;
     }
-  }, [documentData]);
+  }, [documentData, markServerTimestamp]);
+
+  // A teammate changed the document while we have no local edits — adopt the
+  // server version so the open editor stays current instead of going stale.
+  useEffect(() => {
+    if (
+      documentData &&
+      hasInitialized.current &&
+      !isDirty &&
+      !conflict &&
+      toIso(documentData.updatedAt) !== lastSavedUpdatedAtRef.current
+    ) {
+      setTitle(documentData.title);
+      setContent(documentData.content);
+      setLastSavedTitle(documentData.title);
+      setLastSavedContent(documentData.content);
+      markServerTimestamp(documentData.updatedAt);
+    }
+  }, [documentData, isDirty, conflict, markServerTimestamp]);
   
   // Track dirty state when content or title changes
   useEffect(() => {
@@ -159,6 +203,7 @@ export function useDocument({
       queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/documents`] });
       setLastSavedTitle(data.title);
       setLastSavedContent(data.content);
+      markServerTimestamp(data.updatedAt);
       setIsDirty(false);
       setSaveError(null);
       saveRetryCount.current = 0;
@@ -178,20 +223,41 @@ export function useDocument({
       });
     }
   });
-  
-  // Update document mutation
+
+  // Update document mutation — uses a raw fetch so a 409 conflict body
+  // (with the server's current copy) can be read and surfaced.
   const updateDocumentMutation = useMutation({
-    mutationFn: async (data: { id: number; title?: string; content?: string }) => {
-      const res = await apiRequest("PUT", `/api/documents/${data.id}`, {
-        title: data.title,
-        content: data.content
+    mutationFn: async (data: { id: number; title?: string; content?: string; force?: boolean }) => {
+      const res = await fetch(`/api/documents/${data.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: data.title,
+          content: data.content,
+          // Omit the precondition when explicitly forcing an overwrite.
+          ifUpdatedAt: data.force ? undefined : lastSavedUpdatedAtRef.current,
+        }),
       });
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        throw new DocumentConflictError(body.currentDocument);
+      }
+      if (!res.ok) {
+        let message = `Save failed (${res.status})`;
+        try {
+          const body = await res.json();
+          if (body?.message) message = body.message;
+        } catch { /* non-JSON body */ }
+        throw new Error(message);
+      }
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/documents/${data.id}`] });
       setLastSavedTitle(data.title);
       setLastSavedContent(data.content);
+      markServerTimestamp(data.updatedAt);
       setIsDirty(false);
       setSaveError(null);
       saveRetryCount.current = 0;
@@ -199,9 +265,20 @@ export function useDocument({
       return data;
     },
     onError: (error) => {
+      if (error instanceof DocumentConflictError && error.currentDocument) {
+        // Don't count a conflict as a save failure and don't retry into it —
+        // surface both versions and let the writer resolve it.
+        setConflict({ serverDocument: error.currentDocument });
+        toast({
+          title: "Document changed by someone else",
+          description: "Your version is kept. Resolve the conflict to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
       setSaveError(error.message);
       saveRetryCount.current++;
-      
+
       // Disable autosave after max retries to prevent spam
       if (saveRetryCount.current >= maxRetries) {
         setAutoSaveEnabled(false);
@@ -219,6 +296,50 @@ export function useDocument({
       }
     }
   });
+
+  // Resolve a 409 conflict: adopt the server copy, or force-overwrite with ours.
+  const resolveConflict = useCallback(async (choice: "server" | "mine") => {
+    if (!conflict) return;
+    const serverDoc = conflict.serverDocument;
+    if (choice === "server") {
+      setTitle(serverDoc.title);
+      setContent(serverDoc.content);
+      setLastSavedTitle(serverDoc.title);
+      setLastSavedContent(serverDoc.content);
+      markServerTimestamp(serverDoc.updatedAt);
+      setIsDirty(false);
+      undoStackRef.current = [];
+      redoStackRef.current = [];
+      toast({ title: "Server version loaded", description: "Your in-progress edits were replaced by the teammate's version." });
+    } else {
+      // Force write: no precondition. Update our known server timestamp on success.
+      if (documentId) {
+        try {
+          const res = await fetch(`/api/documents/${documentId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ title, content }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setLastSavedTitle(data.title);
+            setLastSavedContent(data.content);
+            markServerTimestamp(data.updatedAt);
+            setIsDirty(false);
+            saveRetryCount.current = 0;
+            queryClient.invalidateQueries({ queryKey: [`/api/documents/${documentId}`] });
+            toast({ title: "Your version saved", description: "Your edits overwrote the server copy." });
+          } else {
+            toast({ title: "Could not save your version", description: `Server responded ${res.status}.`, variant: "destructive" });
+          }
+        } catch (err: any) {
+          toast({ title: "Could not save your version", description: err?.message || "Network error.", variant: "destructive" });
+        }
+      }
+    }
+    setConflict(null);
+  }, [conflict, documentId, title, content, markServerTimestamp, queryClient, toast]);
   
   // Save document (create or update)
   const saveDocument = async (isManualSave: boolean = false) => {
@@ -307,6 +428,8 @@ export function useDocument({
     saveError,
     autoSaveEnabled,
     saveDocument: (isManual = true) => saveDocument(isManual),
-    documentData
+    documentData,
+    conflict,
+    resolveConflict
   };
 }

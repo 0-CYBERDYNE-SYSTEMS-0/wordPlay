@@ -10,6 +10,7 @@ import AIAgent from "@/components/AIAgent";
 import SettingsPanel from "@/components/SettingsPanel";
 import WelcomeModal from "@/components/WelcomeModal";
 import AgentApplyDialog from "@/components/AgentApplyDialog";
+import DocumentConflictDialog from "@/components/DocumentConflictDialog";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 
@@ -120,7 +121,9 @@ export default function Home() {
     saveError,
     autoSaveEnabled,
     saveDocument,
-    documentData
+    documentData,
+    conflict,
+    resolveConflict
   } = useDocument({
     documentId: activeDocumentId || undefined,
     projectId: activeProjectId || undefined,
@@ -700,8 +703,7 @@ export default function Home() {
       />
 
       <AgentApplyDialog
-        open={!!pendingAgentApply}
-        tool={pendingAgentApply?.tool || ""}
+        open={!!pendingAgentApply}        tool={pendingAgentApply?.tool || ""}
         reason={pendingAgentApply?.reason}
         before={pendingAgentApply?.before || ""}
         after={pendingAgentApply?.after || ""}
@@ -726,6 +728,13 @@ export default function Home() {
           setPendingAgentApply(null);
           toast({ title: "Rewrite dismissed", description: "Your document was left untouched." });
         }}
+      />
+
+      <DocumentConflictDialog
+        conflict={conflict}
+        localTitle={title}
+        onTakeServer={() => resolveConflict("server")}
+        onKeepMine={() => resolveConflict("mine")}
       />
       
       {/* AI Agent - Only show in expert mode for power users */}

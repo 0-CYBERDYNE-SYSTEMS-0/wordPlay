@@ -158,23 +158,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       title: z.string().min(1).optional(),
       content: z.string().optional(),
       styleMetrics: z.any().optional(),
-      wordCount: z.number().optional()
+      wordCount: z.number().optional(),
+      // Optimistic concurrency: the updatedAt the client based its edit on.
+      // Omit to force the write (explicit "overwrite" resolution).
+      ifUpdatedAt: z.string().optional()
     });
-    
+
     try {
-      const validatedData = documentSchema.parse(req.body);
-      
+      const { ifUpdatedAt, ...validatedData } = documentSchema.parse(req.body);
+      const id = parseInt(req.params.id);
+
+      // Conflict check: if the document changed since the client last saw it,
+      // refuse the blind overwrite instead of silently clobbering the other editor.
+      if (ifUpdatedAt) {
+        const existing = await storage.getDocument(id);
+        if (!existing) {
+          return res.status(404).json({ message: "Document not found" });
+        }
+        const serverUpdatedAt = new Date(existing.updatedAt).toISOString();
+        const clientUpdatedAt = new Date(ifUpdatedAt).toISOString();
+        if (serverUpdatedAt !== clientUpdatedAt) {
+          return res.status(409).json({
+            message: "This document changed on the server while you were editing.",
+            currentDocument: existing
+          });
+        }
+      }
+
       // If content was updated but word count wasn't, calculate the new word count
       if (validatedData.content && !validatedData.wordCount) {
         validatedData.wordCount = countWords(validatedData.content);
       }
-      
-      const updatedDocument = await storage.updateDocument(parseInt(req.params.id), validatedData);
-      
+
+      const updatedDocument = await storage.updateDocument(id, validatedData);
+
       if (!updatedDocument) {
         return res.status(404).json({ message: "Document not found" });
       }
-      
+
       res.json(updatedDocument);
     } catch (error) {
       res.status(400).json({ message: "Invalid document data" });
