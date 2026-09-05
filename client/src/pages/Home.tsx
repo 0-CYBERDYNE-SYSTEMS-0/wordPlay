@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/Sidebar";
 import UltraMinimalEditor from "@/components/UltraMinimalEditor";
 import ContextPanel from "@/components/ContextPanel";
@@ -9,6 +9,9 @@ import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
 import SettingsPanel from "@/components/SettingsPanel";
 import WelcomeModal from "@/components/WelcomeModal";
+import AgentApplyDialog from "@/components/AgentApplyDialog";
+import { apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
 
 import { useDocument } from "@/hooks/use-document";
 import { useSettings } from "@/providers/SettingsProvider";
@@ -25,6 +28,7 @@ interface PanelState {
 export default function Home() {
   const { settings, updateSettings } = useSettings();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   
   // UI State Management - Ultra Minimalist Approach
   const [panelState, setPanelState] = useState<PanelState>({
@@ -107,7 +111,10 @@ export default function Home() {
     title,
     setTitle,
     content,
-    setContent,
+    setContentTyping,
+    applyWithHistory,
+    undoContent,
+    redoContent,
     isSaving,
     isDirty,
     saveError,
@@ -119,6 +126,15 @@ export default function Home() {
     projectId: activeProjectId || undefined,
     autosaveInterval: settings.autosaveInterval
   });
+
+  // Pending whole-document agent rewrite awaiting writer approval
+  const [pendingAgentApply, setPendingAgentApply] = useState<{
+    tool: string;
+    reason?: string;
+    before: string;
+    after: string;
+    newTitle?: string;
+  } | null>(null);
 
   // Stable writing-context updates (no lastActivity feedback loop)
   useEffect(() => {
@@ -194,6 +210,185 @@ export default function Home() {
     setActiveTab("editor");
     setFocusMode("writing");
   };
+
+  // ---------------------------------------------------------------------------
+  // Agent → editor integration.
+  // Every agent write goes through the undoable apply-path; whole-document
+  // rewrites additionally require the writer's approval before anything changes.
+  // ---------------------------------------------------------------------------
+  const handleAgentToolResult = useCallback((result: any) => {
+    if (!result.success) {
+      toast({
+        title: "Tool Error",
+        description: result.error || "Tool execution failed",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const insertUndoable = (text: string, title: string, description: string) => {
+      applyWithHistory((prev) => `${prev}\n\n${text}`);
+      toast({ title, description: `${description} Undo with ⌘Z.` });
+    };
+
+    switch (result.tool) {
+      case 'update_document':
+        if (result.data?.content !== undefined) {
+          setPendingAgentApply({
+            tool: result.tool,
+            before: content,
+            after: result.data.content,
+            newTitle: result.data.title || undefined,
+            reason: "The agent proposed a new version of this document.",
+          });
+        }
+        break;
+
+      case 'replace_in_text':
+        if (result.data?.result !== undefined) {
+          setPendingAgentApply({
+            tool: result.tool,
+            before: content,
+            after: result.data.result,
+            reason: `Replaces ${result.data.count ?? 0} instance(s).`,
+          });
+        }
+        break;
+
+      case 'generate_text':
+        if (result.data && typeof result.data === 'string') {
+          insertUndoable(result.data, "Text Generated", "AI generated content was added at the end of the document.");
+        }
+        break;
+
+      case 'process_text_command':
+        if (result.data && typeof result.data === 'string') {
+          setPendingAgentApply({
+            tool: result.tool,
+            before: content,
+            after: result.data,
+            reason: "Applied a text command to the whole document.",
+          });
+        }
+        break;
+
+      case 'edit_current_document':
+        if (result.data?.operation && result.data?.content !== undefined) {
+          if (result.data.operation === 'replace') {
+            setPendingAgentApply({
+              tool: result.tool,
+              before: content,
+              after: result.data.content,
+              reason: "The agent proposed replacing the document.",
+            });
+          } else if (result.data.operation === 'append') {
+            applyWithHistory((prev) => prev + result.data.content);
+            toast({ title: "Editor Updated", description: "Content appended. Undo with ⌘Z." });
+          } else if (result.data.operation === 'prepend') {
+            applyWithHistory((prev) => result.data.content + prev);
+            toast({ title: "Editor Updated", description: "Content prepended. Undo with ⌘Z." });
+          } else if (result.data.operation === 'insert') {
+            applyWithHistory((prev) => `${prev}\n\n${result.data.content}`);
+            toast({ title: "Editor Updated", description: "Content inserted at the end. Undo with ⌘Z." });
+          }
+        }
+        break;
+
+      case 'replace_current_content':
+        if (result.data?.content !== undefined) {
+          setPendingAgentApply({
+            tool: result.tool,
+            before: content,
+            after: result.data.content,
+            reason: result.data.reason || "The agent proposed replacing the document content.",
+          });
+        }
+        break;
+
+      case 'edit_text_with_pattern':
+        if (result.data?.content !== undefined) {
+          setPendingAgentApply({
+            tool: result.tool,
+            before: content,
+            after: result.data.content,
+            reason: result.data.description || `Replaces ${result.data.count ?? 0} pattern match(es).`,
+          });
+        }
+        break;
+
+      case 'improve_current_text':
+        if (result.data?.content !== undefined) {
+          setPendingAgentApply({
+            tool: result.tool,
+            before: content,
+            after: result.data.content,
+            reason: result.data.description || "The agent proposed an improved version.",
+          });
+        }
+        break;
+
+      case 'create_document':
+        if (result.data?.title && result.data?.content !== undefined) {
+          // Create a real separate document — never overwrite the one being edited.
+          if (!activeProjectId) {
+            toast({
+              title: "No project open",
+              description: "Open or create a project first, then ask the agent again.",
+              variant: "destructive",
+            });
+            break;
+          }
+          apiRequest("POST", "/api/documents", {
+            projectId: activeProjectId,
+            title: result.data.title,
+            content: result.data.content,
+          })
+            .then((res) => res.json())
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: [`/api/projects/${activeProjectId}/documents`] });
+              toast({
+                title: "Document Created",
+                description: `“${result.data.title}” was added to the project. Your current document is untouched.`,
+              });
+            })
+            .catch((err) => {
+              toast({ title: "Could not create document", description: err.message, variant: "destructive" });
+            });
+        }
+        break;
+
+      default: {
+        // Unknown tools never touch the document silently. Offer an explicit,
+        // undoable insert when the result is document-worthy text.
+        const text = typeof result.data === 'string' ? result.data : null;
+        if (text && text.length > 20) {
+          toast({
+            title: "Agent result ready",
+            description: `${result.tool} produced content. Insert it into the document?`,
+            action: (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  applyWithHistory((prev) => `${prev}\n\n${text}`);
+                  toast({ title: "Inserted", description: "Agent content added at the end. Undo with ⌘Z." });
+                }}
+              >
+                Insert
+              </Button>
+            ),
+            duration: 15000,
+          });
+        } else {
+          toast({
+            title: "Agent tool completed",
+            description: result.message || `${result.tool} finished — see the agent panel for details.`,
+          });
+        }
+        break;
+      }
+    }
+  }, [activeProjectId, applyWithHistory, content, queryClient, toast]);
 
   // Smart focus mode switching based on user activity
   useEffect(() => {
@@ -318,7 +513,10 @@ export default function Home() {
       title,
       setTitle,
       content,
-      setContent,
+      setContentTyping,
+      applyWithHistory,
+      undoContent,
+      redoContent,
       isSaving,
       isDirty,
       saveError,
@@ -418,7 +616,10 @@ export default function Home() {
           title={title}
           setTitle={setTitle}
           content={content}
-          setContent={setContent}
+          setContentTyping={setContentTyping}
+          applyWithHistory={applyWithHistory}
+          undoContent={undoContent}
+          redoContent={redoContent}
           isSaving={isSaving}
           isDirty={isDirty}
           saveError={saveError}
@@ -497,6 +698,35 @@ export default function Home() {
           handleModeTransition('organizing');
         }}
       />
+
+      <AgentApplyDialog
+        open={!!pendingAgentApply}
+        tool={pendingAgentApply?.tool || ""}
+        reason={pendingAgentApply?.reason}
+        before={pendingAgentApply?.before || ""}
+        after={pendingAgentApply?.after || ""}
+        newTitle={
+          pendingAgentApply?.newTitle && pendingAgentApply.newTitle !== title
+            ? pendingAgentApply.newTitle
+            : undefined
+        }
+        onApply={() => {
+          if (!pendingAgentApply) return;
+          applyWithHistory(pendingAgentApply.after);
+          if (pendingAgentApply.newTitle) {
+            setTitle(pendingAgentApply.newTitle);
+          }
+          toast({
+            title: "Rewrite applied",
+            description: "The agent's version is in the document — undo with ⌘Z if it isn't what you wanted.",
+          });
+          setPendingAgentApply(null);
+        }}
+        onCancel={() => {
+          setPendingAgentApply(null);
+          toast({ title: "Rewrite dismissed", description: "Your document was left untouched." });
+        }}
+      />
       
       {/* AI Agent - Only show in expert mode for power users */}
       {settings.userExperienceMode === 'expert' && (
@@ -508,140 +738,7 @@ export default function Home() {
           autonomyLevel={settings.autonomyLevel}
           openaiApiKey={settings.openaiApiKey}
           geminiApiKey={settings.geminiApiKey}
-          onToolResult={(result) => {
-            if (!result.success) {
-              toast({
-                title: "Tool Error",
-                description: result.error || "Tool execution failed",
-                variant: "destructive"
-              });
-              return;
-            }
-
-            // Handle different tool types properly
-            switch (result.tool) {
-              case 'update_document':
-                if (result.data?.content !== undefined) {
-                  setContent(result.data.content);
-                  if (result.data.title) {
-                    setTitle(result.data.title);
-                  }
-                  toast({
-                    title: "Document Updated",
-                    description: "Your document has been updated by the agent",
-                  });
-                }
-                break;
-
-              case 'replace_in_text':
-                if (result.data?.result !== undefined) {
-                  setContent(result.data.result);
-                  toast({
-                    title: "Text Replaced",
-                    description: `Replaced ${result.data.count || 0} instances`,
-                  });
-                }
-                break;
-
-              case 'generate_text':
-                if (result.data && typeof result.data === 'string') {
-                  setContent(prev => prev + '\n\n' + result.data);
-                  toast({
-                    title: "Text Generated",
-                    description: "AI generated content has been added",
-                  });
-                }
-                break;
-
-              case 'process_text_command':
-                if (result.data && typeof result.data === 'string') {
-                  setContent(result.data);
-                  toast({
-                    title: "Text Command Executed",
-                    description: "Your text has been processed",
-                  });
-                }
-                break;
-
-              case 'edit_current_document':
-                // Handle direct editor operations
-                if (result.data?.operation && result.data?.content !== undefined) {
-                  switch (result.data.operation) {
-                    case 'replace':
-                      setContent(result.data.content);
-                      break;
-                    case 'append':
-                      setContent(prev => prev + result.data.content);
-                      break;
-                    case 'prepend':
-                      setContent(prev => result.data.content + prev);
-                      break;
-                    case 'insert':
-                      // For now, just append - could be enhanced with cursor position
-                      setContent(prev => prev + '\n\n' + result.data.content);
-                      break;
-                  }
-                  toast({
-                    title: "Editor Updated",
-                    description: `Content ${result.data.operation}d successfully`,
-                  });
-                }
-                break;
-
-              case 'replace_current_content':
-                if (result.data?.content !== undefined) {
-                  setContent(result.data.content);
-                  toast({
-                    title: "Document Replaced",
-                    description: result.data.reason || "Content replaced by agent",
-                  });
-                }
-                break;
-
-              case 'edit_text_with_pattern':
-                if (result.data?.content !== undefined) {
-                  setContent(result.data.content);
-                  toast({
-                    title: "Pattern Edit Complete",
-                    description: result.data.description || `Replaced ${result.data.count || 0} instances`,
-                  });
-                }
-                break;
-
-              case 'improve_current_text':
-                if (result.data?.content !== undefined) {
-                  setContent(result.data.content);
-                  toast({
-                    title: "Text Improved",
-                    description: result.data.description || "Content improved by AI",
-                  });
-                }
-                break;
-
-              case 'create_document':
-                if (result.data?.title && result.data?.content !== undefined) {
-                  // If creating a new document, update the current editor
-                  setTitle(result.data.title);
-                  setContent(result.data.content);
-                  toast({
-                    title: "Document Created",
-                    description: `Created "${result.data.title}"`,
-                  });
-                }
-                break;
-
-              default:
-                // Fallback for other tools that return useful text content
-                if (result.data && typeof result.data === 'string' && result.data.length > 20) {
-                  setContent(prev => prev + '\n\n' + result.data);
-                  toast({
-                    title: "Agent Result",
-                    description: result.message || "Tool executed successfully",
-                  });
-                }
-                break;
-            }
-          }}
+          onToolResult={handleAgentToolResult}
           editorState={{
             title,
             content,

@@ -46,7 +46,7 @@ interface ToolCall {
 function isEditorTool(toolName: string): boolean {
   const editorTools = [
     'edit_current_document',
-    'replace_current_content', 
+    'replace_current_content',
     'edit_text_with_pattern',
     'improve_current_text',
     'update_document',
@@ -56,6 +56,64 @@ function isEditorTool(toolName: string): boolean {
     'create_document'
   ];
   return editorTools.includes(toolName);
+}
+
+// Renders the agent's plan + per-tool outcomes inline so its reasoning is
+// visible instead of a mysterious "Thinking…" that ends in a changed document.
+function AgentExecutionTrace({ toolResult }: { toolResult?: any }) {
+  const [open, setOpen] = useState(false);
+  const plan: string[] | null = Array.isArray(toolResult?.plan)
+    ? toolResult.plan
+    : typeof toolResult?.plan === 'string' && toolResult.plan.trim()
+      ? [toolResult.plan]
+      : null;
+  const tools: any[] = Array.isArray(toolResult?.toolsExecuted) ? toolResult.toolsExecuted : [];
+  if (!plan && tools.length === 0) return null;
+
+  return (
+    <div className="mt-2 rounded-md border border-stone-200 dark:border-stone-700">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        Execution trace{tools.length > 0 ? ` · ${tools.length} tool${tools.length === 1 ? '' : 's'}` : ''}
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-stone-200 px-2 py-2 text-xs dark:border-stone-700">
+          {plan && (
+            <div>
+              <div className="mb-1 font-medium text-stone-500 dark:text-stone-400">Plan</div>
+              <ol className="list-decimal space-y-0.5 pl-4 text-stone-600 dark:text-stone-300">
+                {plan.map((step, i) => (
+                  <li key={i} className="whitespace-pre-wrap">{typeof step === 'string' ? step : JSON.stringify(step)}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {tools.length > 0 && (
+            <div>
+              <div className="mb-1 font-medium text-stone-500 dark:text-stone-400">Tools</div>
+              <ul className="space-y-1 text-stone-600 dark:text-stone-300">
+                {tools.map((t: any, i: number) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span aria-hidden>{t?.success ? '✅' : '❌'}</span>
+                    <span className="font-mono">{t?.tool}</span>
+                    {t?.message && (
+                      <span className="min-w-0 flex-1 truncate text-stone-500 dark:text-stone-400" title={String(t.message)}>
+                        — {t.message}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AIAgent({ 
@@ -454,6 +512,7 @@ export default function AIAgent({
                           </div>
                         )}
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                        {message.type === "agent" && <AgentExecutionTrace toolResult={message.toolResult} />}
                       </div>
 
                       <div className="flex items-center justify-between mt-1">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,7 +39,17 @@ export function useDocument({
   const maxRetries = 3;
   const lastSaveTime = useRef(0);
   const minimumSaveInterval = 500; // Minimum time between saves
-  
+
+  // Shared undo history so every writer (typing, slash commands, ambient
+  // suggestions, the agent) feeds one stack — ⌘Z can revert any of them.
+  const undoStackRef = useRef<string[]>([]);
+  const redoStackRef = useRef<string[]>([]);
+  const lastHistoryPushRef = useRef(0);
+  const contentRef = useRef(content);
+  useEffect(() => {
+    contentRef.current = content;
+  }, [content]);
+
   // Reset initialization when documentId changes
   useEffect(() => {
     hasInitialized.current = false;
@@ -47,7 +57,11 @@ export function useDocument({
     setSaveError(null);
     saveRetryCount.current = 0;
     setAutoSaveEnabled(true);
-    
+    // Never let undo cross documents.
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    lastHistoryPushRef.current = 0;
+
     // Reset to initial values when switching documents
     if (!documentId) {
       setTitle(initialTitle);
@@ -56,6 +70,45 @@ export function useDocument({
       setLastSavedContent(initialContent);
     }
   }, [documentId, initialTitle, initialContent]);
+
+  // Coalesced history push (typing); `force` skips coalescing (AI applies).
+  const pushContentHistory = useCallback((value: string, opts?: { force?: boolean }) => {
+    const now = Date.now();
+    if (!opts?.force && now - lastHistoryPushRef.current < 1000) return;
+    lastHistoryPushRef.current = now;
+    const stack = undoStackRef.current;
+    if (stack.length >= 100) stack.shift();
+    stack.push(value);
+    redoStackRef.current = [];
+  }, []);
+
+  // Typing path: coalesced so undo steps are word/phrase-sized, not per-keystroke.
+  const setContentTyping = useCallback((next: string) => {
+    pushContentHistory(contentRef.current);
+    setContent(next);
+  }, [pushContentHistory]);
+
+  // AI applies (slash commands, suggestions, agent): always a forced history
+  // point so the exact pre-AI text is one ⌘Z away.
+  const applyWithHistory = useCallback((next: string | ((prev: string) => string)) => {
+    const resolved = typeof next === "function" ? next(contentRef.current) : next;
+    pushContentHistory(contentRef.current, { force: true });
+    setContent(resolved);
+  }, [pushContentHistory]);
+
+  const undoContent = useCallback(() => {
+    const prev = undoStackRef.current.pop();
+    if (prev === undefined) return;
+    redoStackRef.current.push(contentRef.current);
+    setContent(prev);
+  }, []);
+
+  const redoContent = useCallback(() => {
+    const next = redoStackRef.current.pop();
+    if (next === undefined) return;
+    pushContentHistory(contentRef.current, { force: true });
+    setContent(next);
+  }, [pushContentHistory]);
   
   // Debounce content changes using settings interval
   const debouncedContent = useDebounce(content, autosaveInterval);
@@ -245,6 +298,10 @@ export function useDocument({
     setTitle,
     content,
     setContent,
+    setContentTyping,
+    applyWithHistory,
+    undoContent,
+    redoContent,
     isSaving,
     isDirty,
     saveError,

@@ -25,7 +25,10 @@ interface UltraMinimalEditorProps {
   title: string;
   setTitle: (title: string) => void;
   content: string;
-  setContent: (content: string) => void;
+  setContentTyping: (content: string) => void;
+  applyWithHistory: (content: string | ((prev: string) => string)) => void;
+  undoContent: () => void;
+  redoContent: () => void;
   isSaving: boolean;
   isDirty: boolean;
   saveError: string | null;
@@ -46,7 +49,10 @@ export default function UltraMinimalEditor({
   title,
   setTitle,
   content,
-  setContent,
+  setContentTyping,
+  applyWithHistory,
+  undoContent,
+  redoContent,
   isSaving,
   isDirty,
   saveError,
@@ -76,57 +82,8 @@ export default function UltraMinimalEditor({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chromeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const undoStackRef = useRef<string[]>([]);
-  const redoStackRef = useRef<string[]>([]);
-  const lastHistoryPushRef = useRef(0);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [exportOpen, setExportOpen] = useState(false);
-
-  // Coalesce rapid typing so undo steps are word/phrase-sized, not per-keystroke.
-  const pushHistoryToUndo = useCallback((value: string) => {
-    const now = Date.now();
-    if (now - lastHistoryPushRef.current < 1000) return;
-    lastHistoryPushRef.current = now;
-    const stack = undoStackRef.current;
-    if (stack.length >= 100) stack.shift();
-    stack.push(value);
-    redoStackRef.current = [];
-  }, []);
-
-  const handleUndo = useCallback(() => {
-    const prev = undoStackRef.current.pop();
-    if (prev === undefined) return;
-    redoStackRef.current.push(content);
-    setContent(prev);
-    requestAnimationFrame(() => {
-      const ta = textareaRef.current;
-      if (ta) {
-        ta.setSelectionRange(prev.length, prev.length);
-        ta.focus();
-      }
-    });
-  }, [content, setContent]);
-
-  const handleRedo = useCallback(() => {
-    const next = redoStackRef.current.pop();
-    if (next === undefined) return;
-    pushHistoryToUndo(content);
-    setContent(next);
-    requestAnimationFrame(() => {
-      const ta = textareaRef.current;
-      if (ta) {
-        ta.setSelectionRange(next.length, next.length);
-        ta.focus();
-      }
-    });
-  }, [content, pushHistoryToUndo, setContent]);
-
-  // AI-driven content changes (slash commands, suggestions) go through here so they
-  // can be undone.
-  const applyAIContent = useCallback((next: string) => {
-    pushHistoryToUndo(content);
-    setContent(next);
-  }, [content, pushHistoryToUndo, setContent]);
 
   const debouncedContent = useDebounce(content, 300);
 
@@ -174,31 +131,30 @@ export default function UltraMinimalEditor({
       const textarea = textareaRef.current;
       if (!textarea) return;
 
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newContent = content.slice(0, start) + suggestion + content.slice(end);
-      applyAIContent(newContent);
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const newContent = content.slice(0, start) + suggestion + content.slice(end);
+    applyWithHistory(newContent);
 
-      setTimeout(() => {
-        const newPosition = start + suggestion.length;
-        textarea.setSelectionRange(newPosition, newPosition);
-        textarea.focus();
-      }, 0);
+    setTimeout(() => {
+      const newPosition = start + suggestion.length;
+      textarea.setSelectionRange(newPosition, newPosition);
+      textarea.focus();
+    }, 0);
 
-      toast({
-        title: 'Inserted',
-        description: 'Suggestion placed at your cursor.',
-      });
-    },
-    [content, applyAIContent, toast]
+    toast({
+      title: 'Inserted',
+      description: 'Suggestion placed at your cursor.',
+    });
+  },
+    [content, applyWithHistory, toast]
   );
 
   const handleTextareaChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      pushHistoryToUndo(content);
-      setContent(e.target.value);
+      setContentTyping(e.target.value);
     },
-    [content, pushHistoryToUndo, setContent]
+    [setContentTyping]
   );
 
   const handleManualSave = async () => {
@@ -286,14 +242,14 @@ export default function UltraMinimalEditor({
   const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
       e.preventDefault();
-      if (e.shiftKey) handleRedo();
-      else handleUndo();
+      if (e.shiftKey) redoContent();
+      else undoContent();
       return;
     }
 
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
       e.preventDefault();
-      handleRedo();
+      redoContent();
       return;
     }
 
@@ -664,14 +620,14 @@ export default function UltraMinimalEditor({
         onClose={() => setSlashCommandsOpen(false)}
         position={slashCommandPosition}
         content={content}
-        setContent={applyAIContent}
+        setContent={applyWithHistory}
         editorRef={textareaRef}
         llmProvider={llmProvider}
         llmModel={llmModel}
         openaiApiKey={openaiApiKey}
         geminiApiKey={geminiApiKey}
         onSuggestions={onSuggestions}
-        onUndo={handleUndo}
+        onUndo={undoContent}
         activeProjectId={activeProjectId}
       />
 
