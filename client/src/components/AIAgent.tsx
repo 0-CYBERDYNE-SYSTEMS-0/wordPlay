@@ -132,6 +132,8 @@ export default function AIAgent({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -217,6 +219,8 @@ export default function AIAgent({
         type: "ai-command",
         initialProgress: 0
       });
+      const controller = new AbortController();
+      abortRef.current = controller;
       try {
         const res = await apiRequest("POST", "/api/agent/intelligent-request", {
           request,
@@ -224,14 +228,13 @@ export default function AIAgent({
           autonomyLevel: autonomyLevel ?? 'moderate',
           llmProvider,
           llmModel
-        });
+        }, { signal: controller.signal });
         return res.json();
       } finally {
         stopProcessing(operationId);
       }
     },
     onSuccess: (data) => {
-      // Add agent response with intelligent synthesis
       const agentMessage: Message = {
         id: Date.now().toString(),
         type: "agent",
@@ -292,9 +295,19 @@ export default function AIAgent({
       }
     },
     onError: (error: any) => {
+      // A cancelled run is not an error — say so quietly and move on.
+      if (error?.name === 'AbortError' || error?.code === 20) {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          type: "agent",
+          content: "Request cancelled.",
+          timestamp: new Date()
+        }]);
+        return;
+      }
       // Handle intelligent error responses
       const errorResponse = error.response?.data;
-      
+
       const errorMessage: Message = {
         id: Date.now().toString(),
         type: "agent",
@@ -307,7 +320,7 @@ export default function AIAgent({
       const raw = (errorResponse?.message || error.message || '').toString();
       let friendly = raw;
       if (/401|invalid.*key|unauthor/i.test(raw)) {
-        friendly = "The AI provider rejected the API key (401). Check the key in Settings → AI.";
+        friendly = "The AI provider rejected the server's API key (401). Check the key configured on the server (.env).";
       } else if (/429|rate limit/i.test(raw)) {
         friendly = "The AI provider is rate-limiting requests. Wait a moment and try again.";
       } else if (/503|unavailable|timeout|ECONNREFUSED/i.test(raw)) {
@@ -323,6 +336,15 @@ export default function AIAgent({
       });
     }
   });
+
+  // Elapsed-seconds counter while the agent runs — long multi-tool chains are
+  // normal, so the writer should see how long it's actually been.
+  useEffect(() => {
+    if (!agentMutation.isPending) return;
+    setElapsed(0);
+    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [agentMutation.isPending]);
 
   // Execute individual tool
   const toolMutation = useMutation({
@@ -532,7 +554,16 @@ export default function AIAgent({
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                       <div className="flex items-center space-x-2">
                         <MatteDots size={4} gap={3} dotCount={4} label="Thinking" />
-                        <span className="text-sm">Thinking...</span>
+                        <span className="text-sm">
+                          {elapsed >= 10 ? `Thinking… ${elapsed}s` : 'Thinking…'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => abortRef.current?.abort()}
+                          className="ml-2 rounded-md border border-stone-300 px-2 py-0.5 text-[11px] text-stone-600 hover:bg-stone-100 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   </div>

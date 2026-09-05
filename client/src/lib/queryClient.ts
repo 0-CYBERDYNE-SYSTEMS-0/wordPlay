@@ -25,15 +25,17 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: { signal?: AbortSignal }
 ): Promise<Response> {
   // Ensure URL starts with /api
   const apiUrl = url.startsWith('/api') ? url : `/api${url}`;
-  
+
   const res = await fetch(apiUrl, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
+    signal: options?.signal,
   });
 
   await throwIfResNotOk(res);

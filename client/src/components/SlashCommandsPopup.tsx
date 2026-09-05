@@ -14,7 +14,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import { useApiProcessing } from '@/hooks/use-api-processing';
-import AIProcessingIndicator from './AIProcessingIndicator';
+import MatteDots from './MatteDots';
 import { createAIResponseParser, type ParsedAIResponse } from '@/lib/aiResponseParser';
 import { useSettings } from '@/providers/SettingsProvider';
 
@@ -605,13 +605,6 @@ export default function SlashCommandsPopup({
     });
     setProcessingId(id);
     executeCommandMutation.mutate(command);
-
-    // Image generation can take 30-60s locally. Don't block the editor with a
-    // full-screen popup for the whole wait — close the menu immediately and
-    // let the image appear in the editor (with a toast) when it's ready.
-    if (command.action === 'image') {
-      onClose();
-    }
   };
 
   // Keyboard navigation + type-to-filter
@@ -813,10 +806,12 @@ export default function SlashCommandsPopup({
             // is running (provider/model/size/steps) since local mflux can
             // take 30-60s and a bare spinner reads as "stuck".
             <div className="flex flex-col items-center gap-3 px-4 py-2 text-center">
-              <AIProcessingIndicator
-                isProcessing
-                message={elapsedSeconds >= 10 ? `Generating image… ${elapsedSeconds}s` : 'Generating image…'}
-              />
+              <div className="flex items-center gap-2">
+                <MatteDots size={4} gap={3} dotCount={4} label="Generating" />
+                <span className="text-sm text-stone-700 dark:text-stone-200">
+                  {elapsedSeconds >= 10 ? `Generating image… ${elapsedSeconds}s` : 'Generating image…'}
+                </span>
+              </div>
               <div className="rounded-lg border border-[var(--wp-line)] bg-[var(--wp-paper-elevated)] px-3.5 py-2.5 text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
                 <div className="mb-1 font-medium text-[var(--wp-ink)] dark:text-stone-100">
                   {settings.imageProvider === 'gemini' ? 'Gemini (cloud)' : 'FLUX.2 Klein 4B · local mflux'}
@@ -832,10 +827,12 @@ export default function SlashCommandsPopup({
               </p>
             </div>
           ) : (
-            <AIProcessingIndicator
-              isProcessing
-              message={elapsedSeconds >= 10 ? `Still working… ${elapsedSeconds}s` : "Processing command…"}
-            />
+            <div className="flex items-center gap-2">
+              <MatteDots size={4} gap={3} dotCount={4} label="Working" />
+              <span className="text-sm text-stone-700 dark:text-stone-200">
+                {elapsedSeconds >= 10 ? `Still working… ${elapsedSeconds}s` : "Processing command…"}
+              </span>
+            </div>
           )}
           <button
             type="button"
