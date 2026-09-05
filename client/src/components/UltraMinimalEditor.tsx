@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { captureStandaloneHtml, downloadStandaloneHtml, printStandaloneHtml } from '@/utils/export-utils';
 import { Eye, PenLine } from 'lucide-react';
 
 interface UltraMinimalEditorProps {
@@ -80,6 +81,7 @@ export default function UltraMinimalEditor({
   const chromeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   const debouncedContent = useDebounce(content, 300);
 
@@ -234,24 +236,43 @@ export default function UltraMinimalEditor({
     URL.revokeObjectURL(url);
   }, []);
 
-  const handleExport = useCallback((format: 'md' | 'txt' | 'print') => {
+  const handleExport = useCallback((format: 'md' | 'print' | 'html') => {
     setExportOpen(false);
     const base = (title.trim() || 'document').replace(/[^\w\-. ]+/g, '_').replace(/\s+/g, '_');
     const fullText = `${title.trim() ? title.trim() + '\n\n' : ''}${content}`;
-    if (format === 'print') {
-      window.print();
-      return;
-    }
     if (format === 'md') {
       downloadFile(`${base}.md`, fullText, 'text/markdown;charset=utf-8');
-    } else {
-      downloadFile(`${base}.txt`, fullText, 'text/plain;charset=utf-8');
+      toast({
+        title: "Export complete",
+        description: `Downloaded ${base}.md`
+      });
+      return;
     }
-    toast({
-      title: "Export complete",
-      description: `Downloaded ${base}.${format}`
-    });
-  }, [title, content, downloadFile, toast]);
+    // 'html' and 'print' both need the rendered preview (charts flattened,
+    // images inlined) — switch to Preview first if we're in Write mode.
+    const capture = async () => {
+      const container = previewContainerRef.current;
+      if (!container) return;
+      try {
+        const html = await captureStandaloneHtml(title || 'Document', container);
+        if (format === 'html') {
+          downloadStandaloneHtml(title || 'Document', html);
+          toast({ title: "HTML exported", description: `${base}.html is fully self-contained — charts and images included.` });
+        } else {
+          printStandaloneHtml(html);
+        }
+      } catch (err: any) {
+        toast({ title: "Export failed", description: err?.message || 'Could not capture the preview.', variant: 'destructive' });
+      }
+    };
+    if (viewMode !== 'preview') {
+      setViewMode('preview');
+      // Wait for markdown + charts to render before capturing.
+      setTimeout(capture, 900);
+    } else {
+      capture();
+    }
+  }, [title, content, viewMode, downloadFile, toast]);
 
   // Close export menu on outside click
   useEffect(() => {
@@ -547,10 +568,10 @@ export default function UltraMinimalEditor({
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleExport('txt')}
+                    onClick={() => handleExport('html')}
                     className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12px] text-[var(--wp-ink)] hover:bg-stone-50 dark:hover:bg-stone-800"
                   >
-                    Plain text (.txt)
+                    Shareable HTML — self-contained
                   </button>
                   <button
                     type="button"
@@ -597,7 +618,7 @@ export default function UltraMinimalEditor({
         )}
 
         {viewMode === 'preview' ? (
-          <div className="relative min-h-0 flex-1 overflow-y-auto py-4 sm:py-6 minimal-scrollbar">
+          <div ref={previewContainerRef} className="relative min-h-0 flex-1 overflow-y-auto py-4 sm:py-6 minimal-scrollbar">
             <MarkdownRenderer content={content} className="writing-preview" />
           </div>
         ) : (
