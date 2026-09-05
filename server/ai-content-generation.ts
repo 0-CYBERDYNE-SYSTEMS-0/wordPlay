@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL } from './openai';
+import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL, DEFAULT_GEMINI_MODEL, generateWithGemini } from './openai';
 
 interface TableGenerationRequest {
   text: string;
@@ -77,6 +77,16 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
       return content || '';
     }
 
+    if (llmProvider === 'gemini') {
+      const content = await generateWithGemini(
+        userPrompt,
+        {},
+        systemPrompt,
+        llmModel || DEFAULT_GEMINI_MODEL
+      );
+      return content || '';
+    }
+
     const client = getOpenAI();
 
     const requestParams = prepareO3Parameters({
@@ -92,10 +102,45 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
     const completion = await client.chat.completions.create(requestParams);
 
     return completion.choices[0]?.message?.content || '';
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error generating table:', error);
-    throw new Error('Failed to generate table');
+    throw new Error(describeProviderError('table generation', llmProvider, llmModel, error));
   }
+}
+
+// Turns low-level fetch/SDK failures into messages that name the provider,
+// the model, and the actual cause — so a teammate can act on it.
+export function describeProviderError(what: string, llmProvider: string, llmModel: string | undefined, error: any): string {
+  const raw = (error?.message || String(error || 'unknown error')).trim();
+  const modelSuffix = llmModel ? ` (model: ${llmModel})` : '';
+  if (llmProvider === 'ollama') {
+    if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(raw)) {
+      return `Could not reach Ollama at ${process.env.OLLAMA_URL || 'http://localhost:11434'} — is it running?${modelSuffix}`;
+    }
+    return `Ollama failed during ${what}: ${raw}${modelSuffix}`;
+  }
+  if (llmProvider === 'gemini') {
+    if (/API key not configured/i.test(raw)) return `Gemini API key is not configured on the server (set GEMINI_API_KEY in .env) — cannot run ${what}.`;
+    if (/401|API_KEY_INVALID|permission/i.test(raw)) return `Gemini rejected the server's API key (401) during ${what}.${modelSuffix}`;
+    if (/429|quota|RATE/i.test(raw)) return `Gemini quota/rate limit hit during ${what}. Try again shortly.${modelSuffix}`;
+    if (/404|not found/i.test(raw)) return `Gemini model not available for ${what}${modelSuffix} — pick another model in Settings → AI.`;
+    return `Gemini failed during ${what}: ${raw}${modelSuffix}`;
+  }
+  // OpenAI-compatible (OpenAI, or any OPENAI_BASE_URL endpoint)
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(raw)) {
+    const base = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+    return `Could not reach the OpenAI-compatible endpoint at ${base} during ${what}.${modelSuffix}`;
+  }
+  if (/401|invalid.*key|unauthor/i.test(raw)) {
+    return `The provider rejected the server's OpenAI API key (401) during ${what}. Check OPENAI_API_KEY in .env.${modelSuffix}`;
+  }
+  if (/429|rate limit|quota/i.test(raw)) {
+    return `Provider rate limit/quota hit during ${what}. Try again shortly.${modelSuffix}`;
+  }
+  if (/404|model.*not/i.test(raw)) {
+    return `Model not available for ${what}${modelSuffix} — pick another model in Settings → AI.`;
+  }
+  return `Provider error during ${what}: ${raw}${modelSuffix}`;
 }
 
 export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
@@ -168,6 +213,20 @@ ${content}
       return result;
     }
 
+    if (llmProvider === 'gemini') {
+      console.log('📡 Making Gemini call for chart generation...');
+      const content = await generateWithGemini(
+        userPrompt,
+        {},
+        systemPrompt,
+        llmModel || DEFAULT_GEMINI_MODEL
+      );
+      const result = `\`\`\`chart
+${content || ''}
+\`\`\``;
+      return result;
+    }
+
     const client = getOpenAI();
 
     console.log('📡 Making OpenAI API call for chart generation...');
@@ -192,9 +251,9 @@ ${content}
 \`\`\``;
     console.log('📊 Chart result prepared:', result.substring(0, 200) + '...');
     return result;
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error generating chart:', error);
-    throw new Error('Failed to generate chart');
+    throw new Error(describeProviderError('chart generation', llmProvider, llmModel, error));
   }
 }
 
@@ -293,7 +352,15 @@ Create a visually appealing and professional image.`;
     return `![${altText}](${imageUrl})`;
   } catch (localError: any) {
     console.warn(`⚠️ Local FLUX bridge failed (${localError.message}); falling back to Gemini (cloud)`, localError);
-    return generateImageWithGeminiFallback(request, enhancedPrompt, options);
+    try {
+      return await generateImageWithGeminiFallback(request, enhancedPrompt, options);
+    } catch (geminiError: any) {
+      const mfluxUrl = process.env.MFLUX_BRIDGE_URL || 'http://127.0.0.1:4030';
+      // Name both causes so the fix is obvious (start the bridge, or add a key).
+      throw new Error(
+        `Image generation failed on both providers. Local mflux bridge at ${mfluxUrl}: ${localError.message}. Gemini fallback: ${geminiError.message}`
+      );
+    }
   }
 }
 
