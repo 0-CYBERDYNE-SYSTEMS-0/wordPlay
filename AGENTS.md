@@ -24,19 +24,21 @@ Guidance for AI coding agents working in this repository. Assumes no prior knowl
 ```
 client/                  React + Vite app (Vite root is client/, entry client/index.html)
   src/
-    components/          React components, PascalCase (AIAgent.tsx, Editor.tsx, ...)
+    components/          React components, PascalCase (Home uses UltraMinimalEditor)
       ui/                shadcn/ui generated primitives
-    hooks/               Custom hooks, kebab-case use-*.ts(x) (use-document.ts, use-toast.ts, ...)
-    lib/                 Client utilities (queryClient.ts, ContextualAIEngine.ts, aiResponseParser.ts, ...)
-    pages/               Route pages (Home.tsx, Settings.tsx, not-found.tsx)
+    hooks/               Custom hooks, kebab-case use-*.ts(x) (use-document.ts owns the shared undo stack)
+    lib/                 Client utilities (queryClient.ts, lenientJson.ts, aiResponseParser.ts, ...)
+    pages/               Route pages (Home.tsx, Settings.tsx — the single settings surface, not-found.tsx)
     providers/           React context providers (ThemeProvider, SettingsProvider, ProcessingProvider)
-    utils/               export-utils.ts, reasoning-models.ts
+    utils/               export-utils.ts (standalone HTML/PDF export), reasoning-models.ts
 server/                  Express + TypeScript API (kebab-case filenames, prefer named exports)
   index.ts               Entry: middleware, DB init, route registration, Vite dev/static serving
-  routes.ts              All REST endpoints (~40 routes under /api/*)
-  ai-agent.ts            Autonomous agent engine + 19 tool definitions (largest file, ~2.5k lines)
-  ai-content-generation.ts  Multi-provider content + image generation (Gemini / mflux local bridge)
-  openai.ts              Text completion, style analysis, suggestions (OpenAI / Ollama)
+  routes.ts              All REST endpoints (~40 routes under /api/*); ownership checks live here
+  auth.ts                Optional team auth (AUTH_PASSWORD): HMAC cookie sessions + login/logout/session
+  upload.ts              POST /api/uploads — bring-your-own image upload (multer, 15MB, image mimes)
+  ai-agent.ts            Autonomous agent engine + tool definitions (largest file)
+  ai-content-generation.ts  Multi-provider content + image generation (mflux / Gemini / custom endpoint)
+  openai.ts              Text completion, style analysis, suggestions (OpenAI / Ollama / Gemini)
   web-search.ts          Perplexity-backed web search + page scraping
   file-operations.ts     grepText, replaceText, countWords, extractStructure, analyzeDocument
   slash-commands-new.ts  ACTIVE slash-command dispatcher (imported dynamically by routes.ts)
@@ -56,6 +58,8 @@ scripts/                 db-push.js, init-db.js (legacy CommonJS helpers using d
 attached_assets/         Design docs/screenshots (aliased as @assets)
 test-*.js                Ad-hoc integration test scripts at repo root (no test runner)
 dist/                    Build output (dist/public client assets, dist/index.js server bundle)
+Dockerfile               Production image (API + built client, single port)
+docker-compose.yml       Team deployment: app + Postgres + uploads volume
 ```
 
 **Path aliases**: `@` → `client/src` and `@shared` → `shared` are defined in both `vite.config.ts` and `tsconfig.json`. `@assets` → `attached_assets` is a **Vite-only alias** (not in tsconfig), so `@assets/*` imports won't resolve under `npm run check` — prefer a relative import if type-checking that path.
@@ -74,10 +78,13 @@ dist/                    Build output (dist/public client assets, dist/index.js 
 ## Architecture Notes
 
 - **Single port in production**: the Express server serves the built client from `dist/public` and also runs Vite middleware in dev (`server/vite.ts`). In the standard local dev flow you run both processes and use the Vite port (5173).
-- **API surface**: all endpoints live in `server/routes.ts` — REST CRUD for projects/documents/sources/custom-commands, AI endpoints (`/api/ai/*`, `/api/agent/*`), text ops (`/api/text/*`), and search/scrape. Request/response bodies are validated with Zod schemas derived from `shared/schema.ts`.
+- **Team auth & ownership**: when `AUTH_PASSWORD` is set, `server/auth.ts` gates `/api` and `/uploads` with HMAC-signed session cookies; users sign in with the shared password + display name (maps to a `users` row). Routes enforce per-user ownership of projects/documents/sources/custom commands. Unset → single-user mode (`userId = 1`), e2e tests unaffected.
+- **Data safety invariants** (keep them): API keys are server-side env only — never accept client-sent keys; all document edits (typing, slash commands, agent) share the undo history in `use-document.ts`; whole-document agent rewrites require explicit approval (`AgentApplyDialog`); `PUT /api/documents/:id` supports an `ifUpdatedAt` precondition (409 + server copy on conflict).
+- **API surface**: all endpoints live in `server/routes.ts` — REST CRUD for projects/documents/sources/custom-commands, AI endpoints (`/api/ai/*`, `/api/agent/*`), text ops (`/api/text/*`), `POST /api/uploads` (image upload), and search/scrape. Request/response bodies are validated with Zod schemas derived from `shared/schema.ts`.
 - **Storage layer**: routes depend only on the `IStorage` interface from `server/storage.ts`; the active export is `PostgresStorage` (Drizzle). `MemStorage` exists for in-memory use.
-- **AI pipeline**: the editor sends slash commands to `/api/ai/slash-command`, which dynamically imports `./slash-commands-new` (→ `slash-commands-minimal`). The agent (`/api/agent/*`) runs the tool-using engine in `server/ai-agent.ts`. Text generation goes through `server/openai.ts` / `server/ai-content-generation.ts`, which support OpenAI, `OPENAI_BASE_URL`-compatible local servers, Gemini, and Ollama. Image generation is local-first (mflux bridge) with Gemini fallback. WebSockets were removed in favor of direct API calls.
-- **Payload limits**: JSON/urlencoded bodies capped at 50mb for image handling.
+- **AI pipeline**: the editor sends slash commands to `/api/ai/slash-command`, which dynamically imports `./slash-commands-new` (→ `slash-commands-minimal`; custom commands from the DB appear in the same menu). The agent (`/api/agent/*`) runs the tool-using engine in `server/ai-agent.ts`. Text generation supports OpenAI, `OPENAI_BASE_URL`-compatible servers, Gemini, and Ollama. Image generation is local-first (mflux bridge) with Gemini fallback and an OpenAI-compatible custom-endpoint adapter (`IMAGE_API_URL`). WebSockets were removed in favor of direct API calls.
+- **Preview renderer** (`client/src/components/MarkdownRenderer.tsx`): GFM tables, raw HTML, syntax highlighting, ` ```chart ` ECharts fences, ` ```mermaid ` diagrams, and `$`/`$$` math (KaTeX).
+- **Payload limits**: JSON/urlencoded bodies capped at 50mb for image handling; uploads capped at 15MB.
 
 ## Coding Style & Naming Conventions
 
@@ -92,7 +99,7 @@ dist/                    Build output (dist/public client assets, dist/index.js 
 
 - **No formal test runner** is configured. `npm run check` (tsc) is the baseline correctness gate — run it after every change.
 - Integration checks are ad-hoc Node scripts at the repo root named `test-<area>.js` (e.g. `node test-openai-agent.js`, `node test-gemini-simple.js`). They expect `.env` configured and the server running (`npm run dev:server`).
-- `node test-ship-readiness.js` is the committed 18-check e2e gate (CRUD, all slash commands, NDJSON streaming, image gen, agent tool loop, search honesty, text ops). Run it against a live dev server; honors `BASE_URL` (default `http://localhost:5001`) and `QA_MODEL` (default `qwen3.5:0.8b`).
+- `node test-ship-readiness.js` is the committed 18-check e2e gate (CRUD, all slash commands, NDJSON streaming, image gen, agent tool loop, search honesty, text ops). Run it against a live dev server; honors `BASE_URL` (default `http://localhost:5001`) and `QA_MODEL` (default `qwen3.5:0.8b`). It requires auth to be disabled (no `AUTH_PASSWORD`).
 - When adding coverage for a feature, follow the same pattern: create `test-<area>.js` at the root that exercises the running API.
 
 ## Security & Configuration
@@ -105,8 +112,10 @@ dist/                    Build output (dist/public client assets, dist/index.js 
   - `MFLUX_BRIDGE_URL` (default `http://127.0.0.1:4030`), `MFLUX_STEPS` (default 1) — local image generation
   - `OLLAMA_URL` (default `http://localhost:11434`) — local models
   - `GEMINI_IMAGE_MODEL` — must be an image-capable Gemini model (default `gemini-3.1-flash-lite-image`)
+  - `IMAGE_API_URL`, `IMAGE_API_KEY`, `IMAGE_API_MODEL` — optional OpenAI-compatible custom image endpoint
+  - `AUTH_PASSWORD` — enables team sign-in when set (shared password; per-user ownership). `AUTH_SECRET` — optional cookie-signing secret
   - `AI_REQUEST_TIMEOUT_MS` (default `180000`) — bounds all AI requests (OpenAI, Ollama, agent loop, slash commands) in `server/openai.ts`, `server/ai-agent.ts`, `server/slash-commands-minimal.ts`
-  - `NODE_ENV`, `PORT` (default 5001), `HOST` (default localhost)
+  - `NODE_ENV`, `PORT` (default 5001), `HOST` (default localhost; set `0.0.0.0` to expose to the team)
 - DB SSL is enabled only when `NODE_ENV=production` (see `server/config.ts`).
 
 ## Commit & Pull Request Guidelines
