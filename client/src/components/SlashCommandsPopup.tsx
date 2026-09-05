@@ -27,8 +27,6 @@ interface SlashCommandsPopupProps {
   editorRef: React.RefObject<HTMLTextAreaElement>;
   llmProvider: 'openai' | 'ollama' | 'gemini';
   llmModel: string;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
   onSuggestions?: (suggestions: string) => void;
   onUndo?: () => void;
   activeProjectId?: number | null;
@@ -128,8 +126,6 @@ export default function SlashCommandsPopup({
   editorRef, 
   llmProvider, 
   llmModel, 
-  openaiApiKey,
-  geminiApiKey,
   onSuggestions, 
   onUndo, 
   activeProjectId 
@@ -333,8 +329,6 @@ export default function SlashCommandsPopup({
         },
         llmProvider,
         llmModel,
-        openaiApiKey,
-        geminiApiKey,
         projectId: activeProjectId
       };
 

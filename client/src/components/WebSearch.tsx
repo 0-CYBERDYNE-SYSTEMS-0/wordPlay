@@ -121,7 +121,6 @@ export default function WebSearch({
       const res = await processedApiRequest("POST", "/api/search", {
         query: searchQuery,
         source: searchSource,
-        perplexityApiKey: settings.perplexityApiKey,
         model: settings.researchModel
       }, {
         message: "Searching...",

@@ -41,8 +41,6 @@ interface AgentContext {
   researchNotes: string;
   llmProvider?: 'openai' | 'ollama' | 'gemini';
   llmModel?: string;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
   
   // NEW: Enhanced autonomous capabilities
   executionHistory: ExecutionStep[];
@@ -1670,12 +1668,11 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
       const { generateTextCompletion } = await import("./openai");
       
       const result = await generateTextCompletion(
-        "", 
-        {}, 
+        "",
+        {},
         analysisPrompt,
         this.context.llmProvider,
-        getValidOpenAIModel(this.context.llmModel),
-        { openaiApiKey: this.context.openaiApiKey, geminiApiKey: this.context.geminiApiKey }
+        getValidOpenAIModel(this.context.llmModel)
       );
       
       try {
@@ -2173,10 +2170,10 @@ Remember:
     const startTime = Date.now();
     
     try {
-      // Initialize OpenAI client
+      // Initialize OpenAI client — server-side env key only
       const { OpenAI } = await import("openai");
-      const openai = new OpenAI({ 
-        apiKey: this.context.openaiApiKey || process.env.OPENAI_API_KEY || "default_key",
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY || "default_key",
         baseURL: process.env.OPENAI_BASE_URL || undefined,
         timeout: AI_REQUEST_TIMEOUT_MS
       });
@@ -2577,9 +2574,9 @@ Remember:
 
     try {
       const { GoogleGenerativeAI } = await import("@google/generative-ai");
-      const apiKey = this.context.geminiApiKey || process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
-        throw new Error("Gemini API key not configured. Set GEMINI_API_KEY or enter it in Settings → AI.");
+        throw new Error("Gemini API key is not configured on the server (set GEMINI_API_KEY in .env).");
       }
 
       const client = new GoogleGenerativeAI(apiKey);

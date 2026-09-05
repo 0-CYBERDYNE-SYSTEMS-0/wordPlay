@@ -68,11 +68,9 @@ export default function ContextPanel({
           title,
           prompt: data?.prompt,
           llmProvider: settings.llmProvider,
-          llmModel: settings.llmModel,
-          openaiApiKey: settings.openaiApiKey,
-          geminiApiKey: settings.geminiApiKey
+          llmModel: settings.llmModel
         };
-        
+
         const res = await apiRequest("POST", "/api/ai/contextual-help", payload);
         return res.json();
       } catch (error) {
@@ -123,9 +121,7 @@ export default function ContextPanel({
         const res = await apiRequest("POST", "/api/ai/analyze-style", {
           content,
           llmProvider: settings.llmProvider,
-          llmModel: settings.llmModel,
-          openaiApiKey: settings.openaiApiKey,
-          geminiApiKey: settings.geminiApiKey
+          llmModel: settings.llmModel
         });
         return res.json();
       } catch (error) {

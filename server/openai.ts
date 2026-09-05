@@ -7,20 +7,19 @@ export const DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-4bit";
 const DEFAULT_PROVIDER = "openai";
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
 
-// Per-request overrides for API keys/endpoints. Values fall back to env vars
-// server-side, so settings-entered keys simply override the environment.
+// Per-request overrides for endpoints. API keys are SERVER-SIDE ONLY
+// (process.env): values sent from the browser are ignored, so a shared
+// deployment never round-trips keys through clients.
 export interface AIRequestOptions {
-  openaiApiKey?: string;
-  geminiApiKey?: string;
   baseUrl?: string;
 }
 
-function effectiveOpenAIKey(options?: AIRequestOptions): string {
-  return options?.openaiApiKey || process.env.OPENAI_API_KEY || "default_key";
+function effectiveOpenAIKey(_options?: AIRequestOptions): string {
+  return process.env.OPENAI_API_KEY || "default_key";
 }
 
-function effectiveGeminiKey(options?: AIRequestOptions): string {
-  return options?.geminiApiKey || process.env.GEMINI_API_KEY || "";
+function effectiveGeminiKey(_options?: AIRequestOptions): string {
+  return process.env.GEMINI_API_KEY || "";
 }
 
 function effectiveBaseUrl(options?: AIRequestOptions): string | undefined {

@@ -16,8 +16,6 @@ interface AIAgentProps {
   llmProvider?: 'openai' | 'ollama' | 'gemini';
   llmModel?: string;
   autonomyLevel?: 'conservative' | 'moderate' | 'aggressive';
-  openaiApiKey?: string;
-  geminiApiKey?: string;
   onToolResult?: (result: any) => void;
   editorState?: {
     title: string;
@@ -122,8 +120,6 @@ export default function AIAgent({
   llmProvider,
   llmModel,
   autonomyLevel,
-  openaiApiKey,
-  geminiApiKey,
   onToolResult,
   editorState
 }: AIAgentProps) {
@@ -200,8 +196,6 @@ export default function AIAgent({
     currentDocument,
     llmProvider,
     llmModel,
-    openaiApiKey,
-    geminiApiKey,
     userId: 1,
     editorState
   };
@@ -229,9 +223,7 @@ export default function AIAgent({
           context: agentContext,
           autonomyLevel: autonomyLevel ?? 'moderate',
           llmProvider,
-          llmModel,
-          openaiApiKey,
-          geminiApiKey
+          llmModel
         });
         return res.json();
       } finally {

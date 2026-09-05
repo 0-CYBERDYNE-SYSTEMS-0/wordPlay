@@ -37,9 +37,6 @@ export default function Settings({ onBack }: SettingsProps) {
     llmProvider: z.enum(['openai', 'ollama', 'gemini']),
     llmModel: z.string(),
     ollamaUrl: z.string().url().optional().or(z.literal('')),
-    openaiApiKey: z.string().optional(),
-    geminiApiKey: z.string().optional(),
-    perplexityApiKey: z.string().optional(),
     researchModel: z.string().optional(),
     imageProvider: z.enum(['local', 'gemini']).optional(),
     imageModel: z.string().optional(),
@@ -59,9 +56,6 @@ export default function Settings({ onBack }: SettingsProps) {
       llmProvider: settings.llmProvider,
       llmModel: settings.llmModel || 'mlx-community/gemma-4-e2b-it-4bit',
       ollamaUrl: settings.ollamaUrl || 'http://localhost:11434',
-      openaiApiKey: settings.openaiApiKey || '',
-      geminiApiKey: settings.geminiApiKey || '',
-      perplexityApiKey: settings.perplexityApiKey || '',
       researchModel: settings.researchModel || 'sonar',
       imageProvider: settings.imageProvider || 'local',
       imageModel: settings.imageModel || 'gemini-3.1-flash-lite-image',
@@ -83,10 +77,7 @@ export default function Settings({ onBack }: SettingsProps) {
     // AI Settings
     llmProvider: 'openai',
     llmModel: 'mlx-community/gemma-4-e2b-it-4bit',
-    openaiApiKey: '',
-    geminiApiKey: '',
     ollamaUrl: 'http://localhost:11434',
-    perplexityApiKey: '',
     researchModel: 'sonar',
     imageProvider: 'local',
     imageModel: 'gemini-3.1-flash-lite-image',
@@ -451,34 +442,13 @@ export default function Settings({ onBack }: SettingsProps) {
                 </div>
               </div>
               
-              {settings.llmProvider === 'openai' && (
-                <div className="space-y-2">
-                  <Label htmlFor="openaiApiKey">OpenAI API Key</Label>
-                  <Input
-                    id="openaiApiKey"
-                    type="password"
-                    placeholder="sk-..."
-                    value={settings.openaiApiKey}
-                    onChange={(e) => updateSettings({ openaiApiKey: e.target.value })}
-                  />
-                  <p className="text-sm text-gray-500">Your API key is stored locally and never sent to our servers.</p>
-                </div>
-              )}
+              <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-600 dark:border-stone-700 dark:bg-stone-800/60 dark:text-stone-300">
+                API keys are configured on the server via environment variables
+                (<span className="font-mono">OPENAI_API_KEY</span>, <span className="font-mono">GEMINI_API_KEY</span>,{" "}
+                <span className="font-mono">PERPLEXITY_API_KEY</span>) in the server's{" "}
+                <span className="font-mono">.env</span> — they are never stored in your browser.
+              </div>
 
-              {settings.llmProvider === 'gemini' && (
-                <div className="space-y-2">
-                  <Label htmlFor="geminiApiKey">Gemini API Key</Label>
-                  <Input
-                    id="geminiApiKey"
-                    type="password"
-                    placeholder="AIza..."
-                    value={settings.geminiApiKey}
-                    onChange={(e) => updateSettings({ geminiApiKey: e.target.value })}
-                  />
-                  <p className="text-sm text-gray-500">Your API key is stored locally and never sent to our servers.</p>
-                </div>
-              )}
-              
               {settings.llmProvider === 'ollama' && (
                 <div className="space-y-2">
                   <Label htmlFor="ollamaUrl">Ollama Server URL</Label>
@@ -500,17 +470,6 @@ export default function Settings({ onBack }: SettingsProps) {
             <h2 className="text-xl font-semibold mb-4">Research & Image</h2>
             <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="perplexityApiKey">Perplexity API Key</Label>
-                  <Input
-                    id="perplexityApiKey"
-                    type="password"
-                    placeholder="pplx-..."
-                    value={settings.perplexityApiKey || ''}
-                    onChange={(e) => updateSettings({ perplexityApiKey: e.target.value })}
-                  />
-                  <p className="text-sm text-gray-500">Web research. Falls back to PERPLEXITY_API_KEY env.</p>
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="researchModel">Research Model</Label>
                   <Select value={settings.researchModel || 'sonar'} onValueChange={(value) => updateSettings({ researchModel: value })}>

@@ -19,7 +19,7 @@ export async function executeSlashCommand(
   includeContext: boolean = false,
   projectId?: number,
   userId?: number,
-  options?: { openaiApiKey?: string; geminiApiKey?: string }
+  options?: { baseUrl?: string }
 ): Promise<{
   result: string;
   message: string;

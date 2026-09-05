@@ -9,9 +9,8 @@ import {
   processTextCommand,
   generateContextualAssistance
 } from "./openai";
-import { 
-  processAIContentCommand,
-  initializeAIClients
+import {
+  processAIContentCommand
 } from "./ai-content-generation";
 import { 
   searchWeb,
@@ -29,10 +28,9 @@ import { z } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
-  
-  // Initialize AI clients for content generation
-  initializeAIClients(process.env.OPENAI_API_KEY, process.env.GEMINI_API_KEY);
-  
+
+  // AI clients initialize lazily from server env — see ai-content-generation.ts.
+
   // Serve uploaded images
   app.use('/uploads', express.static('public/uploads'));
   
@@ -249,32 +247,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       style: z.any().optional(),
       prompt: z.string().optional(),
       llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
-      llmModel: z.string().optional(),
-      openaiApiKey: z.string().optional(),
-      geminiApiKey: z.string().optional()
+      llmModel: z.string().optional()
     });
-    
+
     try {
-      const { content, style, prompt, llmProvider, llmModel, openaiApiKey, geminiApiKey } = generateSchema.parse(req.body);
-      const generatedText = await generateTextCompletion(content, style, prompt, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
+      const { content, style, prompt, llmProvider, llmModel } = generateSchema.parse(req.body);
+      const generatedText = await generateTextCompletion(content, style, prompt, llmProvider, llmModel);
       res.json({ generated: generatedText });
     } catch (error) {
       res.status(400).json({ message: "Failed to generate text" });
     }
   });
-  
+
   app.post("/api/ai/analyze-style", async (req: Request, res: Response) => {
     const analyzeSchema = z.object({
       content: z.string(),
       llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
-      llmModel: z.string().optional(),
-      openaiApiKey: z.string().optional(),
-      geminiApiKey: z.string().optional()
+      llmModel: z.string().optional()
     });
-    
+
     try {
-      const { content, llmProvider, llmModel, openaiApiKey, geminiApiKey } = analyzeSchema.parse(req.body);
-      const styleAnalysis = await analyzeTextStyle(content, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
+      const { content, llmProvider, llmModel } = analyzeSchema.parse(req.body);
+      const styleAnalysis = await analyzeTextStyle(content, llmProvider, llmModel);
       res.json({ metrics: styleAnalysis });
     } catch (error) {
       console.error("Error in style analysis route:", error);
@@ -308,32 +302,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       content: z.string(),
       style: z.any().optional(),
       llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
-      llmModel: z.string().optional(),
-      openaiApiKey: z.string().optional(),
-      geminiApiKey: z.string().optional()
+      llmModel: z.string().optional()
     });
-    
+
     try {
-      const { content, style, llmProvider, llmModel, openaiApiKey, geminiApiKey } = suggestSchema.parse(req.body);
-      const suggestions = await generateSuggestions(content, style, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
+      const { content, style, llmProvider, llmModel } = suggestSchema.parse(req.body);
+      const suggestions = await generateSuggestions(content, style, llmProvider, llmModel);
       res.json({ suggestions });
     } catch (error) {
       res.status(400).json({ message: "Failed to generate suggestions" });
     }
   });
-  
+
   app.post("/api/ai/process-command", async (req: Request, res: Response) => {
     const commandSchema = z.object({
       content: z.string(),
       command: z.string(),
       llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
-      llmModel: z.string().optional(),
-      openaiApiKey: z.string().optional(),
-      geminiApiKey: z.string().optional()
+      llmModel: z.string().optional()
     });
-    
+
     try {
-      const { content, command, llmProvider, llmModel, openaiApiKey, geminiApiKey } = commandSchema.parse(req.body);
+      const { content, command, llmProvider, llmModel } = commandSchema.parse(req.body);
       
       // Detect if this is a complex editing request that should use the agent
       const isComplexEdit = detectComplexEditingRequest(command);
@@ -407,45 +397,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Default behavior for simple commands
-      const result = await processTextCommand(content, command, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
+      const result = await processTextCommand(content, command, llmProvider, llmModel);
       res.json(result);
     } catch (error) {
       console.error("Error in process-command:", error);
       res.status(400).json({ message: "Failed to process command" });
     }
   });
-  
+
   app.post("/api/ai/contextual-help", async (req: Request, res: Response) => {
     const helpSchema = z.object({
       content: z.string(),
       title: z.string(),
       llmProvider: z.enum(["openai", "ollama", "gemini"]).optional(),
-      llmModel: z.string().optional(),
-      openaiApiKey: z.string().optional(),
-      geminiApiKey: z.string().optional()
+      llmModel: z.string().optional()
     });
-    
+
     try {
-      const { content, title, llmProvider, llmModel, openaiApiKey, geminiApiKey } = helpSchema.parse(req.body);
-      const assistance = await generateContextualAssistance(content, title, llmProvider, llmModel, { openaiApiKey, geminiApiKey });
+      const { content, title, llmProvider, llmModel } = helpSchema.parse(req.body);
+      const assistance = await generateContextualAssistance(content, title, llmProvider, llmModel);
       res.json(assistance);
     } catch (error) {
       res.status(400).json({ message: "Failed to generate contextual help" });
     }
   });
-  
+
   // Web Search
   app.post("/api/search", async (req: Request, res: Response) => {
     const searchSchema = z.object({
       query: z.string(),
       source: z.string().optional(),
-      perplexityApiKey: z.string().optional(),
       model: z.string().optional()
     });
-    
+
     try {
-      const { query, source, perplexityApiKey, model } = searchSchema.parse(req.body);
-      const results = await searchWeb(query, source, { apiKey: perplexityApiKey, model });
+      const { query, source, model } = searchSchema.parse(req.body);
+      const results = await searchWeb(query, source, { model });
       res.json(results);
     } catch (error: any) {
       console.error("Error in search route:", error.message);
@@ -483,16 +470,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       style: z.any().optional(),
       llmProvider: z.enum(['openai', 'ollama', 'gemini']).optional(),
       llmModel: z.string().optional(),
-      openaiApiKey: z.string().optional(),
-      geminiApiKey: z.string().optional(),
       includeContext: z.boolean().optional(),
       projectId: z.number().optional(),
       userId: z.number().optional()
     });
-    
+
     try {
       const validatedData = commandSchema.parse(req.body);
-      
+
       // Check if this is an AI content generation command
       const aiContentCommands = ['table', 'chart', 'image'];
       if (aiContentCommands.includes(validatedData.command)) {
@@ -505,7 +490,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           llmModel: validatedData.llmModel,
           style: validatedData.style
         });
-        
+
         try {
           const result = await processAIContentCommand(
             validatedData.command,
@@ -513,11 +498,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             validatedData.selectionInfo,
             validatedData.llmProvider || 'openai',
             validatedData.llmModel || 'gpt-4',
-            validatedData.openaiApiKey || process.env.OPENAI_API_KEY,
-            validatedData.geminiApiKey || process.env.GEMINI_API_KEY,
             validatedData.style, // Pass style/parameters from request
             {
-              geminiApiKey: validatedData.geminiApiKey,
               imageModel: validatedData.style?.imageModel,
               // Honor the user's Settings → AI → Image Generation choice:
               // 'local' = mflux bridge, 'gemini' = cloud. Falls back to local.
@@ -526,7 +508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               steps: validatedData.style?.imageSteps,
             }
           );
-          
+
           console.log('✅ AI content command completed, result length:', result.length);
           return res.json({ result });
         } catch (aiError: any) {
@@ -537,21 +519,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
-      
-      // Import the executeSlashCommand function for regular commands  
+
+      // Import the executeSlashCommand function for regular commands
       const { executeSlashCommand } = await import("./slash-commands-new");
-      
+
       const result = await executeSlashCommand(
-        validatedData.command, 
-        validatedData.content, 
-        validatedData.selectionInfo, 
+        validatedData.command,
+        validatedData.content,
+        validatedData.selectionInfo,
         validatedData.style,
         validatedData.llmProvider,
         validatedData.llmModel,
         validatedData.includeContext || false,
         validatedData.projectId,
-        validatedData.userId,
-        { openaiApiKey: validatedData.openaiApiKey, geminiApiKey: validatedData.geminiApiKey }
+        validatedData.userId
       );
       
       res.json(result);
@@ -1119,38 +1100,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ENHANCED: Maximum capability autonomous agent workflow
   app.post("/api/agent/intelligent-request", async (req: Request, res: Response) => {
     const { createAgent } = await import("./ai-agent");
-    const { 
-      request, 
-      context, 
-      autonomyLevel = 'moderate', 
+    const {
+      request,
+      context,
+      autonomyLevel = 'moderate',
       maxExecutionTime = 300000,
       llmProvider = 'openai',
-      llmModel,
-      openaiApiKey,
-      geminiApiKey
+      llmModel
     } = req.body; // 5 min default
-    
+
     if (!request) {
       return res.status(400).json({ message: "Request is required" });
     }
-    
+
     try {
       const agent = createAgent(1); // Default user ID
-      
+
       // Set autonomy level for maximum capability
       if (autonomyLevel) {
         agent.setAutonomyLevel(autonomyLevel);
       }
-      
+
       // Update agent context if provided, including LLM selection.
       // The client sends llmProvider/llmModel both nested in `context` and top-level;
       // prefer the nested (context) values so the user's actual selection wins.
+      // API keys are never accepted from the client — server env only.
       const updatedContext = {
         ...context,
         llmProvider: context?.llmProvider ?? llmProvider,
         llmModel: context?.llmModel ?? llmModel,
-        openaiApiKey: context?.openaiApiKey ?? openaiApiKey,
-        geminiApiKey: context?.geminiApiKey ?? geminiApiKey
+        openaiApiKey: undefined,
+        geminiApiKey: undefined
       };
       
       await agent.updateContext(updatedContext);

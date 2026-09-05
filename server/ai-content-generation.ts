@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GoogleGenAI, Modality } from '@google/genai';
 import OpenAI from 'openai';
 import fs from 'fs';
@@ -24,26 +23,33 @@ interface ImageGenerationRequest {
   size?: '256x256' | '512x512' | '1024x1024';
 }
 
-// Initialize AI clients
+// AI clients are initialized lazily from SERVER-SIDE env vars only. API keys
+// sent from the browser are never accepted: keys live in .env on the host, so
+// one teammate's request can never spend another teammate's key, and no key
+// is ever stored in or round-tripped through a browser.
 let openai: OpenAI | null = null;
-let gemini: GoogleGenerativeAI | null = null;
 let geminiNew: GoogleGenAI | null = null;
 
-export function initializeAIClients(openaiKey?: string, geminiKey?: string) {
-  if (openaiKey) {
-    openai = new OpenAI({ apiKey: openaiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
+function getOpenAI(): OpenAI {
+  if (!openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error('OpenAI API key is not configured on the server (set OPENAI_API_KEY in .env)');
+    }
+    openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
   }
-  
-  if (geminiKey) {
-    // Keep old client for compatibility
-    gemini = new GoogleGenerativeAI(geminiKey);
-    
-    // Initialize new client for image generation
-    geminiNew = new GoogleGenAI({ apiKey: geminiKey });
-    console.log('Gemini clients initialized for image generation');
-  } else {
-    console.warn('Gemini API key not provided - image generation will not work');
+  return openai;
+}
+
+function getGeminiImageClient(): GoogleGenAI {
+  if (!geminiNew) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Gemini API key is not configured on the server (set GEMINI_API_KEY in .env)');
+    }
+    geminiNew = new GoogleGenAI({ apiKey });
   }
+  return geminiNew;
 }
 
 export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
@@ -71,9 +77,7 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
       return content || '';
     }
 
-    if (!openai) {
-      throw new Error('OpenAI client not initialized');
-    }
+    const client = getOpenAI();
 
     const requestParams = prepareO3Parameters({
       model: llmModel || DEFAULT_MODEL,
@@ -84,8 +88,8 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
       temperature: 0.3,
       max_tokens: 2000,
     });
-    
-    const completion = await openai.chat.completions.create(requestParams);
+
+    const completion = await client.chat.completions.create(requestParams);
 
     return completion.choices[0]?.message?.content || '';
   } catch (error) {
@@ -164,10 +168,7 @@ ${content}
       return result;
     }
 
-    if (!openai) {
-      console.error('❌ OpenAI client not initialized');
-      throw new Error('OpenAI client not initialized');
-    }
+    const client = getOpenAI();
 
     console.log('📡 Making OpenAI API call for chart generation...');
     const requestParams = prepareO3Parameters({
@@ -179,8 +180,8 @@ ${content}
       temperature: 0.2,
       max_tokens: 3000,
     });
-    
-    const completion = await openai.chat.completions.create(requestParams);
+
+    const completion = await client.chat.completions.create(requestParams);
 
     const content = completion.choices[0]?.message?.content || '';
     console.log('✅ OpenAI response received, content length:', content.length);
@@ -199,7 +200,6 @@ ${content}
 
 // ---- Local-first image generation: FLUX.2 Klein via mflux bridge (1-step default), Gemini fallback ----
 export interface ImageGenerationOptions {
-  geminiApiKey?: string;
   imageModel?: string;
   // When 'gemini', skip the local mflux bridge and generate with Gemini directly.
   provider?: 'local' | 'gemini';
@@ -302,13 +302,8 @@ async function generateImageWithGeminiFallback(
   enhancedPrompt: string,
   options?: ImageGenerationOptions
 ): Promise<string> {
-  // Use the per-request key when provided; otherwise the module-level client
-  // (initialized from env at startup) is used.
-  const apiKey = options?.geminiApiKey || process.env.GEMINI_API_KEY;
-  const client = apiKey ? new GoogleGenAI({ apiKey }) : geminiNew;
-  if (!client) {
-    throw new Error('Gemini client not initialized for image generation');
-  }
+  // Server-side env key only — the browser never supplies keys.
+  const client = getGeminiImageClient();
 
   console.log('🎨 Starting Gemini image generation (fallback)...');
   console.log(`📝 Prompt: "${request.prompt}"`);
@@ -439,16 +434,9 @@ export async function processAIContentCommand(
   selectionInfo: any,
   llmProvider: string = 'openai',
   llmModel: string = DEFAULT_MODEL,
-  openaiKey?: string,
-  geminiKey?: string,
   parameters?: any,
   options?: ImageGenerationOptions
 ): Promise<string> {
-  // Initialize clients if not already done
-  if (openaiKey || geminiKey) {
-    initializeAIClients(openaiKey, geminiKey);
-  }
-
   const provider = llmProvider === 'ollama' ? 'ollama' : llmProvider === 'gemini' ? 'gemini' : 'openai';
 
   const selectedText = selectionInfo.selectedText || content;

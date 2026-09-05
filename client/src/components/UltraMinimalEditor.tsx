@@ -36,8 +36,6 @@ interface UltraMinimalEditorProps {
   saveDocument: (isManual?: boolean) => Promise<void>;
   llmProvider: 'openai' | 'ollama' | 'gemini';
   llmModel: string;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
   isFullScreen: boolean;
   onToggleFullScreen: () => void;
   onOpenFullFeatures?: () => void;
@@ -60,8 +58,6 @@ export default function UltraMinimalEditor({
   saveDocument,
   llmProvider,
   llmModel,
-  openaiApiKey,
-  geminiApiKey,
   isFullScreen,
   onToggleFullScreen,
   onOpenFullFeatures,
@@ -624,8 +620,6 @@ export default function UltraMinimalEditor({
         editorRef={textareaRef}
         llmProvider={llmProvider}
         llmModel={llmModel}
-        openaiApiKey={openaiApiKey}
-        geminiApiKey={geminiApiKey}
         onSuggestions={onSuggestions}
         onUndo={undoContent}
         activeProjectId={activeProjectId}

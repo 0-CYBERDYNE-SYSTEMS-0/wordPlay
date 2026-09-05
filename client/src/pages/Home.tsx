@@ -527,8 +527,6 @@ export default function Home() {
       saveDocument,
       llmProvider: settings.llmProvider,
       llmModel: settings.llmModel,
-      openaiApiKey: settings.openaiApiKey,
-      geminiApiKey: settings.geminiApiKey,
       isFullScreen,
       onToggleFullScreen: toggleFullScreen,
       onOpenFullFeatures: () => handleModeTransition('settings'),
@@ -630,8 +628,6 @@ export default function Home() {
           saveDocument={saveDocument}
           llmProvider={settings.llmProvider}
           llmModel={settings.llmModel}
-          openaiApiKey={settings.openaiApiKey}
-          geminiApiKey={settings.geminiApiKey}
           isFullScreen={true}
           onToggleFullScreen={toggleFullScreen}
           onOpenFullFeatures={() => handleModeTransition('settings')}
@@ -745,8 +741,6 @@ export default function Home() {
           llmProvider={settings.llmProvider}
           llmModel={settings.llmModel}
           autonomyLevel={settings.autonomyLevel}
-          openaiApiKey={settings.openaiApiKey}
-          geminiApiKey={settings.geminiApiKey}
           onToolResult={handleAgentToolResult}
           editorState={{
             title,

@@ -323,7 +323,7 @@ export async function executeCoreCommand(
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
-  options?: { openaiApiKey?: string; geminiApiKey?: string }
+  options?: { baseUrl?: string }
 ): Promise<{
   result: string;
   message: string;
@@ -377,8 +377,8 @@ export async function executeCoreCommand(
     enhancedContext = await analyzeContentAndContext(content, includeContext, projectId);
   }
   
-  const openai = new OpenAI({ 
-    apiKey: options?.openaiApiKey || process.env.OPENAI_API_KEY || "default_key",
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || "default_key",
     baseURL: process.env.OPENAI_BASE_URL || undefined,
     timeout: AI_REQUEST_TIMEOUT_MS
   });
@@ -707,7 +707,7 @@ export async function executeCustomCommand(
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
-  options?: { openaiApiKey?: string; geminiApiKey?: string }
+  options?: { baseUrl?: string }
 ): Promise<{
   result: string;
   message: string;
@@ -747,8 +747,8 @@ ${enhancedContext?.researchContext ? `\nRESEARCH SOURCES:\n${enhancedContext.res
 
 Follow the custom prompt instructions precisely.${enhancedContext?.researchContext ? `\n\nYou may reference and incorporate information from the research sources above when relevant.` : ''}`;
 
-  const openai = new OpenAI({ 
-    apiKey: options?.openaiApiKey || process.env.OPENAI_API_KEY || "default_key",
+  const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY || "default_key",
     baseURL: process.env.OPENAI_BASE_URL || undefined,
     timeout: AI_REQUEST_TIMEOUT_MS
   });

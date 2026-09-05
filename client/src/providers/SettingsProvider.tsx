@@ -23,10 +23,7 @@ export interface AppSettings {
   // AI Settings
   llmProvider: 'openai' | 'ollama' | 'gemini';
   llmModel: string;
-  openaiApiKey?: string;
-  geminiApiKey?: string;
   ollamaUrl: string;
-  perplexityApiKey?: string;
   researchModel: string;
   imageProvider: 'local' | 'gemini';
   imageModel: string;
@@ -181,6 +178,13 @@ const defaultSettings: AppSettings = {
 
 const SETTINGS_STORAGE_KEY = 'wordplay-settings';
 
+// Keys must never live in the browser: the server reads provider keys from
+// its own .env. Strip any legacy key fields from stored/imported settings.
+function sanitizeSettings(input: Record<string, unknown>): AppSettings {
+  const { openaiApiKey: _o, geminiApiKey: _g, perplexityApiKey: _p, ...rest } = input;
+  return { ...defaultSettings, ...rest };
+}
+
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
@@ -191,7 +195,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return { ...defaultSettings, ...parsed };
+        return sanitizeSettings(parsed);
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);
@@ -318,7 +322,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     reader.onload = (e) => {
       try {
         const imported = JSON.parse(e.target?.result as string);
-        const validatedSettings = { ...defaultSettings, ...imported };
+        const validatedSettings = sanitizeSettings(imported);
         setSettings(validatedSettings);
         
         toast({
