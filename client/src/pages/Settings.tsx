@@ -820,18 +820,11 @@ export default function Settings({ onBack }: SettingsProps) {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="defaultExportFormat">Default Export Format</Label>
-                  <Select value={settings.defaultExportFormat} onValueChange={(value) => updateSettings({ defaultExportFormat: value as any })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pdf">PDF</SelectItem>
-                      <SelectItem value="docx">Word Document</SelectItem>
-                      <SelectItem value="txt">Plain Text</SelectItem>
-                      <SelectItem value="markdown">Markdown</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Exports</Label>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Use the editor's download menu: Markdown for source, Shareable HTML for a
+                    self-contained file (charts and images included), Print / PDF for paper.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -909,74 +902,6 @@ export default function Settings({ onBack }: SettingsProps) {
                     Maximum time the agent can run before stopping (safety limit)
                   </p>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableSelfReflection"
-                    checked={settings.enableSelfReflection}
-                    onCheckedChange={(checked) => updateSettings({ enableSelfReflection: checked })}
-                  />
-                  <Label htmlFor="enableSelfReflection">Enable self-reflection</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableLearning"
-                    checked={settings.enableLearning}
-                    onCheckedChange={(checked) => updateSettings({ enableLearning: checked })}
-                  />
-                  <Label htmlFor="enableLearning">Enable learning from results</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableMemoryPersistence"
-                    checked={settings.enableMemoryPersistence}
-                    onCheckedChange={(checked) => updateSettings({ enableMemoryPersistence: checked })}
-                  />
-                  <Label htmlFor="enableMemoryPersistence">Persistent memory</Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="enableChainOfThought"
-                    checked={settings.enableChainOfThought}
-                    onCheckedChange={(checked) => updateSettings({ enableChainOfThought: checked })}
-                  />
-                  <Label htmlFor="enableChainOfThought">Show reasoning process</Label>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="toolExecutionDelay">Tool Execution Delay (ms)</Label>
-                <Input
-                  id="toolExecutionDelay"
-                  type="number"
-                  min="0"
-                  max="5000"
-                  step="100"
-                  value={settings.toolExecutionDelay}
-                  onChange={(e) => updateSettings({ toolExecutionDelay: parseInt(e.target.value) })}
-                />
-                <p className="text-xs text-gray-500">
-                  Delay between tool executions (0 = fastest, higher = easier to follow)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="agentInstructions">Custom Agent Instructions</Label>
-                <Textarea
-                  id="agentInstructions"
-                  placeholder="Additional instructions for the AI agent's behavior..."
-                  className="min-h-24"
-                  value={settings.agentInstructions}
-                  onChange={(e) => updateSettings({ agentInstructions: e.target.value })}
-                />
-                <p className="text-xs text-gray-500">
-                  These instructions will guide the agent's behavior and tool selection
-                </p>
               </div>
             </div>
           </section>

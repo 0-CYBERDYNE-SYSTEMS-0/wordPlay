@@ -529,6 +529,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     try {
       const validatedData = commandSchema.parse(req.body);
+      // Custom commands are looked up per user — always use the session user.
+      validatedData.userId = resolveUserId(req);
 
       // Check if this is an AI content generation command
       const aiContentCommands = ['table', 'chart', 'image'];

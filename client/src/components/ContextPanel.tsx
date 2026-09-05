@@ -300,29 +300,21 @@ export default function ContextPanel({
           </div>
         )}
         
-        {/* Quick Actions for AI Features - Always Available */}
+        {/* AI hints — pressing one opens the slash menu pre-filtered */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
           <h3 className="font-medium text-xs mb-2 flex items-center">
             <Zap className="h-3 w-3 mr-1" />
-            AI Quick Actions
+            Try a slash command
           </h3>
           <div className="space-y-1">
-            <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <Sparkles className="h-3 w-3 mr-1" />
-              Use /improve to enhance writing
-            </button>
-            <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <FileText className="h-3 w-3 mr-1" />
-              Use /format to structure your document
-            </button>
-            <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <BarChart2 className="h-3 w-3 mr-1" />
-              Use /chart to visualize your data
-            </button>
+            <p className="text-xs text-gray-500 dark:text-gray-300 leading-relaxed">
+              Type <kbd className="rounded bg-gray-200 dark:bg-gray-600 px-1 font-mono">/</kbd> in the editor and press
+              Enter to run. Next step: run a rewrite from here.
+            </p>
           </div>
         </div>
         
-        {/* Global Document Info */}
+                {/* Global Document Info */}
         <div className="border-t pt-2 mt-2">
           <div className="bg-copper-50 dark:bg-copper-100 rounded-lg p-2">
             <h3 className="font-medium text-xs mb-1 flex items-center text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">

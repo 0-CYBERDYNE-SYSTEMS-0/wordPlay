@@ -12,7 +12,7 @@ import {
   Table
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useApiProcessing } from '@/hooks/use-api-processing';
 import MatteDots from './MatteDots';
 import { createAIResponseParser, type ParsedAIResponse } from '@/lib/aiResponseParser';
@@ -147,8 +147,33 @@ export default function SlashCommandsPopup({
   // show command-specific detail (e.g. image provider/model/size/steps).
   const [activeCommand, setActiveCommand] = useState<SlashCommand | null>(null);
 
+  // Custom commands created in Settings are first-class menu citizens.
+  const { data: customCommands } = useQuery({
+    queryKey: ['custom-commands'],
+    queryFn: async () => {
+      const res = await fetch('/api/custom-commands', { credentials: 'include' });
+      if (!res.ok) return [];
+      const data = await res.json();
+      return Array.isArray(data) ? data : [];
+    },
+    enabled: isOpen,
+  });
+
+  const allCommands: SlashCommand[] = [
+    ...SLASH_COMMANDS.filter(c => c.action !== 'undo'),
+    ...(customCommands || []).map((cmd: any) => ({
+      id: `custom-${cmd.id}`,
+      title: cmd.name || cmd.trigger,
+      description: cmd.description || 'Custom command',
+      icon: <Sparkles className="h-4 w-4" />,
+      action: String(cmd.trigger || '').replace(/^\//, ''),
+    })),
+    // Undo always last (its keyboard shortcut is 0)
+    ...SLASH_COMMANDS.filter(c => c.action === 'undo'),
+  ];
+
   // Type-to-filter: match on title or action
-  const filteredCommands = SLASH_COMMANDS.filter(c =>
+  const filteredCommands = allCommands.filter(c =>
     c.title.toLowerCase().includes(query.toLowerCase()) ||
     c.action.toLowerCase().includes(query.toLowerCase())
   );

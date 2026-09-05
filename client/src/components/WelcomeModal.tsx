@@ -104,8 +104,8 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
                   Full-featured experience with AI agent, research tools, and all capabilities.
                 </p>
                 <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
-                  <div>✓ All 9 slash commands</div>
-                  <div>✓ Autonomous AI agent with 19 tools</div>
+                  <div>✓ 8 AI slash commands (+ undo)</div>
+                  <div>✓ Autonomous AI agent (Expert mode)</div>
                   <div>✓ Research integration and source management</div>
                   <div>✓ Advanced text analysis and style metrics</div>
                   <div>✓ Context panel with insights and sources</div>
@@ -137,7 +137,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
                 <div className="space-y-1 text-sm text-gray-500 dark:text-gray-400">
                   <div>✓ Everything in Advanced Mode</div>
                   <div>✓ AI-powered data visualizations with ECharts</div>
-                  <div>✓ AI image generation with Gemini 2.0 Flash</div>
+                  <div>✓ AI image generation — local mflux (Gemini optional)</div>
                   <div>✓ Advanced export with embedded artifacts</div>
                   <div>✓ /table, /chart, /image commands</div>
                 </div>
@@ -197,7 +197,7 @@ export default function WelcomeModal({ isOpen, onClose, onComplete }: WelcomeMod
           </div>
 
           <div className="text-center text-sm text-gray-500 dark:text-gray-400">
-            You can always change your mode in Settings → User Experience
+            You can always change your mode using the switcher in the sidebar
           </div>
         </div>
       )

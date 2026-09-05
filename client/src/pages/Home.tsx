@@ -7,7 +7,7 @@ import SmartPanelManager from "@/components/SmartPanelManager";
 import NewProjectModal from "@/components/NewProjectModal";
 import WebSearch from "@/components/WebSearch";
 import AIAgent from "@/components/AIAgent";
-import SettingsPanel from "@/components/SettingsPanel";
+import Settings from "@/pages/Settings";
 import WelcomeModal from "@/components/WelcomeModal";
 import AgentApplyDialog from "@/components/AgentApplyDialog";
 import DocumentConflictDialog from "@/components/DocumentConflictDialog";
@@ -553,9 +553,11 @@ export default function Home() {
       
       case "settings":
         return (
-          <SettingsPanel
-            contextPanelOpen={panelState.context === 'visible' || panelState.context === 'always-visible'}
-            onToggleContextPanel={() => {/* AI will handle this */}}
+          <Settings
+            onBack={() => {
+              setActiveTab("editor");
+              setFocusMode("writing");
+            }}
           />
         );
       
@@ -741,6 +743,7 @@ export default function Home() {
           llmProvider={settings.llmProvider}
           llmModel={settings.llmModel}
           autonomyLevel={settings.autonomyLevel}
+          maxExecutionTime={settings.maxExecutionTime}
           onToolResult={handleAgentToolResult}
           editorState={{
             title,

@@ -16,6 +16,7 @@ interface AIAgentProps {
   llmProvider?: 'openai' | 'ollama' | 'gemini';
   llmModel?: string;
   autonomyLevel?: 'conservative' | 'moderate' | 'aggressive';
+  maxExecutionTime?: number; // minutes
   onToolResult?: (result: any) => void;
   editorState?: {
     title: string;
@@ -120,6 +121,7 @@ export default function AIAgent({
   llmProvider,
   llmModel,
   autonomyLevel,
+  maxExecutionTime,
   onToolResult,
   editorState
 }: AIAgentProps) {
@@ -226,6 +228,7 @@ export default function AIAgent({
           request,
           context: agentContext,
           autonomyLevel: autonomyLevel ?? 'moderate',
+          maxExecutionTime: (maxExecutionTime ?? 5) * 60_000,
           llmProvider,
           llmModel
         }, { signal: controller.signal });

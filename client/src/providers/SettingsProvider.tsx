@@ -50,13 +50,7 @@ export interface AppSettings {
   
   // Agent Settings
   autonomyLevel: 'conservative' | 'moderate' | 'aggressive';
-  maxExecutionTime: number; // minutes
-  enableSelfReflection: boolean;
-  enableLearning: boolean;
-  enableMemoryPersistence: boolean;
-  enableChainOfThought: boolean;
-  toolExecutionDelay: number; // ms
-  agentInstructions: string;
+  maxExecutionTime: number; // minutes — enforced server-side by the agent route
   
   // UI Settings
   sidebarDefaultOpen: boolean;
@@ -81,7 +75,6 @@ export interface AppSettings {
   enableTimeGoal: boolean;
   
   // Export Settings
-  defaultExportFormat: 'pdf' | 'docx' | 'txt' | 'markdown';
   includeMetadata: boolean;
   autoBackupEnabled: boolean;
   backupInterval: number; // hours
@@ -140,12 +133,6 @@ const defaultSettings: AppSettings = {
   // Agent Settings - Conservative for New Users
   autonomyLevel: 'conservative', // Start conservative, allow growth
   maxExecutionTime: 2, // Quick responses
-  enableSelfReflection: false, // Not needed for simple tasks
-  enableLearning: true, // Learn user preferences
-  enableMemoryPersistence: false, // Respect privacy
-  enableChainOfThought: false, // Keep responses concise
-  toolExecutionDelay: 500, // Visible but not slow
-  agentInstructions: 'Help with writing naturally and subtly. Focus on being helpful without being intrusive.',
   
   // UI Settings - Distraction-Free by Default
   sidebarDefaultOpen: false, // Hide initially for focus
@@ -170,7 +157,6 @@ const defaultSettings: AppSettings = {
   enableTimeGoal: false, // Optional
   
   // Export Settings - Simple & Standard
-  defaultExportFormat: 'pdf', // Most universal
   includeMetadata: false, // Keep exports clean
   autoBackupEnabled: false, // Can overwhelm new users
   backupInterval: 24, // Default daily backup
