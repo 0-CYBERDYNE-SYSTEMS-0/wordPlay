@@ -31,6 +31,7 @@ import {
   resolveUserId,
   isAuthEnabled,
 } from "./auth";
+import { registerUploadRoute } from "./upload";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const httpServer = createServer(app);
@@ -54,6 +55,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve uploaded images
   app.use('/uploads', express.static('public/uploads'));
+
+  // Bring-your-own image upload (paste / drag-drop in the editor)
+  registerUploadRoute(app);
 
   // We've replaced WebSockets with direct API calls
   // This simplifies the architecture and avoids connection issues

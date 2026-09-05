@@ -153,6 +153,53 @@ export default function UltraMinimalEditor({
     [setContentTyping]
   );
 
+  // Bring-your-own images: paste or drag-drop a file, it uploads to /uploads
+  // and is inserted at the cursor as undoable markdown.
+  const uploadImageFile = useCallback(async (file: File): Promise<{ url: string; alt: string } | null> => {
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Images only', description: `${file.name} is not an image file.`, variant: 'destructive' });
+      return null;
+    }
+    const body = new FormData();
+    body.append('file', file);
+    try {
+      const res = await fetch('/api/uploads', { method: 'POST', body, credentials: 'include' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Upload failed (${res.status})`);
+      }
+      return await res.json();
+    } catch (err: any) {
+      toast({ title: 'Upload failed', description: err?.message || 'Network error', variant: 'destructive' });
+      return null;
+    }
+  }, [toast]);
+
+  const insertUploadedImage = useCallback(async (file: File) => {
+    const ta = textareaRef.current;
+    const start = ta ? ta.selectionStart : content.length;
+    toast({ title: 'Uploading image…', description: file.name });
+    const uploaded = await uploadImageFile(file);
+    if (!uploaded) return;
+    const snippet = `![${uploaded.alt}](${uploaded.url})`;
+    applyWithHistory(content.slice(0, start) + snippet + content.slice(start));
+    toast({ title: 'Image added', description: 'Inserted at your cursor. Undo with ⌘Z.' });
+  }, [content, applyWithHistory, uploadImageFile, toast]);
+
+  const handleImagePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData?.files || []).filter((f) => f.type.startsWith('image/'));
+    if (files.length === 0) return; // normal text paste
+    e.preventDefault();
+    files.forEach((f) => insertUploadedImage(f));
+  }, [insertUploadedImage]);
+
+  const handleImageDrop = useCallback((e: React.DragEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+    if (files.length === 0) return;
+    e.preventDefault();
+    files.forEach((f) => insertUploadedImage(f));
+  }, [insertUploadedImage]);
+
   const handleManualSave = async () => {
     if (!isDirty) {
       toast({
@@ -563,6 +610,11 @@ export default function UltraMinimalEditor({
             onKeyUp={handleSelectionChange}
             onClick={handleSelectionChange}
             onKeyDown={handleTextareaKeyDown}
+            onPaste={handleImagePaste}
+            onDrop={handleImageDrop}
+            onDragOver={(e) => {
+              if (Array.from(e.dataTransfer?.types || []).includes('Files')) e.preventDefault();
+            }}
             aria-label="Document body"
             placeholder={
               isEmpty
