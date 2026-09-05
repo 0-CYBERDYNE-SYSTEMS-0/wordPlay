@@ -520,6 +520,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         afterSelection: z.string().optional()
       }),
       style: z.any().optional(),
+      // Image generation settings arrive as top-level fields from the client
+      imageProvider: z.string().optional(),
+      imageModel: z.string().optional(),
+      imageSize: z.string().optional(),
+      imageSteps: z.number().optional(),
       llmProvider: z.enum(['openai', 'ollama', 'gemini']).optional(),
       llmModel: z.string().optional(),
       includeContext: z.boolean().optional(),
@@ -554,12 +559,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
             validatedData.llmModel || 'gpt-4',
             validatedData.style, // Pass style/parameters from request
             {
-              imageModel: validatedData.style?.imageModel,
               // Honor the user's Settings → AI → Image Generation choice:
-              // 'local' = mflux bridge, 'gemini' = cloud. Falls back to local.
-              provider: validatedData.style?.imageProvider === 'gemini' ? 'gemini' : 'local',
-              imageSize: validatedData.style?.imageSize,
-              steps: validatedData.style?.imageSteps,
+              // 'local' = mflux bridge, 'gemini' = cloud, 'custom' = any
+              // OpenAI-compatible images endpoint (IMAGE_API_URL in .env).
+              // Top-level fields win; fall back to legacy style-embedded ones.
+              provider: (validatedData.imageProvider || validatedData.style?.imageProvider || 'local') as any,
+              imageModel: validatedData.imageModel || validatedData.style?.imageModel,
+              imageSize: validatedData.imageSize || validatedData.style?.imageSize,
+              steps: validatedData.imageSteps ?? validatedData.style?.imageSteps,
             }
           );
 

@@ -38,7 +38,7 @@ export default function Settings({ onBack }: SettingsProps) {
     llmModel: z.string(),
     ollamaUrl: z.string().url().optional().or(z.literal('')),
     researchModel: z.string().optional(),
-    imageProvider: z.enum(['local', 'gemini']).optional(),
+    imageProvider: z.enum(['local', 'gemini', 'custom']).optional(),
     imageModel: z.string().optional(),
     imageSteps: z.number().optional(),
     imageSize: z.enum(['256x256', '512x512', '1024x1024']).optional(),
@@ -487,13 +487,14 @@ export default function Settings({ onBack }: SettingsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="imageProvider">Image Provider</Label>
-                  <Select value={settings.imageProvider || 'local'} onValueChange={(value) => updateSettings({ imageProvider: value as 'local' | 'gemini' })}>
+                  <Select value={settings.imageProvider || 'local'} onValueChange={(value) => updateSettings({ imageProvider: value as 'local' | 'gemini' | 'custom' })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="local">Local (mflux FLUX.2 Klein)</SelectItem>
                       <SelectItem value="gemini">Gemini (cloud)</SelectItem>
+                      <SelectItem value="custom">Custom endpoint (OpenAI-compatible)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -507,6 +508,15 @@ export default function Settings({ onBack }: SettingsProps) {
                   />
                   <p className="text-xs text-gray-500">Must be an image-capable Gemini model. Requires a Gemini API key (or GEMINI_API_KEY env).</p>
                 </div>
+                {settings.imageProvider === 'custom' && (
+                  <div className="md:col-span-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600 dark:border-stone-700 dark:bg-stone-800/60 dark:text-stone-300">
+                    Custom endpoints use the standard OpenAI images API shape and are configured on the
+                    server via <span className="font-mono">IMAGE_API_URL</span> (plus optional{" "}
+                    <span className="font-mono">IMAGE_API_KEY</span>,{" "}
+                    <span className="font-mono">IMAGE_API_MODEL</span>) — works with ComfyUI bridges,
+                    A1111 <span className="font-mono">--api</span>, SD WebUI, and hosted gateways.
+                  </div>
+                )}
                 {settings.imageProvider === 'local' && (
                   <>
                     <div className="space-y-2">

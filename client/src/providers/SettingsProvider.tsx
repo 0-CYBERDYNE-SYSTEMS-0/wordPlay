@@ -25,7 +25,7 @@ export interface AppSettings {
   llmModel: string;
   ollamaUrl: string;
   researchModel: string;
-  imageProvider: 'local' | 'gemini';
+  imageProvider: 'local' | 'gemini' | 'custom';
   imageModel: string;
   // Local mflux bridge controls
   imageSteps: number;      // mflux steps (1 = fastest/quality tradeoff, 4 = bridge default)

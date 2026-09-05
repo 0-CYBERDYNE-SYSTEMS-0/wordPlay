@@ -260,8 +260,9 @@ ${content}
 // ---- Local-first image generation: FLUX.2 Klein via mflux bridge (1-step default), Gemini fallback ----
 export interface ImageGenerationOptions {
   imageModel?: string;
-  // When 'gemini', skip the local mflux bridge and generate with Gemini directly.
-  provider?: 'local' | 'gemini';
+  // 'local' = mflux bridge, 'gemini' = cloud, 'custom' = any OpenAI-compatible
+  // images endpoint configured via IMAGE_API_URL (+ IMAGE_API_KEY/IMAGE_API_MODEL).
+  provider?: 'local' | 'gemini' | 'custom';
   // Local mflux bridge controls (defaults from env / constants)
   imageSize?: string;
   steps?: number;
@@ -303,6 +304,12 @@ Create a visually appealing and professional image.`;
   const genDimensions = sizeMap[genSize] || sizeMap['512x512'];
   const genWidth = genDimensions.width;
   const genHeight = genDimensions.height;
+
+  // Custom OpenAI-compatible endpoint (/v1/images/generations shape) — covers
+  // ComfyUI bridges, A1111 --api, SD WebUI, swarmui, hosted gateways, etc.
+  if (options?.provider === 'custom') {
+    return generateImageWithCustomEndpoint(request, enhancedPrompt, options);
+  }
 
   // When the user selected Gemini for images, skip the local bridge entirely.
   if (options?.provider === 'gemini') {
@@ -362,6 +369,66 @@ Create a visually appealing and professional image.`;
       );
     }
   }
+}
+
+async function generateImageWithCustomEndpoint(
+  request: ImageGenerationRequest,
+  enhancedPrompt: string,
+  options?: ImageGenerationOptions
+): Promise<string> {
+  const base = (process.env.IMAGE_API_URL || '').replace(/\/$/, '');
+  if (!base) {
+    throw new Error('Custom image endpoint is not configured on the server (set IMAGE_API_URL in .env)');
+  }
+
+  console.log(`🎨 Generating image via custom endpoint ${base}/images/generations...`);
+  const res = await fetch(`${base}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(process.env.IMAGE_API_KEY ? { Authorization: `Bearer ${process.env.IMAGE_API_KEY}` } : {}),
+    },
+    body: JSON.stringify({
+      model: options?.imageModel || process.env.IMAGE_API_MODEL || undefined,
+      prompt: enhancedPrompt,
+      size: options?.imageSize || request.size || '1024x1024',
+      n: 1,
+    }),
+    signal: AbortSignal.timeout(300_000),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Custom image endpoint HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+  }
+
+  const data = await res.json();
+  const item = data?.data?.[0];
+  if (!item) {
+    throw new Error('Custom image endpoint returned no data');
+  }
+
+  let imageBuffer: Buffer;
+  if (item.b64_json) {
+    imageBuffer = Buffer.from(item.b64_json, 'base64');
+  } else if (item.url) {
+    const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(120_000) });
+    if (!imgRes.ok) throw new Error(`Could not fetch generated image (HTTP ${imgRes.status})`);
+    imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+  } else {
+    throw new Error('Custom image endpoint returned neither b64_json nor url');
+  }
+
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  const fileName = `custom-image-${crypto.randomUUID()}.png`;
+  fs.writeFileSync(path.join(uploadsDir, fileName), imageBuffer);
+  console.log(`✅ Custom endpoint image saved: ${fileName}`);
+
+  const altText = request.prompt.split(/\s+/).slice(0, 8).join(' ') || 'Generated image';
+  return `![${altText}](/uploads/${fileName})`;
 }
 
 async function generateImageWithGeminiFallback(
