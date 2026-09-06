@@ -73,17 +73,17 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
 
   try {
     if (llmProvider === 'ollama') {
-      const content = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`);
+      const content = stripThinking(await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`));
       return content || '';
     }
 
     if (llmProvider === 'gemini') {
-      const content = await generateWithGemini(
+      const content = stripThinking(await generateWithGemini(
         userPrompt,
         {},
         systemPrompt,
         llmModel || DEFAULT_GEMINI_MODEL
-      );
+      ));
       return content || '';
     }
 
@@ -101,7 +101,7 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
 
     const completion = await client.chat.completions.create(requestParams);
 
-    return completion.choices[0]?.message?.content || '';
+    return stripThinking(completion.choices[0]?.message?.content || '');
   } catch (error: any) {
     console.error('Error generating table:', error);
     throw new Error(describeProviderError('table generation', llmProvider, llmModel, error));
@@ -141,6 +141,16 @@ export function describeProviderError(what: string, llmProvider: string, llmMode
     return `Model not available for ${what}${modelSuffix} — pick another model in Settings → AI.`;
   }
   return `Provider error during ${what}: ${raw}${modelSuffix}`;
+}
+
+// Reasoning models (qwen, deepseek-r1, …) wrap their answer in <thinking>…
+// </thinking> — and an unclosed tag means the whole tail is reasoning. Either
+// variant would poison a chart/table payload, so strip it at the source.
+function stripThinking(text: string): string {
+  let t = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  const unclosed = t.toLowerCase().lastIndexOf('<thinking>');
+  if (unclosed !== -1) t = t.slice(0, unclosed);
+  return t.trim();
 }
 
 export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
@@ -206,7 +216,7 @@ export async function generateChart(request: ChartGenerationRequest, llmProvider
   try {
     if (llmProvider === 'ollama') {
       console.log('📡 Making Ollama call for chart generation...');
-      const content = await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`);
+      const content = stripThinking(await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`));
       const result = `\`\`\`chart
 ${content}
 \`\`\``;
@@ -215,12 +225,12 @@ ${content}
 
     if (llmProvider === 'gemini') {
       console.log('📡 Making Gemini call for chart generation...');
-      const content = await generateWithGemini(
+      const content = stripThinking(await generateWithGemini(
         userPrompt,
         {},
         systemPrompt,
         llmModel || DEFAULT_GEMINI_MODEL
-      );
+      ));
       const result = `\`\`\`chart
 ${content || ''}
 \`\`\``;

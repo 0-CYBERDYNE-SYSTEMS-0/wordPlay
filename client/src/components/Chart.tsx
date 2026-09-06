@@ -70,6 +70,129 @@ const verticalGradient = (color: string, from = 0.55, to = 0.06) =>
     { offset: 1, color: hexToRgba(color, to) },
   ]);
 
+// ---------------------------------------------------------------------------
+// LLM config hardening. Models emit plausible-looking but ECharts-hostile
+// options (objects where an axis index belongs, chart types like "barChart",
+// single-element pair data). Unknown structures crash setOption internals
+// ("Cannot read properties of undefined (reading 'get')") and the writer sees
+// a "Chart Error" card. Pass the option through a whitelist so any parseable
+// config produces a chart.
+// ---------------------------------------------------------------------------
+const CHART_TYPE_ALIASES: Record<string, string> = {
+  bar: 'bar', barchart: 'bar', columnchart: 'bar',
+  line: 'line', linechart: 'line', area: 'line', areachart: 'line',
+  pie: 'pie', piechart: 'pie', doughnut: 'pie', donut: 'pie',
+  scatter: 'scatter', scatterchart: 'scatter', bubblechart: 'scatter',
+  radar: 'radar', radarchart: 'radar',
+  funnel: 'funnel', funnelchart: 'funnel',
+  gauge: 'gauge', gaugechart: 'gauge',
+  treemap: 'treemap', heatmap: 'heatmap',
+};
+
+const SERIES_ALLOWED_KEYS = new Set([
+  'name', 'type', 'data', 'itemStyle', 'lineStyle', 'areaStyle', 'label',
+  'labelLine', 'emphasis', 'barWidth', 'barGap', 'stack', 'symbol',
+  'symbolSize', 'smooth', 'radius', 'center', 'roseType', 'startAngle',
+  'avoidLabelOverlap', 'showBackground', 'backgroundStyle', 'markLine',
+  'markPoint', 'markArea', 'left', 'right', 'top', 'bottom', 'width', 'height',
+]);
+
+const OPTION_ALLOWED_KEYS = [
+  'title', 'legend', 'tooltip', 'grid', 'xAxis', 'yAxis', 'series', 'color',
+  'backgroundColor', 'animation', 'animationDuration', 'animationEasing',
+  'animationDelayUpdate', 'radar', 'polar', 'angleAxis', 'radiusAxis',
+  'visualMap', 'dataZoom', 'graphic', 'textStyle',
+];
+
+function normalizeChartType(raw: any): string {
+  const key = String(raw ?? 'bar').toLowerCase().replace(/[^a-z]/g, '');
+  return CHART_TYPE_ALIASES[key] || 'bar';
+}
+
+function repairSeriesData(data: any): any {
+  if (!Array.isArray(data)) return [];
+  return data
+    .map((d) => (Array.isArray(d) && d.length === 1 ? d[0] : d))
+    .filter((d) => d === null || typeof d === 'number' || typeof d === 'string' || (d && typeof d === 'object'));
+}
+
+function sanitizeSeries(series: any): any[] {
+  if (!Array.isArray(series)) return [];
+  return series.map((s) => {
+    if (!s || typeof s !== 'object' || Array.isArray(s)) {
+      return { type: 'bar', data: [] };
+    }
+    const rawType = s.type ?? s.chartType ?? s.chart ?? 'bar';
+    const type = normalizeChartType(rawType);
+    const clean: any = { type };
+    for (const key of Object.keys(s)) {
+      if (SERIES_ALLOWED_KEYS.has(key)) clean[key] = s[key];
+    }
+    clean.data = repairSeriesData(clean.data);
+    // An "area" chart is a line chart with a fill.
+    if (type === 'line' && /area/i.test(String(rawType)) && !clean.areaStyle) {
+      clean.areaStyle = {};
+    }
+    return clean;
+  });
+}
+
+const AXIS_ALLOWED_KEYS = new Set([
+  'type', 'data', 'name', 'nameTextStyle', 'min', 'max', 'scale', 'inverse',
+  'axisLine', 'axisLabel', 'axisTick', 'splitLine', 'splitArea',
+  'boundaryGap', 'position', 'offset', 'interval', 'rotate', 'formatter',
+]);
+
+function sanitizeAxis(axis: any, defaultType: string): any {
+  // Absent or non-object axes are replaced with clean defaults — a malformed
+  // xAxis paired with a missing yAxis crashes cartesian series init
+  // ("Cannot read properties of undefined (reading 'get')") and poisons the
+  // painter for the rest of the session.
+  if (!axis || typeof axis !== 'object' || Array.isArray(axis)) {
+    return { type: defaultType };
+  }
+  const clean: any = { type: typeof axis.type === 'string' ? axis.type : defaultType };
+  for (const key of Object.keys(axis)) {
+    if (AXIS_ALLOWED_KEYS.has(key)) clean[key] = axis[key];
+  }
+  if (clean.type === 'category' && !Array.isArray(clean.data)) {
+    clean.data = [];
+  }
+  return clean;
+}
+
+function sanitizeChartOption(option: any): any {
+  if (!option || typeof option !== 'object') return option;
+  const out: any = {};
+  for (const key of OPTION_ALLOWED_KEYS) {
+    if (option[key] !== undefined) out[key] = option[key];
+  }
+  out.series = sanitizeSeries(option.series);
+
+  const needsCartesian = out.series.some((s: any) => ['bar', 'line'].includes(s.type));
+  if (needsCartesian) {
+    out.xAxis = sanitizeAxis(out.xAxis, 'category');
+    out.yAxis = sanitizeAxis(out.yAxis, 'value');
+    // Numeric data on a category axis with no labels: synthesize indexes so
+    // bars/lines land at distinct positions instead of stacking on one slot.
+    if (out.xAxis.type === 'category' && (!Array.isArray(out.xAxis.data) || out.xAxis.data.length === 0)) {
+      const maxLen = Math.max(1, ...out.series.map((s: any) => (Array.isArray(s.data) ? s.data.length : 0)));
+      out.xAxis.data = Array.from({ length: maxLen }, (_, i) => String(i + 1));
+    }
+  } else {
+    delete out.xAxis;
+    delete out.yAxis;
+  }
+
+  // Legend booleans where numbers/percentages belong crash layout.
+  if (out.legend && typeof out.legend === 'object') {
+    for (const edge of ['left', 'right', 'top', 'bottom']) {
+      if (typeof out.legend[edge] === 'boolean') delete out.legend[edge];
+    }
+  }
+  return out;
+}
+
 interface ChartProps {
   config: any;
   className?: string;
@@ -130,7 +253,18 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
       height: 'auto',
     });
 
+    // If the container had zero size at init time (hidden panel, pending
+    // layout), ECharts silently renders nothing and never recovers on its
+    // own. Watch the container and repaint whenever its size changes.
+    const resizeObserver = new ResizeObserver(() => {
+      try {
+        chartInstance.current?.resize();
+      } catch { /* instance disposed mid-callback */ }
+    });
+    resizeObserver.observe(chartRef.current);
+
     return () => {
+      resizeObserver.disconnect();
       if (chartInstance.current) {
         chartInstance.current.dispose();
       }
@@ -297,7 +431,7 @@ const Chart = forwardRef<ChartRef, ChartProps>(({
         } : {}),
       };
 
-      chartInstance.current.setOption(enhancedConfig, true);
+      chartInstance.current.setOption(sanitizeChartOption(enhancedConfig), true);
       console.log('✅ Chart options set successfully');
 
       // Debounced resize handler

@@ -20,17 +20,7 @@ export function lenientParse(input: string): any {
   }
   s = s.slice(start, end + 1);
 
-  // Remove line comments
-  s = s.replace(/\/\/[^\n]*/g, '');
-
-  // Quote unquoted object keys: { value: 40 } -> { "value": 40 }
-  s = s.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:)/g, '$1"$2"$3');
-
-  // Remove trailing commas before } or ]
-  s = s.replace(/,\s*([}\]])/g, '$1');
-
-  // Replace single-quoted strings with double-quoted
-  s = s.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"');
+  s = sanitizeLlmJson(s);
 
   try {
     return JSON.parse(s);
@@ -45,4 +35,79 @@ export function lenientParse(input: string): any {
       throw firstError;
     }
   }
+}
+
+/**
+ * String-aware JSON cleanup. All repairs happen ONLY outside double-quoted
+ * strings, so legitimate content survives untouched:
+ *   • apostrophes in values ("'San Francisco', -apple-system") are preserved
+ *   • URLs ("https://…") are not eaten by comment stripping
+ *
+ * Repairs applied outside strings:
+ *   • // line comments and  block comments are removed
+ *   • 'single-quoted' strings are converted to "double-quoted"
+ * Then (globally, safe by construction):
+ *   • unquoted object keys get quoted
+ *   • trailing commas before } or ] are removed
+ */
+function sanitizeLlmJson(s: string): string {
+  let out = '';
+  let i = 0;
+  const n = s.length;
+
+  while (i < n) {
+    const ch = s[i];
+
+    if (ch === '"') {
+      // Copy double-quoted strings verbatim (respecting escapes).
+      let j = i + 1;
+      while (j < n) {
+        if (s[j] === '\\') { j += 2; continue; }
+        if (s[j] === '"') break;
+        j++;
+      }
+      out += s.slice(i, Math.min(j + 1, n));
+      i = j + 1;
+      continue;
+    }
+
+    if (ch === "'") {
+      // Genuine single-quoted string → convert to double-quoted.
+      let j = i + 1;
+      let inner = '';
+      while (j < n && s[j] !== "'") {
+        if (s[j] === '\\') { inner += s[j + 1] ?? ''; j += 2; continue; }
+        inner += s[j];
+        j++;
+      }
+      out += '"' + inner.replace(/"/g, '\\"') + '"';
+      i = j + 1;
+      continue;
+    }
+
+    if (ch === '/' && s[i + 1] === '/') {
+      // Line comment → skip to end of line.
+      while (i < n && s[i] !== '\n') i++;
+      continue;
+    }
+
+    if (ch === '/' && s[i + 1] === '*') {
+      // Block comment → skip past the closing */
+      i += 2;
+      while (i < n && !(s[i] === '*' && s[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+
+    out += ch;
+    i++;
+  }
+
+  // Quote unquoted object keys: { value: 40 } -> { "value": 40 }
+  out = out.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)(\s*:)/g, '$1"$2"$3');
+
+  // Remove trailing commas before } or ]
+  out = out.replace(/,\s*([}\]])/g, '$1');
+
+  return out;
 }
