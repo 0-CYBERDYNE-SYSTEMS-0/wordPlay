@@ -791,6 +791,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // AI Connection test endpoint for debugging
+  // Ollama model list, proxied through the server so remote devices on the
+  // network see the server host's Ollama (a browser's localhost is its own).
+  app.get("/api/ai/ollama/models", async (req: Request, res: Response) => {
+    const ollamaUrl = process.env.OLLAMA_URL || "http://localhost:11434";
+    try {
+      const response = await fetch(`${ollamaUrl}/api/tags`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) {
+        return res.status(502).json({
+          message: `Ollama at ${ollamaUrl} responded HTTP ${response.status}`
+        });
+      }
+      const data = await response.json();
+      res.json({ models: data.models || [] });
+    } catch (error: any) {
+      res.status(502).json({
+        message: `Could not reach Ollama at ${ollamaUrl} — is it running on the server host?`
+      });
+    }
+  });
+
   app.get("/api/ai/test", async (req: Request, res: Response) => {
     try {
       const { testAIConnections, testGeminiConnection } = await import("./openai");

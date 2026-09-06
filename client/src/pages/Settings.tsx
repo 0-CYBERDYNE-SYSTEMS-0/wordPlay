@@ -125,30 +125,33 @@ export default function Settings({ onBack }: SettingsProps) {
     }
   }, [settings.theme]);
 
-  // Fetch Ollama models when provider is ollama
+  // Fetch Ollama models when provider is ollama. Goes through the server so
+  // it works from ANY device on the network (a browser on a remote machine
+  // has no localhost Ollama of its own).
   const fetchOllamaModels = async () => {
     if (settings.llmProvider !== 'ollama') return;
-    
+
     setLoadingModels(true);
     try {
-      const response = await fetch(`${settings.ollamaUrl}/api/tags`);
+      const response = await fetch('/api/ai/ollama/models', { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         const models = data.models?.map((model: any) => model.name) || [];
         setOllamaModels(models);
-        
+
         // If current model is not available, set to first available model
         if (models.length > 0 && !models.includes(settings.llmModel)) {
           updateSettings({ llmModel: models[0] });
         }
       } else {
-        throw new Error('Failed to fetch models');
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.message || 'Failed to fetch models');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching Ollama models:', error);
       toast({
         title: "Failed to fetch Ollama models",
-        description: "Make sure Ollama is running and accessible at the configured URL.",
+        description: error?.message || "Check that Ollama is running on the server host.",
         variant: "destructive",
       });
       // Set default fallback models

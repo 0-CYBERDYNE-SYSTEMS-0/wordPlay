@@ -56,12 +56,21 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
+  // A shared team server must survive one bad request. Express 4 cannot catch
+  // async route rejections, so without these handlers a single failed DB query
+  // takes the whole process down for everyone.
+  process.on("unhandledRejection", (reason) => {
+    log(`Unhandled rejection (server kept alive): ${reason}`);
+  });
+  process.on("uncaughtException", (err) => {
+    log(`Uncaught exception (server kept alive): ${err?.stack || err}`);
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after

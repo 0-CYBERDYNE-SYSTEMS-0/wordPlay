@@ -11,7 +11,11 @@ export const config = {
       connectionTimeoutMillis: 10000,
       idleTimeoutMillis: 30000,
       max: 10, // Maximum number of connections in the pool
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+      // SSL is OPT-IN (DATABASE_SSL=true) — managed cloud Postgres (Neon etc.)
+      // needs it, but local/LAN Postgres (the normal team deployment) does not
+      // support it. Tying this to NODE_ENV=production broke every self-hosted
+      // production start.
+      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
     }
   },
   server: {
