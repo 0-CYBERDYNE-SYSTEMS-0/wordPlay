@@ -26,9 +26,30 @@ function effectiveBaseUrl(options?: AIRequestOptions): string | undefined {
   return options?.baseUrl || process.env.OPENAI_BASE_URL || undefined;
 }
 
+// Kimi Coding Plan (Moonshot): OpenAI-compatible endpoint restricted to
+// coding-plan subscription keys. Keys are server-side env only.
+export const KIMI_DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1";
+export const KIMI_DEFAULT_MODEL = "kimi-for-coding";
+
+export function resolveOpenAICompat(provider?: string): { apiKey: string; baseURL: string | undefined } {
+  if (provider === "kimi") {
+    return {
+      apiKey: process.env.KIMI_API_KEY || "missing_kimi_key",
+      baseURL: process.env.KIMI_BASE_URL || KIMI_DEFAULT_BASE_URL,
+    };
+  }
+  return { apiKey: effectiveOpenAIKey(), baseURL: effectiveBaseUrl() };
+}
+
+// Per-provider model defaults — 'kimi' must never fall back to the MLX name.
+export function defaultModelFor(provider: string | undefined, llmModel?: string): string {
+  if (llmModel) return llmModel;
+  return provider === "kimi" ? KIMI_DEFAULT_MODEL : DEFAULT_MODEL;
+}
+
 // Connection test interfaces
 export interface AIServiceStatus {
-  service: 'openai' | 'ollama' | 'gemini';
+  service: 'openai' | 'ollama' | 'gemini' | 'kimi';
   available: boolean;
   error?: string;
   latency?: number;
@@ -356,12 +377,12 @@ export async function callOllama(model: string, prompt: string, requestJson: boo
 // Enhanced function with automatic fallback
 export async function callAIWithFallback(
   prompt: string,
-  preferredProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  preferredProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   model?: string,
   style?: any,
   options?: AIRequestOptions
-): Promise<{ result: string; provider: 'openai' | 'ollama' | 'gemini'; error?: string }> {
-  const order: ('openai' | 'ollama' | 'gemini')[] =
+): Promise<{ result: string; provider: 'openai' | 'ollama' | 'gemini' | 'kimi'; error?: string }> {
+  const order: ('openai' | 'ollama' | 'gemini' | 'kimi')[] =
     preferredProvider === 'openai' ? ['openai', 'gemini', 'ollama']
     : preferredProvider === 'ollama' ? ['ollama', 'openai', 'gemini']
     : ['gemini', 'openai', 'ollama'];
@@ -387,7 +408,7 @@ export async function generateTextCompletion(
   content: string,
   style: any,
   prompt: string = "Continue this text in the same style.",
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<string> {
@@ -416,13 +437,12 @@ export async function generateTextCompletion(
 
   try {
     const openai = new OpenAI({
-      apiKey: effectiveOpenAIKey(options),
-      baseURL: effectiveBaseUrl(options),
+      ...resolveOpenAICompat(llmProvider),
       timeout: AI_REQUEST_TIMEOUT_MS
     });
 
     const requestParams = prepareO3Parameters({
-      model: llmModel || DEFAULT_MODEL,
+      model: defaultModelFor(llmProvider, llmModel),
       messages: [
         {
           role: "system",
@@ -520,7 +540,7 @@ export async function generateWithGemini(
 // Analyze the text style in greater detail
 export async function analyzeTextStyle(
   text: string,
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<any> {
@@ -564,12 +584,11 @@ export async function analyzeTextStyle(
       );
     } else {
       const openai = new OpenAI({
-        apiKey: effectiveOpenAIKey(options),
-        baseURL: effectiveBaseUrl(options),
+        ...resolveOpenAICompat(llmProvider),
         timeout: AI_REQUEST_TIMEOUT_MS
       });
       const requestParams = prepareO3Parameters({
-        model: llmModel || DEFAULT_MODEL,
+        model: defaultModelFor(llmProvider, llmModel),
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: text || "Sample text for analysis." }
@@ -671,7 +690,7 @@ export async function analyzeTextStyle(
 export async function generateSuggestions(
   content: string,
   style: any,
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<string[]> {
@@ -752,12 +771,11 @@ export async function generateSuggestions(
 
   try {
     const openai = new OpenAI({
-      apiKey: effectiveOpenAIKey(options),
-      baseURL: effectiveBaseUrl(options),
+      ...resolveOpenAICompat(llmProvider),
       timeout: AI_REQUEST_TIMEOUT_MS
     });
     const requestParams = prepareO3Parameters({
-      model: llmModel || DEFAULT_MODEL,
+      model: defaultModelFor(llmProvider, llmModel),
       messages: [
         {
           role: "system",
@@ -789,7 +807,7 @@ export async function generateSuggestions(
 export async function processTextCommand(
   content: string,
   command: string,
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<{ result: string; message: string }> {
@@ -819,12 +837,11 @@ export async function processTextCommand(
       );
     } else {
       const openai = new OpenAI({
-        apiKey: effectiveOpenAIKey(options),
-        baseURL: effectiveBaseUrl(options),
+        ...resolveOpenAICompat(llmProvider),
         timeout: AI_REQUEST_TIMEOUT_MS
       });
       const requestParams = prepareO3Parameters({
-        model: llmModel || DEFAULT_MODEL,
+        model: defaultModelFor(llmProvider, llmModel),
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Document:\n${content}\n\nCommand: ${command}` }
@@ -856,7 +873,7 @@ export async function processTextCommand(
 export async function generateContextualAssistance(
   content: string,
   title: string,
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<{ message: string; suggestions: string[] }> {
@@ -880,12 +897,11 @@ export async function generateContextualAssistance(
       );
     } else {
       const openai = new OpenAI({
-        apiKey: effectiveOpenAIKey(options),
-        baseURL: effectiveBaseUrl(options),
+        ...resolveOpenAICompat(llmProvider),
         timeout: AI_REQUEST_TIMEOUT_MS
       });
       const requestParams = prepareO3Parameters({
-        model: llmModel || DEFAULT_MODEL,
+        model: defaultModelFor(llmProvider, llmModel),
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: `Title: ${title}\n\nContent: ${content}` }

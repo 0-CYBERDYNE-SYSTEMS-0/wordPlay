@@ -21,7 +21,7 @@ export interface AppSettings {
   showLineNumbers: boolean;
   
   // AI Settings
-  llmProvider: 'openai' | 'ollama' | 'gemini';
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi';
   llmModel: string;
   ollamaUrl: string;
   researchModel: string;

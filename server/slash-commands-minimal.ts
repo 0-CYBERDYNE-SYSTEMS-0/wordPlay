@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { storage } from './storage';
-import { generateWithGemini, DEFAULT_GEMINI_MODEL, type AIRequestOptions } from './openai';
+import { generateWithGemini, DEFAULT_GEMINI_MODEL, resolveOpenAICompat, type AIRequestOptions } from './openai';
 
 const DEFAULT_MODEL = "mlx-community/gemma-4-e2b-it-4bit";
 
@@ -319,7 +319,7 @@ export async function executeCoreCommand(
     beforeSelection?: string;
     afterSelection?: string;
   },
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
@@ -378,12 +378,15 @@ export async function executeCoreCommand(
   }
   
   const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "default_key",
-    baseURL: process.env.OPENAI_BASE_URL || undefined,
+    ...resolveOpenAICompat(llmProvider),
     timeout: AI_REQUEST_TIMEOUT_MS
   });
   
-  const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
+  const modelToUse = llmProvider === 'kimi'
+      ? (llmModel || 'kimi-for-coding')
+      : llmProvider === 'openai'
+        ? (llmModel || DEFAULT_MODEL)
+        : llmModel;
   const textContext = smartSelectionInfo.selectedText || content;
   
   try {
@@ -703,7 +706,7 @@ export async function executeCustomCommand(
     beforeSelection?: string;
     afterSelection?: string;
   },
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
@@ -748,12 +751,15 @@ ${enhancedContext?.researchContext ? `\nRESEARCH SOURCES:\n${enhancedContext.res
 Follow the custom prompt instructions precisely.${enhancedContext?.researchContext ? `\n\nYou may reference and incorporate information from the research sources above when relevant.` : ''}`;
 
   const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "default_key",
-    baseURL: process.env.OPENAI_BASE_URL || undefined,
+    ...resolveOpenAICompat(llmProvider),
     timeout: AI_REQUEST_TIMEOUT_MS
   });
   
-  const modelToUse = llmProvider === 'openai' ? (llmModel || DEFAULT_MODEL) : llmModel;
+  const modelToUse = llmProvider === 'kimi'
+      ? (llmModel || 'kimi-for-coding')
+      : llmProvider === 'openai'
+        ? (llmModel || DEFAULT_MODEL)
+        : llmModel;
   
   try {
     const userPrompt = `Process this content:\n\n${textContext}`;

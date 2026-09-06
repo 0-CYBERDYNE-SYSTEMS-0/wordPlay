@@ -14,7 +14,7 @@ export async function executeSlashCommand(
     afterSelection?: string;
   },
   style: any = {},
-  llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
   llmModel: string = 'mlx-community/gemma-4-e2b-it-4bit',
   includeContext: boolean = false,
   projectId?: number,

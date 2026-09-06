@@ -34,7 +34,7 @@ export default function Settings({ onBack }: SettingsProps) {
     fontSize: z.number().min(10).max(24),
     contextPanelDefaultOpen: z.boolean(),
     sidebarDefaultOpen: z.boolean(),
-    llmProvider: z.enum(['openai', 'ollama', 'gemini']),
+    llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi']),
     llmModel: z.string(),
     ollamaUrl: z.string().url().optional().or(z.literal('')),
     researchModel: z.string().optional(),
@@ -382,7 +382,7 @@ export default function Settings({ onBack }: SettingsProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="llmProvider">LLM Provider</Label>
-                  <Select value={settings.llmProvider} onValueChange={(value) => updateSettings({ llmProvider: value as 'openai' | 'ollama' | 'gemini' })}>
+                  <Select value={settings.llmProvider} onValueChange={(value) => updateSettings({ llmProvider: value as 'openai' | 'ollama' | 'gemini' | 'kimi' })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -390,6 +390,7 @@ export default function Settings({ onBack }: SettingsProps) {
                       <SelectItem value="openai">OpenAI</SelectItem>
                       <SelectItem value="ollama">Ollama (Local)</SelectItem>
                       <SelectItem value="gemini">Gemini</SelectItem>
+                      <SelectItem value="kimi">Kimi (Coding Plan)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -422,6 +423,13 @@ export default function Settings({ onBack }: SettingsProps) {
                           <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
                         </>
+                      ) : settings.llmProvider === 'kimi' ? (
+                        <>
+                          <SelectItem value="kimi-for-coding">Kimi for Coding</SelectItem>
+                          <SelectItem value="kimi-for-coding-highspeed">Kimi for Coding Highspeed</SelectItem>
+                          <SelectItem value="k3">K3</SelectItem>
+                          <SelectItem value="k3-256k">K3 (256k context)</SelectItem>
+                        </>
                       ) : settings.llmProvider === 'gemini' ? (
                         <>
                           <SelectItem value="gemini-2.5-flash">Gemini 2.5 Flash</SelectItem>
@@ -440,6 +448,12 @@ export default function Settings({ onBack }: SettingsProps) {
                   {settings.llmProvider === 'ollama' && ollamaModels.length === 0 && !loadingModels && (
                     <p className="text-xs text-orange-600">
                       No models found. Make sure Ollama is running and has models installed.
+                    </p>
+                  )}
+                  {settings.llmProvider === 'kimi' && (
+                    <p className="text-xs text-gray-500">
+                      Uses the team server's Kimi Coding Plan key (<span className="font-mono">KIMI_API_KEY</span> in .env).
+                      Streaming is not available on this provider yet.
                     </p>
                   )}
                 </div>

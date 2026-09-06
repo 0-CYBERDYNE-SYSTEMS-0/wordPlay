@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 interface AIAgentProps {
   currentProject?: any;
   currentDocument?: any;
-  llmProvider?: 'openai' | 'ollama' | 'gemini';
+  llmProvider?: 'openai' | 'ollama' | 'gemini' | 'kimi';
   llmModel?: string;
   autonomyLevel?: 'conservative' | 'moderate' | 'aggressive';
   maxExecutionTime?: number; // minutes

@@ -39,7 +39,7 @@ interface AgentContext {
   projectDocuments: any[];
   projectSources: any[];
   researchNotes: string;
-  llmProvider?: 'openai' | 'ollama' | 'gemini';
+  llmProvider?: 'openai' | 'ollama' | 'gemini' | 'kimi';
   llmModel?: string;
   
   // NEW: Enhanced autonomous capabilities
@@ -124,14 +124,18 @@ const VALID_OPENAI_MODELS = [
 ];
 
 // Validate model based on provider
-function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' | 'gemini' = 'openai'): string {
+function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'kimi' = 'openai'): string {
   if (!model) {
     if (provider === 'ollama') return 'qwen3:4b';
     if (provider === 'gemini') return 'gemini-2.5-flash';
+    if (provider === 'kimi') return 'kimi-for-coding';
     return 'mlx-community/gemma-4-e2b-it-4bit';
   }
 
-  if (provider === 'openai') {
+  if (provider === 'kimi') {
+    // Honor any non-empty Kimi model string (kimi-for-coding, k3, …)
+    return model;
+  } else if (provider === 'openai') {
     return VALID_OPENAI_MODELS.includes(model) ? model : 'mlx-community/gemma-4-e2b-it-4bit';
   } else if (provider === 'gemini') {
     // Honor any non-empty Gemini model string (e.g. gemini-2.5-flash / -pro)
@@ -2170,11 +2174,12 @@ Remember:
     const startTime = Date.now();
     
     try {
-      // Initialize OpenAI client — server-side env key only
+      // Initialize OpenAI client — server-side env key only (kimi = coding plan slot)
       const { OpenAI } = await import("openai");
+      const isKimi = this.context.llmProvider === "kimi";
       const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY || "default_key",
-        baseURL: process.env.OPENAI_BASE_URL || undefined,
+        apiKey: isKimi ? (process.env.KIMI_API_KEY || "missing_kimi_key") : (process.env.OPENAI_API_KEY || "default_key"),
+        baseURL: isKimi ? (process.env.KIMI_BASE_URL || "https://api.kimi.com/coding/v1") : (process.env.OPENAI_BASE_URL || undefined),
         timeout: AI_REQUEST_TIMEOUT_MS
       });
       

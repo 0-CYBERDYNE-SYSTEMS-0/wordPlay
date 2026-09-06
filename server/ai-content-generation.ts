@@ -3,7 +3,7 @@ import OpenAI from 'openai';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL, DEFAULT_GEMINI_MODEL, generateWithGemini } from './openai';
+import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL, DEFAULT_GEMINI_MODEL, generateWithGemini, defaultModelFor } from './openai';
 
 interface TableGenerationRequest {
   text: string;
@@ -28,9 +28,21 @@ interface ImageGenerationRequest {
 // one teammate's request can never spend another teammate's key, and no key
 // is ever stored in or round-tripped through a browser.
 let openai: OpenAI | null = null;
+let kimi: OpenAI | null = null;
 let geminiNew: GoogleGenAI | null = null;
 
-function getOpenAI(): OpenAI {
+function getOpenAI(provider?: string): OpenAI {
+  if (provider === 'kimi') {
+    // Kimi Coding Plan: separate credential set, its own lazy client.
+    if (!kimi) {
+      const apiKey = process.env.KIMI_API_KEY;
+      if (!apiKey) {
+        throw new Error('Kimi API key is not configured on the server (set KIMI_API_KEY in .env)');
+      }
+      kimi = new OpenAI({ apiKey, baseURL: process.env.KIMI_BASE_URL || 'https://api.kimi.com/coding/v1' });
+    }
+    return kimi;
+  }
   if (!openai) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -52,7 +64,7 @@ function getGeminiImageClient(): GoogleGenAI {
   return geminiNew;
 }
 
-export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
+export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai', llmModel?: string): Promise<string> {
   const systemPrompt = `You are an expert at converting text into well-formatted markdown tables. 
   Analyze the provided text and extract structured information to create a meaningful table.
   
@@ -87,10 +99,10 @@ export async function generateTable(request: TableGenerationRequest, llmProvider
       return content || '';
     }
 
-    const client = getOpenAI();
+    const client = getOpenAI(llmProvider);
 
     const requestParams = prepareO3Parameters({
-      model: llmModel || DEFAULT_MODEL,
+      model: defaultModelFor(llmProvider, llmModel),
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
@@ -153,7 +165,7 @@ function stripThinking(text: string): string {
   return t.trim();
 }
 
-export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' = 'openai', llmModel?: string): Promise<string> {
+export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai', llmModel?: string): Promise<string> {
   console.log('🔧 generateChart called with request:', JSON.stringify(request, null, 2));
   
   const systemPrompt = `You are an expert at creating stunning, Apple-quality ECharts visualizations that rival the best data visualizations from Apple's investor presentations and cutting-edge JavaScript libraries.
