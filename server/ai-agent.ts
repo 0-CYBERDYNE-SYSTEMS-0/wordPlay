@@ -1,3 +1,4 @@
+import { resolveModel, resolveProviderCredentials } from "./provider-registry";
 import { storage } from "./storage";
 import { 
   generateTextCompletion, 
@@ -39,7 +40,7 @@ interface AgentContext {
   projectDocuments: any[];
   projectSources: any[];
   researchNotes: string;
-  llmProvider?: 'openai' | 'ollama' | 'gemini' | 'kimi';
+  llmProvider?: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel?: string;
   
   // NEW: Enhanced autonomous capabilities
@@ -114,43 +115,17 @@ interface AgentResponse {
   tokensUsed: number;
 }
 
-// Define valid OpenAI models to prevent 404 errors
-const VALID_OPENAI_MODELS = [
-  'gpt-4.1',
-  'gpt-4.1-mini',
-  'gpt-4.1-nano',
-  'gpt-4o',
-  'mlx-community/gemma-4-e2b-it-4bit'
-];
-
-// Validate model based on provider
-function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'kimi' = 'openai'): string {
-  if (!model) {
-    if (provider === 'ollama') return 'qwen3:4b';
-    if (provider === 'gemini') return 'gemini-2.5-flash';
-    if (provider === 'kimi') return 'kimi-for-coding';
-    return 'mlx-community/gemma-4-e2b-it-4bit';
-  }
-
-  if (provider === 'kimi') {
-    // Honor any non-empty Kimi model string (kimi-for-coding, k3, …)
-    return model;
-  } else if (provider === 'openai') {
-    return VALID_OPENAI_MODELS.includes(model) ? model : 'mlx-community/gemma-4-e2b-it-4bit';
-  } else if (provider === 'gemini') {
-    // Honor any non-empty Gemini model string (e.g. gemini-2.5-flash / -pro)
-    return model;
-  } else {
-    // For Ollama, honor whatever non-empty model the user selected.
-    // (Previously this allowlist silently swapped unknown models — e.g. the
-    // QA-tested qwen3.5:0.8b — for qwen3:4b, which broke provider routing.)
-    return model;
-  }
+// Model resolution goes through the provider registry: the selected
+// provider's catalog/default decides, and a model chosen for one provider
+// can never leak to another after switching.
+function getValidModel(model: string | undefined, provider: string = 'openai'): string {
+  return resolveModel(provider, model);
 }
 
-// Enhanced to support local models
-function getValidOpenAIModel(model: string | undefined): string {
-  return getValidModel(model, 'openai');
+// Synthesis/reflection paths run on the context provider; the model is
+// resolved per-provider downstream (empty selection -> provider default).
+function getValidOpenAIModel(model: string | undefined, provider?: string): string {
+  return resolveModel(provider || 'openai', model);
 }
 
 // Create all available tools for the agent
@@ -1020,7 +995,7 @@ Respond with JSON:
 
     try {
       const { generateTextCompletion } = await import("./openai");
-      const result = await generateTextCompletion("", {}, reflectionPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel));
+      const result = await generateTextCompletion("", {}, reflectionPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel, context.llmProvider));
       return JSON.parse(result);
     } catch (error) {
       return {
@@ -1075,7 +1050,7 @@ Respond with JSON:
 
     try {
       const { generateTextCompletion } = await import("./openai");
-      const result = await generateTextCompletion("", {}, planningPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel));
+      const result = await generateTextCompletion("", {}, planningPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel, context.llmProvider));
       return JSON.parse(result);
     } catch (error) {
       return {
@@ -1676,7 +1651,7 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
         {},
         analysisPrompt,
         this.context.llmProvider,
-        getValidOpenAIModel(this.context.llmModel)
+        getValidOpenAIModel(this.context.llmModel, this.context.llmProvider)
       );
       
       try {
@@ -2174,12 +2149,13 @@ Remember:
     const startTime = Date.now();
     
     try {
-      // Initialize OpenAI client — server-side env key only (kimi = coding plan slot)
+      // Initialize OpenAI client — credentials resolve from the provider
+      // registry (openai / custom / kimi), server-side env only.
       const { OpenAI } = await import("openai");
-      const isKimi = this.context.llmProvider === "kimi";
+      const { apiKey, baseURL } = resolveProviderCredentials(this.context.llmProvider);
       const openai = new OpenAI({
-        apiKey: isKimi ? (process.env.KIMI_API_KEY || "missing_kimi_key") : (process.env.OPENAI_API_KEY || "default_key"),
-        baseURL: isKimi ? (process.env.KIMI_BASE_URL || "https://api.kimi.com/coding/v1") : (process.env.OPENAI_BASE_URL || undefined),
+        apiKey,
+        baseURL,
         timeout: AI_REQUEST_TIMEOUT_MS
       });
       
@@ -2483,7 +2459,7 @@ Remember:
       
       // Fallback to OpenAI if Ollama fails
       console.log('🔄 Falling back to OpenAI...');
-      return this.processOpenAIRequest(systemPrompt, userPrompt, getValidOpenAIModel(this.context.llmModel));
+      return this.processOpenAIRequest(systemPrompt, userPrompt, getValidOpenAIModel(this.context.llmModel, this.context.llmProvider));
     }
   }
 

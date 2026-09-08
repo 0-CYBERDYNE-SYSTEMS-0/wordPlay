@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { resolveProviderCredentials, resolveModel } from "./provider-registry";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 // import fetch from "node-fetch"; // Remove this line for Node 18+
 
@@ -14,42 +15,27 @@ export interface AIRequestOptions {
   baseUrl?: string;
 }
 
-function effectiveOpenAIKey(_options?: AIRequestOptions): string {
-  return process.env.OPENAI_API_KEY || "default_key";
-}
-
 function effectiveGeminiKey(_options?: AIRequestOptions): string {
   return process.env.GEMINI_API_KEY || "";
 }
 
-function effectiveBaseUrl(options?: AIRequestOptions): string | undefined {
-  return options?.baseUrl || process.env.OPENAI_BASE_URL || undefined;
-}
-
-// Kimi Coding Plan (Moonshot): OpenAI-compatible endpoint restricted to
-// coding-plan subscription keys. Keys are server-side env only.
-export const KIMI_DEFAULT_BASE_URL = "https://api.kimi.com/coding/v1";
-export const KIMI_DEFAULT_MODEL = "kimi-for-coding";
-
+// All OpenAI-compatible providers (openai / custom / kimi) resolve through
+// the provider registry — each carries its own key, endpoint and model
+// default, so Settings selection alone decides where a request goes.
 export function resolveOpenAICompat(provider?: string): { apiKey: string; baseURL: string | undefined } {
-  if (provider === "kimi") {
-    return {
-      apiKey: process.env.KIMI_API_KEY || "missing_kimi_key",
-      baseURL: process.env.KIMI_BASE_URL || KIMI_DEFAULT_BASE_URL,
-    };
-  }
-  return { apiKey: effectiveOpenAIKey(), baseURL: effectiveBaseUrl() };
+  const { apiKey, baseURL } = resolveProviderCredentials(provider);
+  return { apiKey, baseURL };
 }
 
-// Per-provider model defaults — 'kimi' must never fall back to the MLX name.
+// Per-provider model defaults — an MLX model name can never reach
+// api.openai.com and vice versa after a provider switch.
 export function defaultModelFor(provider: string | undefined, llmModel?: string): string {
-  if (llmModel) return llmModel;
-  return provider === "kimi" ? KIMI_DEFAULT_MODEL : DEFAULT_MODEL;
+  return resolveModel(provider, llmModel);
 }
 
 // Connection test interfaces
 export interface AIServiceStatus {
-  service: 'openai' | 'ollama' | 'gemini' | 'kimi';
+  service: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   available: boolean;
   error?: string;
   latency?: number;
@@ -103,9 +89,8 @@ export function prepareO3Parameters(params: any): any {
 // (slash commands) set a shorter one; this is the fallback for module-level use.
 const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '180000', 10);
 
-const openai = new OpenAI({ 
-  apiKey: process.env.OPENAI_API_KEY || "default_key",
-  baseURL: process.env.OPENAI_BASE_URL || undefined,
+const openai = new OpenAI({
+  ...(() => { const { apiKey, baseURL } = resolveProviderCredentials("openai"); return { apiKey, baseURL }; })(),
   timeout: AI_REQUEST_TIMEOUT_MS
 });
 
@@ -377,12 +362,12 @@ export async function callOllama(model: string, prompt: string, requestJson: boo
 // Enhanced function with automatic fallback
 export async function callAIWithFallback(
   prompt: string,
-  preferredProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  preferredProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   model?: string,
   style?: any,
   options?: AIRequestOptions
-): Promise<{ result: string; provider: 'openai' | 'ollama' | 'gemini' | 'kimi'; error?: string }> {
-  const order: ('openai' | 'ollama' | 'gemini' | 'kimi')[] =
+): Promise<{ result: string; provider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom'; error?: string }> {
+  const order: ('openai' | 'ollama' | 'gemini' | 'kimi' | 'custom')[] =
     preferredProvider === 'openai' ? ['openai', 'gemini', 'ollama']
     : preferredProvider === 'ollama' ? ['ollama', 'openai', 'gemini']
     : ['gemini', 'openai', 'ollama'];
@@ -408,7 +393,7 @@ export async function generateTextCompletion(
   content: string,
   style: any,
   prompt: string = "Continue this text in the same style.",
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<string> {
@@ -540,7 +525,7 @@ export async function generateWithGemini(
 // Analyze the text style in greater detail
 export async function analyzeTextStyle(
   text: string,
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<any> {
@@ -690,7 +675,7 @@ export async function analyzeTextStyle(
 export async function generateSuggestions(
   content: string,
   style: any,
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<string[]> {
@@ -807,7 +792,7 @@ export async function generateSuggestions(
 export async function processTextCommand(
   content: string,
   command: string,
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<{ result: string; message: string }> {
@@ -873,7 +858,7 @@ export async function processTextCommand(
 export async function generateContextualAssistance(
   content: string,
   title: string,
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel?: string,
   options?: AIRequestOptions
 ): Promise<{ message: string; suggestions: string[] }> {

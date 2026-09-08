@@ -9,10 +9,10 @@ export interface ParsedAIResponse {
 }
 
 export class AIResponseParser {
-  private llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi';
+  private llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   private parsingModel: string;
 
-  constructor(llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi') {
+  constructor(llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom') {
     this.llmProvider = llmProvider;
     // Use correct available models based on user requirements
     this.parsingModel = llmProvider === 'ollama' ? 'qwen3:0.6b' : llmProvider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4.1-nano';
@@ -162,6 +162,6 @@ Please try the command again. If the problem persists, try:
   }
 }
 
-export const createAIResponseParser = (llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi') => {
+export const createAIResponseParser = (llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom') => {
   return new AIResponseParser(llmProvider);
 }; 

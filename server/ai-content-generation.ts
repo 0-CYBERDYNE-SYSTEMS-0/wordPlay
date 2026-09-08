@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL, DEFAULT_GEMINI_MODEL, generateWithGemini, defaultModelFor } from './openai';
+import { resolveProviderCredentials } from './provider-registry';
 
 interface TableGenerationRequest {
   text: string;
@@ -27,30 +28,20 @@ interface ImageGenerationRequest {
 // sent from the browser are never accepted: keys live in .env on the host, so
 // one teammate's request can never spend another teammate's key, and no key
 // is ever stored in or round-tripped through a browser.
-let openai: OpenAI | null = null;
-let kimi: OpenAI | null = null;
 let geminiNew: GoogleGenAI | null = null;
 
+// OpenAI-compatible clients (openai / custom / kimi), one per provider,
+// credentials resolved from the provider registry.
+const compatClients = new Map<string, OpenAI>();
 function getOpenAI(provider?: string): OpenAI {
-  if (provider === 'kimi') {
-    // Kimi Coding Plan: separate credential set, its own lazy client.
-    if (!kimi) {
-      const apiKey = process.env.KIMI_API_KEY;
-      if (!apiKey) {
-        throw new Error('Kimi API key is not configured on the server (set KIMI_API_KEY in .env)');
-      }
-      kimi = new OpenAI({ apiKey, baseURL: process.env.KIMI_BASE_URL || 'https://api.kimi.com/coding/v1' });
-    }
-    return kimi;
+  const key = provider === 'custom' || provider === 'kimi' ? provider : 'openai';
+  let client = compatClients.get(key);
+  if (!client) {
+    const { apiKey, baseURL } = resolveProviderCredentials(key);
+    client = new OpenAI({ apiKey, baseURL });
+    compatClients.set(key, client);
   }
-  if (!openai) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error('OpenAI API key is not configured on the server (set OPENAI_API_KEY in .env)');
-    }
-    openai = new OpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL || undefined });
-  }
-  return openai;
+  return client;
 }
 
 function getGeminiImageClient(): GoogleGenAI {
@@ -64,7 +55,7 @@ function getGeminiImageClient(): GoogleGenAI {
   return geminiNew;
 }
 
-export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai', llmModel?: string): Promise<string> {
+export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai', llmModel?: string): Promise<string> {
   const systemPrompt = `You are an expert at converting text into well-formatted markdown tables. 
   Analyze the provided text and extract structured information to create a meaningful table.
   
@@ -165,7 +156,7 @@ function stripThinking(text: string): string {
   return t.trim();
 }
 
-export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai', llmModel?: string): Promise<string> {
+export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai', llmModel?: string): Promise<string> {
   console.log('🔧 generateChart called with request:', JSON.stringify(request, null, 2));
   
   const systemPrompt = `You are an expert at creating stunning, Apple-quality ECharts visualizations that rival the best data visualizations from Apple's investor presentations and cutting-edge JavaScript libraries.

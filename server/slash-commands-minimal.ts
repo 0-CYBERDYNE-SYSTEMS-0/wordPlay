@@ -319,7 +319,7 @@ export async function executeCoreCommand(
     beforeSelection?: string;
     afterSelection?: string;
   },
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
@@ -706,7 +706,7 @@ export async function executeCustomCommand(
     beforeSelection?: string;
     afterSelection?: string;
   },
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' = 'openai',
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai',
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,

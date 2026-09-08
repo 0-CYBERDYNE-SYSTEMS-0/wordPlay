@@ -298,7 +298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       content: z.string(),
       style: z.any().optional(),
       prompt: z.string().optional(),
-      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi"]).optional(),
+      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi", "custom"]).optional(),
       llmModel: z.string().optional()
     });
 
@@ -314,7 +314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/analyze-style", async (req: Request, res: Response) => {
     const analyzeSchema = z.object({
       content: z.string(),
-      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi"]).optional(),
+      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi", "custom"]).optional(),
       llmModel: z.string().optional()
     });
 
@@ -353,7 +353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const suggestSchema = z.object({
       content: z.string(),
       style: z.any().optional(),
-      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi"]).optional(),
+      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi", "custom"]).optional(),
       llmModel: z.string().optional()
     });
 
@@ -370,7 +370,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const commandSchema = z.object({
       content: z.string(),
       command: z.string(),
-      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi"]).optional(),
+      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi", "custom"]).optional(),
       llmModel: z.string().optional()
     });
 
@@ -461,7 +461,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const helpSchema = z.object({
       content: z.string(),
       title: z.string(),
-      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi"]).optional(),
+      llmProvider: z.enum(["openai", "ollama", "gemini", "kimi", "custom"]).optional(),
       llmModel: z.string().optional()
     });
 
@@ -525,7 +525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       imageModel: z.string().optional(),
       imageSize: z.string().optional(),
       imageSteps: z.number().optional(),
-      llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi']).optional(),
+      llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi', 'custom']).optional(),
       llmModel: z.string().optional(),
       includeContext: z.boolean().optional(),
       projectId: z.number().optional(),
@@ -746,7 +746,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/parse-response", async (req: Request, res: Response) => {
     const parsingSchema = z.object({
       prompt: z.string(),
-      llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi']),
+      llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi', 'custom']),
       llmModel: z.string(),
       maxTokens: z.number().optional().default(1000)
     });
@@ -819,23 +819,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const connectionStatus = await testAIConnections();
       const geminiStatus = await testGeminiConnection();
 
-      // Kimi Coding Plan reachability (GET /models on the OpenAI-compatible endpoint)
-      let kimiStatus: any = { available: false };
-      try {
-        const kimiBase = process.env.KIMI_BASE_URL || "https://api.kimi.com/coding/v1";
-        const kimiRes = await fetch(`${kimiBase}/models`, {
-          headers: process.env.KIMI_API_KEY
-            ? { Authorization: `Bearer ${process.env.KIMI_API_KEY}` }
-            : {},
-          signal: AbortSignal.timeout(8000),
-        });
-        kimiStatus = {
-          available: kimiRes.ok,
-          httpStatus: kimiRes.status,
-          configured: !!process.env.KIMI_API_KEY,
-        };
-      } catch (err: any) {
-        kimiStatus = { available: false, configured: !!process.env.KIMI_API_KEY, error: err?.message };
+      // Reachability for every OpenAI-compatible cloud provider, straight
+      // from the registry (own key + endpoint per provider).
+      const { allProviders, resolveProviderCredentials } = await import("./provider-registry");
+      const providerStatuses: Record<string, any> = {};
+      for (const def of allProviders()) {
+        if (def.kind !== 'openai-compatible') continue;
+        const { apiKey, baseURL } = resolveProviderCredentials(def.id);
+        const configured = !!(def.apiKeyEnv && process.env[def.apiKeyEnv]);
+        try {
+          const res = await fetch(`${baseURL.replace(/\/$/, '')}/models`, {
+            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+            signal: AbortSignal.timeout(8000),
+          });
+          providerStatuses[def.id] = { available: res.ok, httpStatus: res.status, configured, label: def.label };
+        } catch (err: any) {
+          providerStatuses[def.id] = { available: false, configured, label: def.label, error: err?.message };
+        }
       }
 
       res.json({
@@ -843,7 +843,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         timestamp: new Date().toISOString(),
         ...connectionStatus,
         gemini: geminiStatus,
-        kimi: kimiStatus,
+        providers: providerStatuses,
         troubleshooting: {
           openai: connectionStatus.openai.available ? null : [
             "Set your OpenAI API key: export OPENAI_API_KEY=your_api_key",

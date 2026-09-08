@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useSettings } from "@/providers/SettingsProvider";
-import { ArrowLeft, Download, Upload, RotateCcw, Save, RefreshCw } from "lucide-react";
+import { ArrowLeft, Download, Upload, RotateCcw, Save, RefreshCw, Zap } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -34,7 +34,7 @@ export default function Settings({ onBack }: SettingsProps) {
     fontSize: z.number().min(10).max(24),
     contextPanelDefaultOpen: z.boolean(),
     sidebarDefaultOpen: z.boolean(),
-    llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi']),
+    llmProvider: z.enum(['openai', 'ollama', 'gemini', 'kimi', 'custom']),
     llmModel: z.string(),
     ollamaUrl: z.string().url().optional().or(z.literal('')),
     researchModel: z.string().optional(),
@@ -124,6 +124,36 @@ export default function Settings({ onBack }: SettingsProps) {
       root.classList.add(settings.theme);
     }
   }, [settings.theme]);
+
+  // Per-provider connectivity check (uses the server's /api/ai/test, which
+  // resolves each provider's own key + endpoint from .env).
+  const [testingProvider, setTestingProvider] = useState(false);
+  const [providerStatus, setProviderStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const testProviderConnection = async () => {
+    setTestingProvider(true);
+    setProviderStatus(null);
+    try {
+      const res = await fetch('/api/ai/test', { credentials: 'include' });
+      const data = await res.json();
+      const provider = settings.llmProvider;
+      let status: any;
+      if (provider === 'ollama') status = data.ollama;
+      else if (provider === 'gemini') status = data.gemini;
+      else status = data.providers?.[provider];
+      const ok = !!(status && (status.available || status.status === 'reachable'));
+      const suffix = status && status.configured === false ? ' (key not configured in server .env)' : '';
+      setProviderStatus({
+        ok,
+        message: ok
+          ? `${settings.llmProvider} reachable ✓`
+          : `${settings.llmProvider} not reachable${suffix}`,
+      });
+    } catch (err: any) {
+      setProviderStatus({ ok: false, message: err?.message || 'Test failed' });
+    } finally {
+      setTestingProvider(false);
+    }
+  };
 
   // Fetch Ollama models when provider is ollama. Goes through the server so
   // it works from ANY device on the network (a browser on a remote machine
@@ -381,8 +411,20 @@ export default function Settings({ onBack }: SettingsProps) {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="llmProvider">LLM Provider</Label>
-                  <Select value={settings.llmProvider} onValueChange={(value) => updateSettings({ llmProvider: value as 'openai' | 'ollama' | 'gemini' | 'kimi' })}>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="llmProvider">LLM Provider</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={testProviderConnection}
+                      disabled={testingProvider}
+                      className="h-7 px-2 text-xs"
+                    >
+                      <Zap className={`h-3 w-3 ${testingProvider ? 'animate-pulse' : ''}`} />
+                      {testingProvider ? 'Testing…' : 'Test connection'}
+                    </Button>
+                  </div>
+                  <Select value={settings.llmProvider} onValueChange={(value) => updateSettings({ llmProvider: value as 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' })}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -391,6 +433,7 @@ export default function Settings({ onBack }: SettingsProps) {
                       <SelectItem value="ollama">Ollama (Local)</SelectItem>
                       <SelectItem value="gemini">Gemini</SelectItem>
                       <SelectItem value="kimi">Kimi (Coding Plan)</SelectItem>
+                      <SelectItem value="custom">Custom (OpenAI-compatible)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -410,6 +453,13 @@ export default function Settings({ onBack }: SettingsProps) {
                       </Button>
                     )}
                   </div>
+                  {settings.llmProvider === 'custom' ? (
+                    <Input
+                      value={settings.llmModel || ''}
+                      onChange={(e) => updateSettings({ llmModel: e.target.value })}
+                      placeholder="Model name served by your endpoint"
+                    />
+                  ) : (
                   <Select value={settings.llmModel} onValueChange={(value) => updateSettings({ llmModel: value })}>
                     <SelectTrigger>
                       <SelectValue />
@@ -417,11 +467,12 @@ export default function Settings({ onBack }: SettingsProps) {
                     <SelectContent>
                       {settings.llmProvider === 'openai' ? (
                         <>
-                          <SelectItem value="mlx-community/gemma-4-e2b-it-4bit">Gemma 4 E2B (MLX local)</SelectItem>
                           <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
                           <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
                           <SelectItem value="gpt-4.1-nano">GPT-4.1 Nano</SelectItem>
                           <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                          <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                          <SelectItem value="o4-mini">o4-mini</SelectItem>
                         </>
                       ) : settings.llmProvider === 'kimi' ? (
                         <>
@@ -441,10 +492,19 @@ export default function Settings({ onBack }: SettingsProps) {
                           <SelectItem key={model} value={model}>{model}</SelectItem>
                         ))
                       ) : (
-                        <SelectItem value="" disabled>No models found - check Ollama</SelectItem>
+                        <SelectItem value="__no_models__" disabled>No models found - check Ollama</SelectItem>
                       )}
                     </SelectContent>
                   </Select>
+                  )}
+                  {settings.llmProvider === 'custom' && (
+                    <p className="text-xs text-gray-500">
+                      Point the team server at any OpenAI-compatible endpoint with{" "}
+                      <span className="font-mono">CUSTOM_BASE_URL</span> (and{" "}
+                      <span className="font-mono">CUSTOM_API_KEY</span> if needed) in .env — local MLX, LM Studio,
+                      vLLM, or a cloud gateway like OpenRouter.
+                    </p>
+                  )}
                   {settings.llmProvider === 'ollama' && ollamaModels.length === 0 && !loadingModels && (
                     <p className="text-xs text-orange-600">
                       No models found. Make sure Ollama is running and has models installed.

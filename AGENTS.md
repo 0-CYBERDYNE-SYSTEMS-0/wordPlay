@@ -108,7 +108,9 @@ docker-compose.yml       Team deployment: app + Postgres + uploads volume
 - Env vars:
   - `DATABASE_URL` — PostgreSQL connection (required for `db:push`; server falls back to `postgres://$USER@localhost:5432/wordplay`)
   - `OPENAI_API_KEY`, `GEMINI_API_KEY`, `PERPLEXITY_API_KEY` — provider keys (optional per feature)
-  - `OPENAI_BASE_URL` — optional OpenAI-compatible endpoint (e.g. local MLX server)
+  - `OPENAI_BASE_URL` — legacy: still honored as the custom endpoint when `CUSTOM_BASE_URL` is unset
+  - `CUSTOM_BASE_URL`, `CUSTOM_API_KEY` — "Custom (OpenAI-compatible)" provider (MLX, LM Studio, vLLM, OpenRouter...)
+  - `KIMI_API_KEY`, `KIMI_BASE_URL` — Kimi Coding Plan provider (default endpoint `https://api.kimi.com/coding/v1`)
   - `MFLUX_BRIDGE_URL` (default `http://127.0.0.1:4030`), `MFLUX_STEPS` (default 1) — local image generation
   - `OLLAMA_URL` (default `http://localhost:11434`) — local models
   - `GEMINI_IMAGE_MODEL` — must be an image-capable Gemini model (default `gemini-3.1-flash-lite-image`)

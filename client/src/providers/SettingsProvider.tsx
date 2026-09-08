@@ -21,7 +21,7 @@ export interface AppSettings {
   showLineNumbers: boolean;
   
   // AI Settings
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi';
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel: string;
   ollamaUrl: string;
   researchModel: string;
@@ -168,7 +168,45 @@ const SETTINGS_STORAGE_KEY = 'wordplay-settings';
 // its own .env. Strip any legacy key fields from stored/imported settings.
 function sanitizeSettings(input: Record<string, unknown>): AppSettings {
   const { openaiApiKey: _o, geminiApiKey: _g, perplexityApiKey: _p, ...rest } = input;
-  return { ...defaultSettings, ...rest };
+  const merged = { ...defaultSettings, ...(rest as Partial<AppSettings>) };
+  return normalizeProviderModel(merged);
+}
+
+// ---------------------------------------------------------------------------
+// Model/provider pairing. A model chosen for one provider must never ride
+// along to another after switching — each provider gets its own default
+// unless the stored model belongs to its catalog (Ollama/custom models are
+// free-form and always accepted).
+// ---------------------------------------------------------------------------
+const PROVIDER_DEFAULT_MODELS: Record<AppSettings['llmProvider'], string> = {
+  openai: 'gpt-4.1-mini',
+  custom: 'mlx-community/gemma-4-e2b-it-4bit',
+  kimi: 'kimi-for-coding',
+  gemini: 'gemini-2.5-flash',
+  ollama: 'qwen3.5:4b',
+};
+
+const PROVIDER_MODEL_CATALOGS: Partial<Record<AppSettings['llmProvider'], string[]>> = {
+  openai: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o4-mini'],
+  kimi: ['kimi-for-coding', 'kimi-for-coding-highspeed', 'k3', 'k3-256k'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+};
+
+function modelBelongsToProvider(provider: AppSettings['llmProvider'], model: string): boolean {
+  if (!model) return false;
+  const catalog = PROVIDER_MODEL_CATALOGS[provider];
+  return !catalog || catalog.includes(model);
+}
+
+function normalizeProviderModel(settings: AppSettings): AppSettings {
+  if (!modelBelongsToProvider(settings.llmProvider, settings.llmModel)) {
+    settings.llmModel = PROVIDER_DEFAULT_MODELS[settings.llmProvider];
+  }
+  return settings;
+}
+
+export function defaultModelForProvider(provider: AppSettings['llmProvider']): string {
+  return PROVIDER_DEFAULT_MODELS[provider];
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
@@ -264,7 +302,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [settings.distractionFreeMode]);
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      // Switching provider resets the model to that provider's default unless
+      // a model from the new provider's catalog was set in the same update.
+      if (newSettings.llmProvider && newSettings.llmProvider !== prev.llmProvider) {
+        if (!newSettings.llmModel || !modelBelongsToProvider(newSettings.llmProvider, newSettings.llmModel)) {
+          next.llmModel = PROVIDER_DEFAULT_MODELS[newSettings.llmProvider];
+        }
+      }
+      return next;
+    });
   };
 
   const resetSettings = () => {

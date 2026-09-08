@@ -25,7 +25,7 @@ interface SlashCommandsPopupProps {
   content: string;
   setContent: (content: string) => void;
   editorRef: React.RefObject<HTMLTextAreaElement>;
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi';
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel: string;
   onSuggestions?: (suggestions: string) => void;
   onUndo?: () => void;

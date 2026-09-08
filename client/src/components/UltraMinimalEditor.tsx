@@ -35,7 +35,7 @@ interface UltraMinimalEditorProps {
   saveError: string | null;
   autoSaveEnabled: boolean;
   saveDocument: (isManual?: boolean) => Promise<void>;
-  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi';
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel: string;
   isFullScreen: boolean;
   onToggleFullScreen: () => void;
