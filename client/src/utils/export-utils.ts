@@ -117,8 +117,26 @@ export async function captureStandaloneHtml(title: string, container: HTMLElemen
     })
   );
 
-  // 3. Strip interactive leftovers that make no sense outside the app.
-  clone.querySelectorAll('button, .no-export, script').forEach((el) => el.remove());
+  // 3. Strip interactive leftovers that make no sense outside the app, plus
+  // everything scriptable: event-handler attributes, javascript:/data:html URLs,
+  // and embeddable elements. (data:image/* survives — step 2 just created those.)
+  clone.querySelectorAll('button, .no-export, script, iframe, object, embed, form').forEach((el) => el.remove());
+  clone.querySelectorAll('*').forEach((el) => {
+    for (const attr of Array.from(el.attributes)) {
+      const name = attr.name.toLowerCase();
+      if (name.startsWith('on')) {
+        el.removeAttribute(attr.name);
+        continue;
+      }
+      if (name === 'href' || name === 'src' || name === 'xlink:href') {
+        // Strip whitespace/control chars first so "java\tscript:" can't slip past.
+        const value = attr.value.replace(/[\s\u0000-\u001f]+/g, '').toLowerCase();
+        if (value.startsWith('javascript:') || value.startsWith('data:text/html')) {
+          el.removeAttribute(attr.name);
+        }
+      }
+    }
+  });
 
   return buildStandaloneDocument(title, clone.innerHTML);
 }
