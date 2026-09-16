@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
+import { SurfaceErrorBoundary } from '@/components/SurfaceErrorBoundary';
 import { captureStandaloneHtml, downloadStandaloneHtml, printStandaloneHtml } from '@/utils/export-utils';
 import { Eye, PenLine } from 'lucide-react';
 
@@ -27,7 +28,12 @@ interface UltraMinimalEditorProps {
   setTitle: (title: string) => void;
   content: string;
   setContentTyping: (content: string) => void;
-  applyWithHistory: (content: string | ((prev: string) => string)) => void;
+  // opts.skipHistory bypasses the undo stack (streaming preview writes); the
+  // stream anchors its own single history entry, so chunks never stack up.
+  applyWithHistory: (
+    content: string | ((prev: string) => string),
+    opts?: { skipHistory?: boolean }
+  ) => void;
   undoContent: () => void;
   redoContent: () => void;
   isSaving: boolean;
@@ -324,8 +330,15 @@ export default function UltraMinimalEditor({
     }
 
     if (e.key === '/' && !slashCommandsOpen && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      e.preventDefault();
-      openSlashMenu(e.currentTarget);
+      // Only hijack the keystroke at a word boundary (start of input or right
+      // after whitespace). Mid-word slashes like "and/or" must insert the
+      // character normally instead of being swallowed by preventDefault.
+      const textarea = e.currentTarget;
+      const beforeCursor = textarea.value.slice(0, textarea.selectionStart);
+      if (beforeCursor.length === 0 || /\s$/.test(beforeCursor)) {
+        e.preventDefault();
+        openSlashMenu(textarea);
+      }
       return;
     }
 
@@ -619,7 +632,9 @@ export default function UltraMinimalEditor({
 
         {viewMode === 'preview' ? (
           <div ref={previewContainerRef} className="relative min-h-0 flex-1 overflow-y-auto py-4 sm:py-6 minimal-scrollbar">
-            <MarkdownRenderer content={content} className="writing-preview" />
+            <SurfaceErrorBoundary surface="preview">
+              <MarkdownRenderer content={content} className="writing-preview" />
+            </SurfaceErrorBoundary>
           </div>
         ) : (
         <div className="relative flex min-h-0 flex-1 flex-col py-4 sm:py-6">
@@ -690,6 +705,7 @@ export default function UltraMinimalEditor({
         position={slashCommandPosition}
         content={content}
         setContent={applyWithHistory}
+        setContentWithoutHistory={(next) => applyWithHistory(next, { skipHistory: true })}
         editorRef={textareaRef}
         llmProvider={llmProvider}
         llmModel={llmModel}

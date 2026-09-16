@@ -24,6 +24,9 @@ interface SlashCommandsPopupProps {
   position: { x: number, y: number };
   content: string;
   setContent: (content: string) => void;
+  // Raw preview writer for streaming — bypasses the undo stack so a run of
+  // hundreds of chunks costs exactly one ⌘Z (anchored by the first write).
+  setContentWithoutHistory: (content: string) => void;
   editorRef: React.RefObject<HTMLTextAreaElement>;
   llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel: string;
@@ -117,13 +120,14 @@ const SLASH_COMMANDS: SlashCommand[] = [
   }
 ];
 
-export default function SlashCommandsPopup({ 
-  isOpen, 
-  onClose, 
-  position, 
-  content, 
-  setContent, 
-  editorRef, 
+export default function SlashCommandsPopup({
+  isOpen,
+  onClose,
+  position,
+  content,
+  setContent,
+  setContentWithoutHistory,
+  editorRef,
   llmProvider, 
   llmModel, 
   onSuggestions, 
@@ -213,6 +217,23 @@ export default function SlashCommandsPopup({
   // Elapsed-time tracking so the loading state communicates progress after ~10s
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
+  // Typing while a command runs cancels it: any plain text keystroke aborts
+  // the same controller the Cancel button uses. Modifier shortcuts (⌘S/⌘Z/⌘Y
+  // — handled by the editor) are exempt so saving or undoing mid-stream never
+  // kills the run; navigation and Enter don't count as typing.
+  useEffect(() => {
+    if (!isProcessing) return;
+    const handleTypingKeyDown = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (['Shift', 'Meta', 'Control', 'Alt', 'CapsLock', 'Tab', 'Enter', 'Escape'].includes(e.key)) return;
+      if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') {
+        abortRef.current?.abort();
+      }
+    };
+    document.addEventListener('keydown', handleTypingKeyDown);
+    return () => document.removeEventListener('keydown', handleTypingKeyDown);
+  }, [isProcessing]);
+
   // Streams a core command (Ollama) via /api/ai/slash-command/stream and
   // applies each token to the editor live. Returns the final behavior object
   // (same shape as the non-streaming route) so onSuccess can finish the
@@ -224,50 +245,76 @@ export default function SlashCommandsPopup({
     start: number | undefined,
     end: number | undefined
   ) => {
-    const res = await fetch('/api/ai/slash-command/stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestData),
-      credentials: 'include',
-      signal: controller.signal
-    });
-
-    if (!res.ok) {
-      let message = `Request failed (${res.status})`;
-      try {
-        const body = await res.json();
-        if (body?.message) message = body.message;
-      } catch {}
-      throw new Error(message);
-    }
-    if (!res.body) throw new Error('Streaming not supported by server');
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    // Progressive editor state — start from the original content with the
-    // selection range cleared (the AI output grows into that span).
-    let streamedText = '';
-    let appliedContent = content;
-    let appliedStart = (hasSelection ? start : start) ?? (editorRef.current?.selectionStart ?? 0); // cursor position for insert-at-cursor
-    let behavior: any = null;
-
-    const applyChunk = (text: string) => {
-      streamedText += text;
-      // Rebuild: content before + streamed output + content after the
-      // selection/insertion point. Using the ORIGINAL content means the
-      // editor shows the AI text appearing live in place of the selection.
-      const before = requestData.content.slice(0, appliedStart);
-      const after = requestData.content.slice(hasSelection ? end : appliedStart);
-      appliedContent = before + streamedText + after;
-      setContent(appliedContent);
-      // Keep the textarea caret at the end of the streamed text
-      if (editorRef.current) {
-        editorRef.current.setSelectionRange(before.length + streamedText.length, before.length + streamedText.length);
+    // Pre-AI text — what the document must fall back to if the stream dies,
+    // and the state one ⌘Z away once the command lands.
+    const preStreamOriginal = requestData.content;
+    // The FIRST content write goes through setContent (= applyWithHistory),
+    // force-pushing the pre-AI text as this run's single undo entry; every
+    // later write is raw so hundreds of chunks still cost exactly one ⌘Z.
+    let historyAnchored = false;
+    const applyStreamText = (text: string) => {
+      if (historyAnchored) {
+        setContentWithoutHistory(text);
+      } else {
+        historyAnchored = true;
+        setContent(text);
       }
     };
 
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    // Hoisted so the return below can read them after the try block closes.
+    let streamedText = '';
+    let behavior: any = null;
     try {
+      const res = await fetch('/api/ai/slash-command/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData),
+        credentials: 'include',
+        signal: controller.signal
+      });
+
+      if (!res.ok) {
+        let message = `Request failed (${res.status})`;
+        try {
+          const body = await res.json();
+          if (body?.message) message = body.message;
+        } catch {}
+        throw new Error(message);
+      }
+      if (!res.body) throw new Error('Streaming not supported by server');
+
+      reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      // Progressive editor state — start from the original content with the
+      // selection range cleared (the AI output grows into that span).
+      let appliedContent = content;
+      let appliedStart = (hasSelection ? start : start) ?? (editorRef.current?.selectionStart ?? 0); // cursor position for insert-at-cursor
+
+      const applyChunk = (text: string) => {
+        streamedText += text;
+        // Rebuild: content before + streamed output + content after the
+        // selection/insertion point. Using the ORIGINAL content means the
+        // editor shows the AI text appearing live in place of the selection.
+        const before = requestData.content.slice(0, appliedStart);
+        const after = requestData.content.slice(hasSelection ? end : appliedStart);
+        appliedContent = before + streamedText + after;
+        applyStreamText(appliedContent);
+        // Caret pinning is preview-only: keep the caret at the end of the
+        // streamed text while tokens arrive.
+        if (editorRef.current) {
+          editorRef.current.setSelectionRange(before.length + streamedText.length, before.length + streamedText.length);
+        }
+      };
+
+      // Server-authoritative final result (differs from the streamed buffer).
+      const applyServerResult = (result: string) => {
+        const before = requestData.content.slice(0, appliedStart);
+        const after = requestData.content.slice(hasSelection ? end : appliedStart);
+        applyStreamText(before + result + after);
+      };
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -291,9 +338,7 @@ export default function SlashCommandsPopup({
             // If the server said the final result differs (e.g. no selection),
             // overwrite the streamed content with the authoritative result.
             if (behavior.result && behavior.result !== streamedText) {
-              const before = requestData.content.slice(0, appliedStart);
-              const after = requestData.content.slice(hasSelection ? end : appliedStart);
-              setContent(before + behavior.result + after);
+              applyServerResult(behavior.result);
             }
           }
         }
@@ -307,17 +352,22 @@ export default function SlashCommandsPopup({
           if (data.done) {
             behavior = data.behavior || {};
             if (behavior.result && behavior.result !== streamedText) {
-              const before = requestData.content.slice(0, appliedStart);
-              const after = requestData.content.slice(hasSelection ? end : appliedStart);
-              setContent(before + behavior.result + after);
+              applyServerResult(behavior.result);
             }
           }
         } catch {
           // ignore malformed trailing data
         }
       }
+    } catch (err) {
+      // Abort or error: put the exact pre-AI text back via setContent
+      // (= applyWithHistory). The partial preview never lands bare — either
+      // the first chunk's anchored entry is restored (no duplicate push) or,
+      // if nothing streamed yet, the pre-AI text becomes the single entry.
+      setContent(preStreamOriginal);
+      throw err;
     } finally {
-      reader.releaseLock();
+      reader?.releaseLock();
     }
 
     return {
@@ -518,13 +568,14 @@ export default function SlashCommandsPopup({
         } else {
           // Clean the streamed content of XML tags that may have been
           // rendered live (the model sometimes streams <thinking>/<final_output>
-          // tags before the text). Re-apply the cleaned version.
+          // tags before the text). Re-apply the cleaned version — raw, so it
+          // stays part of the single history entry the stream anchored.
           if (parsedResponse.content && parsedResponse.content !== data.result) {
             const applyStart = data.smartExpansion ? data.smartExpansion.expandedStart : selectionInfo.start;
             const applyEnd = data.smartExpansion ? data.smartExpansion.expandedEnd : selectionInfo.end;
             if (typeof applyStart === 'number' && typeof applyEnd === 'number') {
               const newContent = content.slice(0, applyStart) + parsedResponse.content + content.slice(applyEnd);
-              setContent(newContent);
+              setContentWithoutHistory(newContent);
             }
           }
           toast({

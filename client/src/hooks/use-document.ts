@@ -26,6 +26,36 @@ export class DocumentConflictError extends Error {
 const toIso = (value: unknown): string | undefined =>
   value ? new Date(value as string | Date).toISOString() : undefined;
 
+// Durability mirror (fix: autosave durability) — every document change is
+// mirrored here so edits lost to a crash/tab-close during the autosave
+// debounce window are restored on the next mount.
+const DOC_MIRROR_PREFIX = 'wp-doc-mirror:';
+
+interface DocMirror {
+  title: string;
+  content: string;
+  updatedAt?: string;
+}
+
+const readDocMirror = (documentId: number): DocMirror | null => {
+  try {
+    const raw = localStorage.getItem(`${DOC_MIRROR_PREFIX}${documentId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.title !== 'string' || typeof parsed?.content !== 'string') return null;
+    return parsed as DocMirror;
+  } catch {
+    return null; // corrupted entry or storage unavailable — start from server data
+  }
+};
+
+const clearDocMirror = (documentId?: number) => {
+  if (!documentId) return;
+  try {
+    localStorage.removeItem(`${DOC_MIRROR_PREFIX}${documentId}`);
+  } catch { /* storage unavailable — nothing to clear */ }
+};
+
 export function useDocument({
   documentId,
   projectId,
@@ -59,9 +89,14 @@ export function useDocument({
   // Track if we've initialized from server data
   const hasInitialized = useRef(false);
   const saveRetryCount = useRef(0);
-  const maxRetries = 3;
   const lastSaveTime = useRef(0);
   const minimumSaveInterval = 500; // Minimum time between saves
+  // Autosave backoff after failures: never disable autosave, just wait
+  // min(30s, 2^n × 2s) before the next attempt. Ticked to re-run the
+  // autosave effect when a backoff window expires without further edits.
+  const backoffUntilRef = useRef(0);
+  const backoffTimerRef = useRef<number | undefined>(undefined);
+  const [backoffTick, setBackoffTick] = useState(0);
 
   // Shared undo history so every writer (typing, slash commands, ambient
   // suggestions, the agent) feeds one stack — ⌘Z can revert any of them.
@@ -111,13 +146,42 @@ export function useDocument({
     setContent(next);
   }, [pushContentHistory]);
 
+  // Streaming preview path: raw write that bypasses the undo stack entirely.
+  // The stream wrapper (SlashCommandsPopup) anchors its single history entry
+  // itself, so chunk count never affects ⌘Z depth.
+  const setContentWithoutHistory = useCallback((next: string) => {
+    setContent(next);
+  }, []);
+
   // AI applies (slash commands, suggestions, agent): always a forced history
-  // point so the exact pre-AI text is one ⌘Z away.
-  const applyWithHistory = useCallback((next: string | ((prev: string) => string)) => {
+  // point so the exact pre-AI text is one ⌘Z away. Streaming previews pass
+  // skipHistory and ride the single entry the stream anchored itself.
+  const applyWithHistory = useCallback((
+    next: string | ((prev: string) => string),
+    opts?: { skipHistory?: boolean }
+  ) => {
     const resolved = typeof next === "function" ? next(contentRef.current) : next;
-    pushContentHistory(contentRef.current, { force: true });
+    if (opts?.skipHistory) {
+      setContentWithoutHistory(resolved);
+      return;
+    }
+    const top = undoStackRef.current[undoStackRef.current.length - 1];
+    if (resolved === top) {
+      // Returning to the stack-top state must not consume undo depth:
+      //  • content already equals it → true no-op, nothing to record;
+      //  • content differs (a stream abort/cancel restoring the pre-AI text
+      //    its first chunk anchored) → retire the anchor by popping it, so a
+      //    cancelled command costs no ⌘Z press. Pushing here would create a
+      //    dead entry (or, worse, swallow the pending transition's entry).
+      if (contentRef.current !== resolved) {
+        undoStackRef.current.pop();
+      }
+    } else {
+      pushContentHistory(contentRef.current, { force: true });
+    }
+    contentRef.current = resolved;
     setContent(resolved);
-  }, [pushContentHistory]);
+  }, [pushContentHistory, setContentWithoutHistory]);
 
   const undoContent = useCallback(() => {
     const prev = undoStackRef.current.pop();
@@ -156,8 +220,28 @@ export function useDocument({
       setIsDirty(false);
       setSaveError(null);
       hasInitialized.current = true;
+
+      // Restore edits mirrored to localStorage before the tab last closed.
+      // Must run after the server copy is in place (an earlier restore would
+      // be overwritten here), with the dirty flag set synchronously so the
+      // teammate-adoption effect can never drop the restored text. The
+      // restore is a forced history point (⌘Z drops back to the server
+      // copy); the post-restore autosave sends ifUpdatedAt, so a teammate
+      // edit since our last save surfaces the 409 dialog on mount — that is
+      // deliberate: we never overwrite a teammate silently.
+      const mirrored = documentId ? readDocMirror(documentId) : null;
+      if (mirrored) {
+        const contentChanged = mirrored.content !== documentData.content;
+        const titleChanged = mirrored.title !== documentData.title;
+        if (contentChanged) {
+          contentRef.current = documentData.content; // history base for the forced push
+          applyWithHistory(mirrored.content);
+        }
+        if (titleChanged) setTitle(mirrored.title);
+        if (contentChanged || titleChanged) setIsDirty(true);
+      }
     }
-  }, [documentData, markServerTimestamp]);
+  }, [documentData, documentId, markServerTimestamp, applyWithHistory]);
 
   // A teammate changed the document while we have no local edits — adopt the
   // server version so the open editor stays current instead of going stale.
@@ -185,10 +269,14 @@ export function useDocument({
       setIsDirty(titleChanged || contentChanged);
       
       // Clear save error when user makes changes (give autosave another chance)
-      if ((titleChanged || contentChanged) && saveError) {
-        setSaveError(null);
-        setAutoSaveEnabled(true);
-        saveRetryCount.current = 0;
+      if (titleChanged || contentChanged) {
+        // Any edit re-arms autosave immediately (no backoff wait).
+        backoffUntilRef.current = 0;
+        if (saveError) {
+          setSaveError(null);
+          setAutoSaveEnabled(true);
+          saveRetryCount.current = 0;
+        }
       }
     }
   }, [title, content, lastSavedTitle, lastSavedContent, saveError]);
@@ -207,7 +295,9 @@ export function useDocument({
       setIsDirty(false);
       setSaveError(null);
       saveRetryCount.current = 0;
+      backoffUntilRef.current = 0;
       setAutoSaveEnabled(true);
+      clearDocMirror(data.id);
       toast({
         title: "Document created",
         description: "Your document has been created successfully.",
@@ -261,7 +351,9 @@ export function useDocument({
       setIsDirty(false);
       setSaveError(null);
       saveRetryCount.current = 0;
+      backoffUntilRef.current = 0;
       setAutoSaveEnabled(true);
+      clearDocMirror(data.id);
       return data;
     },
     onError: (error) => {
@@ -279,21 +371,18 @@ export function useDocument({
       setSaveError(error.message);
       saveRetryCount.current++;
 
-      // Disable autosave after max retries to prevent spam
-      if (saveRetryCount.current >= maxRetries) {
-        setAutoSaveEnabled(false);
-        toast({
-          title: "Autosave disabled",
-          description: "Multiple save attempts failed. Please use the manual save button.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error saving document",
-          description: `${error.message} (${saveRetryCount.current}/${maxRetries} attempts)`,
-          variant: "destructive",
-        });
-      }
+      // Back off before the next autosave attempt (min(30s, 2^n × 2s)) —
+      // autosave is never permanently disabled. The timer re-kicks the
+      // autosave effect so a retry happens even without further edits.
+      const backoffMs = Math.min(30_000, 2 ** saveRetryCount.current * 2000);
+      backoffUntilRef.current = Date.now() + backoffMs;
+      window.clearTimeout(backoffTimerRef.current);
+      backoffTimerRef.current = window.setTimeout(() => setBackoffTick((t) => t + 1), backoffMs);
+      toast({
+        title: "Error saving document",
+        description: `${error.message} — retrying in ~${Math.round(backoffMs / 1000)}s`,
+        variant: "destructive",
+      });
     }
   });
 
@@ -308,6 +397,7 @@ export function useDocument({
       setLastSavedContent(serverDoc.content);
       markServerTimestamp(serverDoc.updatedAt);
       setIsDirty(false);
+      clearDocMirror(documentId);
       undoStackRef.current = [];
       redoStackRef.current = [];
       toast({ title: "Server version loaded", description: "Your in-progress edits were replaced by the teammate's version." });
@@ -328,6 +418,8 @@ export function useDocument({
             markServerTimestamp(data.updatedAt);
             setIsDirty(false);
             saveRetryCount.current = 0;
+            backoffUntilRef.current = 0;
+            clearDocMirror(documentId);
             queryClient.invalidateQueries({ queryKey: [`/api/documents/${documentId}`] });
             toast({ title: "Your version saved", description: "Your edits overwrote the server copy." });
           } else {
@@ -384,35 +476,107 @@ export function useDocument({
   useEffect(() => {
     if (documentId && isDirty && hasInitialized.current && autoSaveEnabled) {
       const now = Date.now();
+
+      // Failed saves wait out their exponential backoff before retrying.
+      if (now < backoffUntilRef.current) {
+        return;
+      }
+
       const timeSinceLastSave = now - lastSaveTime.current;
-      
+
       // Rate limit saves to prevent excessive API calls
       if (timeSinceLastSave < minimumSaveInterval) {
         return;
       }
-      
+
       // Only save if we're not currently saving
       if (!isSaving) {
         lastSaveTime.current = now;
         saveDocument(false); // false = not manual save
       }
     }
-  }, [debouncedContent, debouncedTitle, documentId, isDirty, autoSaveEnabled, isSaving]);
+  }, [debouncedContent, debouncedTitle, documentId, isDirty, autoSaveEnabled, isSaving, backoffTick]);
 
-  // Warn and flush before closing/reloading when there are unsaved changes, so the
-  // autosave debounce window can't silently drop recent keystrokes. The flush uses
-  // isManual=true so it also attempts when autosave is disabled.
+  // Final flush when the tab closes/hides: a keepalive PUT so the autosave
+  // debounce window can't silently drop recent keystrokes. fetch + keepalive
+  // is the transport because navigator.sendBeacon always issues POST (it can
+  // never hit app.put('/api/documents/:id')), and its `true` return only
+  // means "queued". The ifUpdatedAt precondition is kept so a teammate edit
+  // still surfaces the 409 dialog instead of being overwritten; if this
+  // fails (e.g. server down), the localStorage mirror restores the text on
+  // the next mount.
+  //
+  // When the flush SUCCEEDS the server timestamp is reconciled into hook
+  // state: without that, a bfcache restore (Back button) would leave
+  // isDirty=true and a stale lastSavedUpdatedAt, and the page's OWN flush
+  // would 409 into the conflict dialog. An in-flight debounced save wins —
+  // flushing under it would 409 against ourselves.
+  useEffect(() => {
+    const flushOnHide = () => {
+      if (!documentId || !isDirty || !hasInitialized.current) return;
+      if (updateDocumentMutation.isPending) return;
+      try {
+        fetch(`/api/documents/${documentId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          keepalive: true,
+          body: JSON.stringify({
+            title,
+            content,
+            ifUpdatedAt: lastSavedUpdatedAtRef.current,
+          }),
+        })
+          .then(async (res) => {
+            if (!res.ok) return; // mirror covers the failure
+            const data = await res.json().catch(() => null);
+            if (!data?.updatedAt) return;
+            setLastSavedTitle(data.title);
+            setLastSavedContent(data.content);
+            markServerTimestamp(data.updatedAt);
+            setIsDirty(false);
+            clearDocMirror(documentId);
+          })
+          .catch(() => { /* best-effort — mirror covers the failure */ });
+      } catch { /* page is dying — mirror still has the text */ }
+    };
+    window.addEventListener('pagehide', flushOnHide);
+    return () => window.removeEventListener('pagehide', flushOnHide);
+  }, [documentId, isDirty, title, content, updateDocumentMutation.isPending, markServerTimestamp]);
+
+  // Warn before closing/reloading with unsaved changes. The actual save
+  // happens in the pagehide flush above; this only asks the user.
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty && hasInitialized.current) {
-        saveDocument(true).catch(() => {});
         e.preventDefault();
         e.returnValue = '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isDirty, saveDocument]);
+  }, [isDirty]);
+
+  // Backoff retry timer must not outlive the hook.
+  useEffect(() => () => window.clearTimeout(backoffTimerRef.current), []);
+
+  // Durability mirror: every change lands in localStorage so a crash or a
+  // closed tab during the autosave debounce window is recoverable on the
+  // next mount (see the restore in the server-data init effect). Cleared on
+  // every successful save.
+  useEffect(() => {
+    if (!documentId || !hasInitialized.current) return;
+    try {
+      localStorage.setItem(
+        `${DOC_MIRROR_PREFIX}${documentId}`,
+        JSON.stringify({
+          title,
+          content,
+          updatedAt: lastSavedUpdatedAtRef.current,
+        }),
+      );
+    } catch { /* private mode / quota exceeded — the mirror is best-effort */ }
+  }, [documentId, title, content]);
   
   return {
     title,
@@ -420,6 +584,7 @@ export function useDocument({
     content,
     setContent,
     setContentTyping,
+    setContentWithoutHistory,
     applyWithHistory,
     undoContent,
     redoContent,
