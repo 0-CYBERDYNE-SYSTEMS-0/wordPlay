@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Sidebar from "@/components/Sidebar";
+import { SurfaceErrorBoundary } from "@/components/SurfaceErrorBoundary";
 import UltraMinimalEditor from "@/components/UltraMinimalEditor";
 import ContextPanel from "@/components/ContextPanel";
 import SmartPanelManager from "@/components/SmartPanelManager";
@@ -574,6 +575,7 @@ export default function Home() {
   const panelChildren = {
     sidebar: (
       <div className="h-full w-full overflow-hidden">
+        <SurfaceErrorBoundary surface="sidebar">
         <Sidebar
           isOpen={true}
           projects={projects || []}
@@ -588,6 +590,7 @@ export default function Home() {
           userExperienceMode={settings.userExperienceMode}
           onModeChange={(mode) => updateSettings({ userExperienceMode: mode })}
         />
+        </SurfaceErrorBoundary>
       </div>
     ),
 
@@ -737,6 +740,7 @@ export default function Home() {
       
       {/* AI Agent - Only show in expert mode for power users */}
       {settings.userExperienceMode === 'expert' && (
+        <SurfaceErrorBoundary surface="agent panel">
         <AIAgent
           currentProject={activeProject}
           currentDocument={documentData}
@@ -752,6 +756,7 @@ export default function Home() {
             wordCount: content?.length ? content.trim().split(/\s+/).filter(Boolean).length : 0
           }}
         />
+        </SurfaceErrorBoundary>
       )}
     </div>
   );
