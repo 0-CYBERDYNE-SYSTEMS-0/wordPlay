@@ -35,3 +35,8 @@ coverage/
 *.swo
 *~
 .gstack/
+
+# Local runtime artifacts and scratch work
+public/uploads/
+demo/
+.zcode/

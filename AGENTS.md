@@ -43,7 +43,6 @@ server/                  Express + TypeScript API (kebab-case filenames, prefer 
   file-operations.ts     grepText, replaceText, countWords, extractStructure, analyzeDocument
   slash-commands-new.ts  ACTIVE slash-command dispatcher (imported dynamically by routes.ts)
   slash-commands-minimal.ts  Core command execution used by -new
-  slash-commands.ts      LEGACY — not imported anymore (.ts.backup/.bak also present; do not edit)
   storage.ts             IStorage interface + MemStorage; exports `storage = new PostgresStorage()`
   db-storage.ts          PostgresStorage (Drizzle implementation of IStorage)
   db.ts / db-migrate.ts  Pool + startup schema initialization
