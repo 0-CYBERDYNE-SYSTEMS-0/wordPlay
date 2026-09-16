@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import dns from "dns";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
@@ -177,6 +178,66 @@ function extractSourcesFromContent(content: string): Array<{
   return sources;
 }
 
+const SCRAPE_TIMEOUT_MS = 10_000;
+const MAX_REDIRECTS = 5;
+// Scraping feeds text extraction, not binaries — anything past 2MB is truncated.
+const MAX_SCRAPE_BYTES = 2 * 1024 * 1024;
+
+// SSRF guard: scraping must never reach loopback/private/link-local space
+// (cloud metadata at 169.254.169.254 included).
+function isPrivateAddress(address: string): boolean {
+  // IPv4-mapped IPv6 (::ffff:10.0.0.1) is judged as plain IPv4.
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(address);
+  const ip = mapped ? mapped[1] : address.toLowerCase();
+
+  if (ip.includes(":")) {
+    // IPv6: unspecified (::), loopback (::1), unique-local fc00::/7, link-local fe80::/10
+    return ip === "::" || ip === "::1" || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip);
+  }
+
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true; // malformed → refuse
+  const [a, b] = parts;
+  return (
+    a === 0 || // 0.0.0.0/8 ("this" network)
+    a === 10 || // 10.0.0.0/8 private
+    a === 127 || // 127.0.0.0/8 loopback
+    (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT
+    (a === 169 && b === 254) || // 169.254.0.0/16 link-local
+    (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 private
+    (a === 192 && b === 168) // 192.168.0.0/16 private
+  );
+}
+
+// Reject if ANY resolved address is private — a record that mixes public and
+// private addresses must not be reachable via the public one.
+async function assertPublicHost(hostname: string): Promise<void> {
+  const addresses = await dns.promises.lookup(hostname, { all: true });
+  for (const { address } of addresses) {
+    if (isPrivateAddress(address)) {
+      throw new Error(`Refusing to scrape private or local address ${address}`);
+    }
+  }
+}
+
+// Stream the body and stop at the cap. Breaking out of the iterator destroys
+// the stream, releasing the socket without buffering the rest.
+async function readBodyCapped(stream: NodeJS.ReadableStream): Promise<string> {
+  const decoder = new TextDecoder("utf-8");
+  let html = "";
+  let received = 0;
+  for await (const chunk of stream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    received += buf.length;
+    html += decoder.decode(buf, { stream: true });
+    if (received >= MAX_SCRAPE_BYTES) {
+      break;
+    }
+  }
+  html += decoder.decode(); // flush any incomplete trailing sequence
+  return html.slice(0, MAX_SCRAPE_BYTES);
+}
+
 // Enhanced webpage scraping with Mozilla Readability
 export async function scrapeWebpage(url: string): Promise<{
   title: string;
@@ -189,24 +250,51 @@ export async function scrapeWebpage(url: string): Promise<{
     // Validate URL
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
-    
-    // Fetch with proper headers
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
+
+    // Fetch with proper headers, following redirects manually so every hop
+    // re-passes the protocol allowlist and SSRF host check.
+    let currentUrl = urlObj;
+    let response;
+    for (let hop = 0; ; hop++) {
+      if (currentUrl.protocol !== "http:" && currentUrl.protocol !== "https:") {
+        throw new Error("Only http and https URLs are supported");
       }
-    });
+      await assertPublicHost(currentUrl.hostname);
+
+      response = await fetch(currentUrl.href, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
+      });
+
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get("location");
+        if (location && hop >= MAX_REDIRECTS) {
+          throw new Error("Too many redirects");
+        }
+        if (!location) break; // 3xx without a target — reported by the !ok check below
+        response.body?.resume(); // drain the hop's body to release the socket
+        currentUrl = new URL(location, currentUrl);
+        continue;
+      }
+      break;
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const html = await response.text();
+    if (!response.body) {
+      throw new Error("Empty response body");
+    }
+    const html = await readBodyCapped(response.body);
     
     // Use Readability for better content extraction
     let title = url;

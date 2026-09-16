@@ -10,12 +10,14 @@ import path from "path";
 
 const UPLOADS_DIR = path.join(process.cwd(), "public", "uploads");
 
+// svg+xml is excluded: browsers execute scripts in SVG served inline,
+// and stored uploads render as <img>/documents. Existing .svg files on
+// disk keep being served; only new uploads are rejected here.
 const ALLOWED_MIME = new Set([
   "image/png",
   "image/jpeg",
   "image/webp",
   "image/gif",
-  "image/svg+xml",
 ]);
 
 const EXT_BY_MIME: Record<string, string> = {
@@ -23,7 +25,6 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
   "image/gif": ".gif",
-  "image/svg+xml": ".svg",
 };
 
 const upload = multer({
@@ -41,7 +42,7 @@ export function registerUploadRoute(app: Express): void {
         return res.status(400).json({ message: "No file provided (expected multipart field 'file')" });
       }
       if (!ALLOWED_MIME.has(file.mimetype)) {
-        return res.status(415).json({ message: `Unsupported file type: ${file.mimetype}. Images only (png, jpeg, webp, gif, svg).` });
+        return res.status(415).json({ message: `Unsupported file type: ${file.mimetype}. Images only (png, jpeg, webp, gif).` });
       }
 
       if (!fs.existsSync(UPLOADS_DIR)) {

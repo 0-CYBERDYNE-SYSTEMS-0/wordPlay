@@ -5,9 +5,20 @@ import { initializeDatabase } from "./db-migrate";
 import { config } from "./config";
 
 const app = express();
-// Increase payload limits for image handling
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+// Path-scoped parsers must mount BEFORE the global ones: body-parser skips
+// already-parsed requests, so a parser placed after the global one is a no-op.
+// /api/text stays small (regex utilities); /api/ai keeps 50mb for base64 image
+// payloads; /api/agent and /api/documents carry whole-document content in
+// JSON (agent context, autosave PUTs), so they get headroom above the 2mb
+// global without re-opening the old unlimited-everything surface. Multipart
+// uploads (15MB) go through multer and bypass these parsers.
+app.use("/api/text", express.json({ limit: '1mb' }));
+app.use("/api/text", express.urlencoded({ extended: false, limit: '1mb' }));
+app.use("/api/ai", express.json({ limit: '50mb' }));
+app.use("/api/agent", express.json({ limit: '10mb' }));
+app.use("/api/documents", express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
 app.use((req, res, next) => {
   const start = Date.now();
