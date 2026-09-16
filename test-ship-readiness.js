@@ -181,7 +181,7 @@ async function main() {
       }),
     }, 150000);
     const content = r.body?.content ?? r.body?.response ?? "";
-    const tools = r.body?.toolResults?.length ?? r.body?.toolExecutions?.length;
+    const tools = r.body?.toolsExecuted?.length ?? r.body?.toolResults?.length ?? r.body?.toolExecutions?.length;
     log("AGENT /intelligent-request (ollama, conservative)", r.status === 200 && String(content).trim().length > 20 ? "PASS" : "FAIL",
       `HTTP ${r.status}, tools used: ${tools ?? "?"}, content: ${String(content).slice(0, 110)}`, Date.now() - t0);
   } catch (e) { log("AGENT /intelligent-request", "FAIL", e.name === "TimeoutError" ? "TIMEOUT >150s" : String(e).slice(0, 120)); }

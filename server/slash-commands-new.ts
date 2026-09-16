@@ -47,7 +47,8 @@ export async function executeSlashCommand(
       llmModel,
       includeContext,
       projectId,
-      options
+      options,
+      userId
     );
   }
   
@@ -66,7 +67,8 @@ export async function executeSlashCommand(
           llmModel,
           includeContext,
           projectId,
-          options
+          options,
+          userId
         );
       }
     } catch (error) {

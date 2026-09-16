@@ -40,7 +40,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // projects they own (documents and sources inherit ownership via project).
   const ownsProject = async (projectId: number, req: Request): Promise<boolean> => {
     if (!isAuthEnabled()) return true;
-    const project = await storage.getProject(projectId);
+    const project = await storage.getProject(projectId, resolveUserId(req));
     return !!project && project.userId === resolveUserId(req);
   };
 
@@ -71,7 +71,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get("/api/projects/:id", async (req: Request, res: Response) => {
-    const project = await storage.getProject(parseInt(req.params.id));
+    const project = await storage.getProject(parseInt(req.params.id), resolveUserId(req));
     if (!project || !(await ownsProject(project.id, req))) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -122,7 +122,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(await ownsProject(parseInt(req.params.id), req))) {
         return res.status(404).json({ message: "Project not found" });
       }
-      const updatedProject = await storage.updateProject(parseInt(req.params.id), validatedData);
+      const updatedProject = await storage.updateProject(parseInt(req.params.id), validatedData, resolveUserId(req));
       
       if (!updatedProject) {
         return res.status(404).json({ message: "Project not found" });
@@ -138,7 +138,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await ownsProject(parseInt(req.params.id), req))) {
       return res.status(404).json({ message: "Project not found" });
     }
-    const deleted = await storage.deleteProject(parseInt(req.params.id));
+    const deleted = await storage.deleteProject(parseInt(req.params.id), resolveUserId(req));
     if (!deleted) {
       return res.status(404).json({ message: "Project not found" });
     }
@@ -150,12 +150,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await ownsProject(parseInt(req.params.projectId), req))) {
       return res.status(404).json({ message: "Project not found" });
     }
-    const documents = await storage.getDocuments(parseInt(req.params.projectId));
+    const documents = await storage.getDocuments(parseInt(req.params.projectId), resolveUserId(req));
     res.json(documents);
   });
   
   app.get("/api/documents/:id", async (req: Request, res: Response) => {
-    const document = await storage.getDocument(parseInt(req.params.id));
+    const document = await storage.getDocument(parseInt(req.params.id), resolveUserId(req));
     if (!document || !(await ownsProject(document.projectId, req))) {
       return res.status(404).json({ message: "Document not found" });
     }
@@ -182,7 +182,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.wordCount = countWords(validatedData.content);
       }
       
-      const document = await storage.createDocument(validatedData);
+      const document = await storage.createDocument(validatedData, resolveUserId(req));
+      if (!document) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       res.status(201).json(document);
     } catch (error) {
       res.status(400).json({ message: "Invalid document data" });
@@ -203,7 +206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { ifUpdatedAt, ...validatedData } = documentSchema.parse(req.body);
       const id = parseInt(req.params.id);
-      const existing = await storage.getDocument(id);
+      const existing = await storage.getDocument(id, resolveUserId(req));
       if (!existing || !(await ownsProject(existing.projectId, req))) {
         return res.status(404).json({ message: "Document not found" });
       }
@@ -226,7 +229,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.wordCount = countWords(validatedData.content);
       }
 
-      const updatedDocument = await storage.updateDocument(id, validatedData);
+      const updatedDocument = await storage.updateDocument(id, validatedData, resolveUserId(req));
 
       if (!updatedDocument) {
         return res.status(404).json({ message: "Document not found" });
@@ -239,11 +242,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.delete("/api/documents/:id", async (req: Request, res: Response) => {
-    const document = await storage.getDocument(parseInt(req.params.id));
+    const document = await storage.getDocument(parseInt(req.params.id), resolveUserId(req));
     if (!document || !(await ownsProject(document.projectId, req))) {
       return res.status(404).json({ message: "Document not found" });
     }
-    const deleted = await storage.deleteDocument(document.id);
+    const deleted = await storage.deleteDocument(document.id, resolveUserId(req));
     if (!deleted) {
       return res.status(404).json({ message: "Document not found" });
     }
@@ -255,7 +258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!(await ownsProject(parseInt(req.params.projectId), req))) {
       return res.status(404).json({ message: "Project not found" });
     }
-    const sources = await storage.getSources(parseInt(req.params.projectId));
+    const sources = await storage.getSources(parseInt(req.params.projectId), resolveUserId(req));
     res.json(sources);
   });
   
@@ -273,7 +276,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(await ownsProject(validatedData.projectId, req))) {
         return res.status(404).json({ message: "Project not found" });
       }
-      const source = await storage.createSource(validatedData);
+      const source = await storage.createSource(validatedData, resolveUserId(req));
+      if (!source) {
+        return res.status(404).json({ message: "Project not found" });
+      }
       res.status(201).json(source);
     } catch (error) {
       res.status(400).json({ message: "Invalid source data" });
@@ -281,11 +287,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   app.delete("/api/sources/:id", async (req: Request, res: Response) => {
-    const source = await storage.getSource(parseInt(req.params.id));
+    const source = await storage.getSource(parseInt(req.params.id), resolveUserId(req));
     if (!source || !(await ownsProject(source.projectId, req))) {
       return res.status(404).json({ message: "Source not found" });
     }
-    const deleted = await storage.deleteSource(source.id);
+    const deleted = await storage.deleteSource(source.id, resolveUserId(req));
     if (!deleted) {
       return res.status(404).json({ message: "Source not found" });
     }
@@ -593,7 +599,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.llmModel,
         validatedData.includeContext || false,
         validatedData.projectId,
-        validatedData.userId
+        resolveUserId(req) // server-derived identity, never the client-sent userId
       );
       
       res.json(result);
@@ -720,7 +726,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         validatedData.selectionInfo,
         validatedData.llmModel,
         validatedData.includeContext || false,
-        validatedData.projectId
+        validatedData.projectId,
+        resolveUserId(req)
       );
 
       for await (const item of generator) {
@@ -1077,13 +1084,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // Text analysis routes
+  // Caps: text bodies are bounded here and by the path-scoped 1mb parser on
+  // /api/text (server/index.ts) — 800k chars leaves room for JSON escaping
+  // overhead inside 1mb of bytes; user regex patterns are short and compile
+  // through re2 (linear-time) in file-operations.ts.
+  const textOpBody = z.object({ text: z.string().max(800_000) });
+  const grepBody = textOpBody.extend({ pattern: z.string().min(1).max(500) });
+  const replaceBody = textOpBody.extend({
+    oldPattern: z.string().min(1).max(500),
+    newPattern: z.string().min(1).max(500),
+  });
+
   app.post("/api/text/grep", async (req: Request, res: Response) => {
-    const { text, pattern } = req.body;
-    
-    if (!text || !pattern) {
-      return res.status(400).json({ message: "Text and pattern are required" });
+    const parsed = grepBody.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return res.status(400).json({ message: `Invalid request: ${issue?.path.join(".")} ${issue?.message}` });
     }
-    
+    const { text, pattern } = parsed.data;
+
     try {
       const results = grepText(text, pattern);
       res.json(results);
@@ -1091,14 +1110,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error processing grep request", error: error.message });
     }
   });
-  
+
   app.post("/api/text/replace", async (req: Request, res: Response) => {
-    const { text, oldPattern, newPattern } = req.body;
-    
-    if (!text || !oldPattern || !newPattern) {
-      return res.status(400).json({ message: "Text, oldPattern, and newPattern are required" });
+    const parsed = replaceBody.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return res.status(400).json({ message: `Invalid request: ${issue?.path.join(".")} ${issue?.message}` });
     }
-    
+    const { text, oldPattern, newPattern } = parsed.data;
+
     try {
       const result = replaceText(text, oldPattern, newPattern);
       res.json(result);
@@ -1106,14 +1126,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error processing replace request", error: error.message });
     }
   });
-  
+
   app.post("/api/text/analyze", async (req: Request, res: Response) => {
-    const { text } = req.body;
-    
-    if (!text) {
-      return res.status(400).json({ message: "Text is required" });
+    const parsed = textOpBody.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return res.status(400).json({ message: `Invalid request: ${issue?.path.join(".")} ${issue?.message}` });
     }
-    
+    const { text } = parsed.data;
+
     try {
       const analysis = analyzeDocument(text);
       res.json(analysis);
@@ -1121,14 +1142,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "Error analyzing text", error: error.message });
     }
   });
-  
+
   app.post("/api/text/structure", async (req: Request, res: Response) => {
-    const { text } = req.body;
-    
-    if (!text) {
-      return res.status(400).json({ message: "Text is required" });
+    const parsed = textOpBody.safeParse(req.body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return res.status(400).json({ message: `Invalid request: ${issue?.path.join(".")} ${issue?.message}` });
     }
-    
+    const { text } = parsed.data;
+
     try {
       const structure = extractStructure(text);
       res.json(structure);
@@ -1278,44 +1300,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const totalDuration = Date.now() - startTime;
-      
+      const toolResults = agentResponse.toolResults;
+
+      // Real telemetry from the execution trace: per-tool outcome + measured
+      // durations (toolResults carry tool/success/message/executionTime).
+      const toolsExecuted = toolResults.map(result => ({
+        tool: result.tool || 'unknown',
+        success: result.success,
+        message: result.message || (result.success ? 'Executed successfully' : result.error),
+        error: result.error,
+        data: result.data
+      }));
+
+      // Plan = the executed step descriptions (client accepts string[] | null).
+      const plan = toolResults.length > 0
+        ? toolsExecuted.map(step => `${step.tool}: ${step.message}`)
+        : null;
+
+      const totalToolTime = toolResults.reduce((sum, result) => sum + (result.executionTime || 0), 0);
+
       // Step 3: Return comprehensive response
       const responseData = {
         response: finalResponse,
-        plan: "Analyzed request and executed appropriate tools based on context",
-        autonomousExecution: {
-          completed: true,
-          iterations: 1,
-          duration: totalDuration,
-          autonomyLevel
-        },
-        toolsExecuted: agentResponse.toolResults.map(result => ({
-          tool: result.tool || 'unknown',
-          success: result.success,
-          message: result.message || (result.success ? 'Executed successfully' : result.error),
-          data: result.data
-        })),
+        plan,
+        toolsExecuted,
         suggestedActions: suggestedActions,
         additionalToolCalls: additionalToolCalls,
         executionDetails: {
-          toolsPlanned: agentResponse.toolResults.length,
-          toolsExecuted: agentResponse.toolResults.length,
-          successfulTools: agentResponse.toolResults.filter(r => r.success).length,
-          failedTools: agentResponse.toolResults.filter(r => !r.success).length,
-          successRate: agentResponse.toolResults.length > 0 
-            ? ((agentResponse.toolResults.filter(r => r.success).length / agentResponse.toolResults.length) * 100).toFixed(1) + '%'
+          toolsPlanned: toolResults.length,
+          toolsExecuted: toolResults.length,
+          successfulTools: toolResults.filter(r => r.success).length,
+          failedTools: toolResults.filter(r => !r.success).length,
+          successRate: toolResults.length > 0
+            ? ((toolResults.filter(r => r.success).length / toolResults.length) * 100).toFixed(1) + '%'
             : '100%',
-          averageToolTime: agentResponse.toolResults.length > 0 
-            ? (totalDuration / agentResponse.toolResults.length).toFixed(0) + 'ms'
+          averageToolTime: toolResults.length > 0
+            ? `${Math.round(totalToolTime / toolResults.length)}ms`
             : '0ms'
         },
         performance: {
           totalDuration,
-          iterationsCompleted: 1,
-          maxIterationsAllowed: 1,
-          executionEfficiency: agentResponse.toolResults.length > 0 
-            ? ((agentResponse.toolResults.filter(r => r.success).length / agentResponse.toolResults.length) * 100).toFixed(1) + '%'
-            : '100%',
           autonomyLevel,
           tokensUsed: agentResponse.tokensUsed
         }
@@ -1529,126 +1553,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   return httpServer;
-}
-
-// Helper method for determining chained tools
-async function determineChainedTools(previousTool: string, result: any, context: any, agent: any): Promise<any[]> {
-  const chainedTools: any[] = [];
-  
-  // Smart chaining based on tool results and context
-  if (previousTool === 'web_search' && result.success && result.data?.results?.length > 0) {
-    const topResult = result.data.results[0];
-    if (topResult.url) {
-      chainedTools.push({
-        tool: 'scrape_webpage',
-        params: { url: topResult.url },
-        reasoning: 'Auto-scraping top search result for detailed content'
-      });
-      
-      // If we have a current project, also save the source
-      if (context?.currentProject) {
-        chainedTools.push({
-          tool: 'save_source',
-          params: {
-            projectId: context.currentProject.id,
-            type: 'url',
-            name: topResult.title || 'Web Source',
-            url: topResult.url,
-            content: '' // Will be filled by scrape result
-          },
-          reasoning: 'Auto-saving research source to current project'
-        });
-      }
-    }
-  }
-  
-  if (previousTool === 'scrape_webpage' && result.success && result.data?.content) {
-    // If we scraped content, analyze it
-    chainedTools.push({
-      tool: 'analyze_document_structure',
-      params: { text: result.data.content.substring(0, 5000) }, // First 5k chars
-      reasoning: 'Auto-analyzing scraped content structure'
-    });
-  }
-  
-  if (previousTool === 'create_document' && result.success && context?.currentProject) {
-    // If we created a document, analyze its style
-    chainedTools.push({
-      tool: 'analyze_writing_style',
-      params: { documentId: result.data.id },
-      reasoning: 'Auto-analyzing newly created document style'
-    });
-  }
-  
-  if (previousTool === 'analyze_writing_style' && result.success && context?.currentDocument) {
-    // If we analyzed style, get improvement suggestions
-    chainedTools.push({
-      tool: 'get_writing_suggestions',
-      params: { 
-        text: context.currentDocument.content,
-        type: 'improvement'
-      },
-      reasoning: 'Auto-generating improvement suggestions based on style analysis'
-    });
-  }
-  
-  return chainedTools;
-}
-
-// Helper method for determining if execution should continue
-async function shouldContinueExecution(
-  iterationExecutions: any[], 
-  synthesis: any, 
-  currentIteration: number, 
-  maxIterations: number,
-  agent: any
-): Promise<{ continue: boolean; reason: string }> {
-  
-  // Check success rate
-  const successRate = iterationExecutions.filter(exec => exec.result.success).length / iterationExecutions.length;
-  if (successRate < 0.3) {
-    return { continue: false, reason: 'Low success rate, stopping to prevent further failures' };
-  }
-  
-  // Check if we have more tools to execute
-  if (!synthesis.additionalToolCalls || synthesis.additionalToolCalls.length === 0) {
-    return { continue: false, reason: 'No additional tools suggested, task appears complete' };
-  }
-  
-  // Check iteration limit
-  if (currentIteration >= maxIterations - 1) {
-    return { continue: false, reason: 'Approaching maximum iteration limit' };
-  }
-  
-  // Check if we're making progress
-  if (currentIteration > 5) {
-    const recentExecutions = iterationExecutions.slice(-3);
-    const recentSuccessRate = recentExecutions.filter(exec => exec.result.success).length / recentExecutions.length;
-    if (recentSuccessRate < 0.5) {
-      return { continue: false, reason: 'Recent execution success rate declining' };
-    }
-  }
-  
-  return { continue: true, reason: 'Continuing autonomous execution with good progress' };
-}
-
-// Helper function to assess user experience quality
-function assessUserExperience(finalSynthesis: any, allToolExecutions: any[], suggestedActions: string[]): string {
-  const hasToolResults = finalSynthesis?.allToolResults && Object.keys(finalSynthesis.allToolResults).length > 0;
-  const hasResearchFindings = !!finalSynthesis?.researchFindings;
-  const hasActionableSteps = suggestedActions.length > 0;
-  const hasContinuousOperation = !!finalSynthesis?.continuousOperationPlan;
-  const toolsExecuted = allToolExecutions.length;
-  
-  if (hasToolResults && hasResearchFindings && hasActionableSteps && hasContinuousOperation) {
-    return 'EXCELLENT';
-  } else if (hasToolResults && (hasResearchFindings || hasActionableSteps)) {
-    return 'GOOD';
-  } else if (toolsExecuted > 0) {
-    return 'BASIC';
-  } else {
-    return 'POOR';
-  }
 }
 
 // Helper function to detect complex editing requests

@@ -179,7 +179,7 @@ function expandSelectionIntelligently(content: string, selectionInfo: any): {
 }
 
 // Enhanced context analysis
-async function analyzeContentAndContext(content: string, includeContext: boolean = false, projectId?: number) {
+async function analyzeContentAndContext(content: string, includeContext: boolean = false, projectId?: number, userId: number = 1) {
   const wordCount = content.trim().split(/\s+/).length;
   const sentences = content.split(/[.!?]+/).filter(s => s.trim().length > 0);
   const avgSentenceLength = sentences.length > 0 ? wordCount / sentences.length : 0;
@@ -212,7 +212,7 @@ async function analyzeContentAndContext(content: string, includeContext: boolean
   
   if (includeContext && projectId) {
     try {
-      projectSources = await storage.getSources(projectId);
+      projectSources = await storage.getSources(projectId, userId);
       
       if (projectSources.length > 0) {
         const sourcesByType = projectSources.reduce((acc, source) => {
@@ -323,7 +323,8 @@ export async function executeCoreCommand(
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
-  options?: { baseUrl?: string }
+  options?: { baseUrl?: string },
+  userId: number = 1
 ): Promise<{
   result: string;
   message: string;
@@ -374,7 +375,7 @@ export async function executeCoreCommand(
   // Enhanced context analysis
   let enhancedContext: any = null;
   if (includeContext) {
-    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId);
+    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId, userId);
   }
   
   const openai = new OpenAI({
@@ -503,7 +504,8 @@ export async function* streamCoreCommand(
   },
   llmModel: string,
   includeContext: boolean = false,
-  projectId?: number
+  projectId?: number,
+  userId: number = 1
 ): AsyncGenerator<string | { done: boolean; behavior: any }> {
   // Smart text selection for improve/fix commands
   let smartSelectionInfo = { ...selectionInfo };
@@ -538,7 +540,7 @@ export async function* streamCoreCommand(
 
   let enhancedContext: any = null;
   if (includeContext) {
-    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId);
+    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId, userId);
   }
 
   const textContext = smartSelectionInfo.selectedText || content;
@@ -710,7 +712,8 @@ export async function executeCustomCommand(
   llmModel: string = DEFAULT_MODEL,
   includeContext: boolean = false,
   projectId?: number,
-  options?: { baseUrl?: string }
+  options?: { baseUrl?: string },
+  userId: number = 1
 ): Promise<{
   result: string;
   message: string;
@@ -727,7 +730,7 @@ export async function executeCustomCommand(
   // Enhanced context analysis
   let enhancedContext: any = null;
   if (includeContext) {
-    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId);
+    enhancedContext = await analyzeContentAndContext(content, includeContext, projectId, userId);
   }
   
   const systemPrompt = `You are an expert writing assistant.

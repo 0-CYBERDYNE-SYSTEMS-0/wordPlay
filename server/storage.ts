@@ -12,25 +12,27 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   
-  // Project operations
+  // Project operations — id-addressed reads/writes are scoped to the owning user
   getProjects(userId: number): Promise<Project[]>;
-  getProject(id: number): Promise<Project | undefined>;
+  getProject(id: number, userId: number): Promise<Project | undefined>;
   createProject(project: InsertProject): Promise<Project>;
-  updateProject(id: number, project: Partial<Project>): Promise<Project | undefined>;
-  deleteProject(id: number): Promise<boolean>;
+  updateProject(id: number, project: Partial<Project>, userId: number): Promise<Project | undefined>;
+  deleteProject(id: number, userId: number): Promise<boolean>;
   
-  // Document operations
-  getDocuments(projectId: number): Promise<Document[]>;
-  getDocument(id: number): Promise<Document | undefined>;
-  createDocument(document: InsertDocument): Promise<Document>;
-  updateDocument(id: number, document: Partial<Document>): Promise<Document | undefined>;
-  deleteDocument(id: number): Promise<boolean>;
+  // Document operations — ownership flows through the parent project
+  getDocuments(projectId: number, userId: number): Promise<Document[]>;
+  getDocument(id: number, userId: number): Promise<Document | undefined>;
+  // Returns undefined when the payload's projectId is not owned by userId
+  createDocument(document: InsertDocument, userId: number): Promise<Document | undefined>;
+  updateDocument(id: number, document: Partial<Document>, userId: number): Promise<Document | undefined>;
+  deleteDocument(id: number, userId: number): Promise<boolean>;
   
-  // Source operations
-  getSources(projectId: number): Promise<Source[]>;
-  getSource(id: number): Promise<Source | undefined>;
-  createSource(source: InsertSource): Promise<Source>;
-  deleteSource(id: number): Promise<boolean>;
+  // Source operations — ownership flows through the parent project
+  getSources(projectId: number, userId: number): Promise<Source[]>;
+  getSource(id: number, userId: number): Promise<Source | undefined>;
+  // Returns undefined when the payload's projectId is not owned by userId
+  createSource(source: InsertSource, userId: number): Promise<Source | undefined>;
+  deleteSource(id: number, userId: number): Promise<boolean>;
   
   // Custom Command operations
   getCustomCommands(userId: number): Promise<CustomCommand[]>;
@@ -129,8 +131,9 @@ export class MemStorage implements IStorage {
     );
   }
 
-  async getProject(id: number): Promise<Project | undefined> {
-    return this.projects.get(id);
+  async getProject(id: number, userId: number): Promise<Project | undefined> {
+    const project = this.projects.get(id);
+    return project && project.userId === userId ? project : undefined;
   }
 
   async createProject(insertProject: InsertProject): Promise<Project> {
@@ -145,8 +148,8 @@ export class MemStorage implements IStorage {
     return project;
   }
 
-  async updateProject(id: number, projectUpdate: Partial<Project>): Promise<Project | undefined> {
-    const project = this.projects.get(id);
+  async updateProject(id: number, projectUpdate: Partial<Project>, userId: number): Promise<Project | undefined> {
+    const project = await this.getProject(id, userId);
     if (!project) return undefined;
     
     const updatedProject = {
@@ -158,22 +161,27 @@ export class MemStorage implements IStorage {
     return updatedProject;
   }
 
-  async deleteProject(id: number): Promise<boolean> {
+  async deleteProject(id: number, userId: number): Promise<boolean> {
+    if (!(await this.getProject(id, userId))) return false;
     return this.projects.delete(id);
   }
 
   // Document operations
-  async getDocuments(projectId: number): Promise<Document[]> {
+  async getDocuments(projectId: number, userId: number): Promise<Document[]> {
+    if (!(await this.getProject(projectId, userId))) return [];
     return Array.from(this.documents.values()).filter(
       (document) => document.projectId === projectId
     );
   }
 
-  async getDocument(id: number): Promise<Document | undefined> {
-    return this.documents.get(id);
+  async getDocument(id: number, userId: number): Promise<Document | undefined> {
+    const document = this.documents.get(id);
+    if (!document) return undefined;
+    return (await this.getProject(document.projectId, userId)) ? document : undefined;
   }
 
-  async createDocument(insertDocument: InsertDocument): Promise<Document> {
+  async createDocument(insertDocument: InsertDocument, userId: number): Promise<Document | undefined> {
+    if (!(await this.getProject(insertDocument.projectId, userId))) return undefined;
     const id = this.documentId++;
     const document: Document = {
       ...insertDocument,
@@ -193,8 +201,8 @@ export class MemStorage implements IStorage {
     return document;
   }
 
-  async updateDocument(id: number, documentUpdate: Partial<Document>): Promise<Document | undefined> {
-    const document = this.documents.get(id);
+  async updateDocument(id: number, documentUpdate: Partial<Document>, userId: number): Promise<Document | undefined> {
+    const document = await this.getDocument(id, userId);
     if (!document) return undefined;
     
     const updatedDocument = {
@@ -206,22 +214,27 @@ export class MemStorage implements IStorage {
     return updatedDocument;
   }
 
-  async deleteDocument(id: number): Promise<boolean> {
+  async deleteDocument(id: number, userId: number): Promise<boolean> {
+    if (!(await this.getDocument(id, userId))) return false;
     return this.documents.delete(id);
   }
 
   // Source operations
-  async getSources(projectId: number): Promise<Source[]> {
+  async getSources(projectId: number, userId: number): Promise<Source[]> {
+    if (!(await this.getProject(projectId, userId))) return [];
     return Array.from(this.sources.values()).filter(
       (source) => source.projectId === projectId
     );
   }
 
-  async getSource(id: number): Promise<Source | undefined> {
-    return this.sources.get(id);
+  async getSource(id: number, userId: number): Promise<Source | undefined> {
+    const source = this.sources.get(id);
+    if (!source) return undefined;
+    return (await this.getProject(source.projectId, userId)) ? source : undefined;
   }
 
-  async createSource(insertSource: InsertSource): Promise<Source> {
+  async createSource(insertSource: InsertSource, userId: number): Promise<Source | undefined> {
+    if (!(await this.getProject(insertSource.projectId, userId))) return undefined;
     const id = this.sourceId++;
     const source: Source = {
       ...insertSource,
@@ -234,7 +247,8 @@ export class MemStorage implements IStorage {
     return source;
   }
 
-  async deleteSource(id: number): Promise<boolean> {
+  async deleteSource(id: number, userId: number): Promise<boolean> {
+    if (!(await this.getSource(id, userId))) return false;
     return this.sources.delete(id);
   }
 
