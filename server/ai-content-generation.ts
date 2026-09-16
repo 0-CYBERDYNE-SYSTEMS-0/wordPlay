@@ -1,0 +1,652 @@
+import { GoogleGenAI, Modality } from '@google/genai';
+import OpenAI from 'openai';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { prepareO3Parameters, isO3Model, callOllama, DEFAULT_MODEL, DEFAULT_GEMINI_MODEL, generateWithGemini, defaultModelFor } from './openai';
+import { resolveProviderCredentials } from './provider-registry';
+
+interface TableGenerationRequest {
+  text: string;
+  mode: 'replace' | 'augment';
+  style?: 'simple' | 'detailed' | 'comparison' | 'data';
+}
+
+interface ChartGenerationRequest {
+  text: string;
+  chartType: 'bar' | 'line' | 'pie' | 'scatter' | 'auto';
+  data?: any[];
+}
+
+interface ImageGenerationRequest {
+  prompt: string;
+  style: 'realistic' | 'artistic' | 'diagram' | 'icon';
+  size?: '256x256' | '512x512' | '1024x1024';
+}
+
+// AI clients are initialized lazily from SERVER-SIDE env vars only. API keys
+// sent from the browser are never accepted: keys live in .env on the host, so
+// one teammate's request can never spend another teammate's key, and no key
+// is ever stored in or round-tripped through a browser.
+let geminiNew: GoogleGenAI | null = null;
+
+// OpenAI-compatible clients (openai / custom / kimi), one per provider,
+// credentials resolved from the provider registry.
+const compatClients = new Map<string, OpenAI>();
+function getOpenAI(provider?: string): OpenAI {
+  const key = provider === 'custom' || provider === 'kimi' ? provider : 'openai';
+  let client = compatClients.get(key);
+  if (!client) {
+    const { apiKey, baseURL } = resolveProviderCredentials(key);
+    client = new OpenAI({ apiKey, baseURL });
+    compatClients.set(key, client);
+  }
+  return client;
+}
+
+function getGeminiImageClient(): GoogleGenAI {
+  if (!geminiNew) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('Gemini API key is not configured on the server (set GEMINI_API_KEY in .env)');
+    }
+    geminiNew = new GoogleGenAI({ apiKey });
+  }
+  return geminiNew;
+}
+
+export async function generateTable(request: TableGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai', llmModel?: string): Promise<string> {
+  const systemPrompt = `You are an expert at converting text into well-formatted markdown tables. 
+  Analyze the provided text and extract structured information to create a meaningful table.
+  
+  Guidelines:
+  - Extract key information and organize it logically
+  - Create appropriate column headers
+  - Use markdown table format with proper alignment
+  - If the text doesn't contain tabular data, intelligently structure it
+  - For comparisons, create comparison tables
+  - For lists, organize into categorized tables
+  - Ensure all data is accurate to the source text
+  
+  Return only the markdown table, no additional text.`;
+
+  const userPrompt = request.mode === 'replace' 
+    ? `Convert this text into a markdown table:\n\n${request.text}`
+    : `Analyze this text and create a complementary table that augments the information:\n\n${request.text}`;
+
+  try {
+    if (llmProvider === 'ollama') {
+      const content = stripThinking(await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`));
+      return content || '';
+    }
+
+    if (llmProvider === 'gemini') {
+      const content = stripThinking(await generateWithGemini(
+        userPrompt,
+        {},
+        systemPrompt,
+        llmModel || DEFAULT_GEMINI_MODEL
+      ));
+      return content || '';
+    }
+
+    const client = getOpenAI(llmProvider);
+
+    const requestParams = prepareO3Parameters({
+      model: defaultModelFor(llmProvider, llmModel),
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.3,
+      max_tokens: 2000,
+    });
+
+    const completion = await client.chat.completions.create(requestParams);
+
+    return stripThinking(completion.choices[0]?.message?.content || '');
+  } catch (error: any) {
+    console.error('Error generating table:', error);
+    throw new Error(describeProviderError('table generation', llmProvider, llmModel, error));
+  }
+}
+
+// Turns low-level fetch/SDK failures into messages that name the provider,
+// the model, and the actual cause — so a teammate can act on it.
+export function describeProviderError(what: string, llmProvider: string, llmModel: string | undefined, error: any): string {
+  const raw = (error?.message || String(error || 'unknown error')).trim();
+  const modelSuffix = llmModel ? ` (model: ${llmModel})` : '';
+  if (llmProvider === 'ollama') {
+    if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(raw)) {
+      return `Could not reach Ollama at ${process.env.OLLAMA_URL || 'http://localhost:11434'} — is it running?${modelSuffix}`;
+    }
+    return `Ollama failed during ${what}: ${raw}${modelSuffix}`;
+  }
+  if (llmProvider === 'gemini') {
+    if (/API key not configured/i.test(raw)) return `Gemini API key is not configured on the server (set GEMINI_API_KEY in .env) — cannot run ${what}.`;
+    if (/401|API_KEY_INVALID|permission/i.test(raw)) return `Gemini rejected the server's API key (401) during ${what}.${modelSuffix}`;
+    if (/429|quota|RATE/i.test(raw)) return `Gemini quota/rate limit hit during ${what}. Try again shortly.${modelSuffix}`;
+    if (/404|not found/i.test(raw)) return `Gemini model not available for ${what}${modelSuffix} — pick another model in Settings → AI.`;
+    return `Gemini failed during ${what}: ${raw}${modelSuffix}`;
+  }
+  // OpenAI-compatible (OpenAI, or any OPENAI_BASE_URL endpoint)
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(raw)) {
+    const base = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+    return `Could not reach the OpenAI-compatible endpoint at ${base} during ${what}.${modelSuffix}`;
+  }
+  if (/401|invalid.*key|unauthor/i.test(raw)) {
+    return `The provider rejected the server's OpenAI API key (401) during ${what}. Check OPENAI_API_KEY in .env.${modelSuffix}`;
+  }
+  if (/429|rate limit|quota/i.test(raw)) {
+    return `Provider rate limit/quota hit during ${what}. Try again shortly.${modelSuffix}`;
+  }
+  if (/404|model.*not/i.test(raw)) {
+    return `Model not available for ${what}${modelSuffix} — pick another model in Settings → AI.`;
+  }
+  return `Provider error during ${what}: ${raw}${modelSuffix}`;
+}
+
+// Reasoning models (qwen, deepseek-r1, …) wrap their answer in <thinking>…
+// </thinking> — and an unclosed tag means the whole tail is reasoning. Either
+// variant would poison a chart/table payload, so strip it at the source.
+function stripThinking(text: string): string {
+  let t = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  const unclosed = t.toLowerCase().lastIndexOf('<thinking>');
+  if (unclosed !== -1) t = t.slice(0, unclosed);
+  return t.trim();
+}
+
+export async function generateChart(request: ChartGenerationRequest, llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom' = 'openai', llmModel?: string): Promise<string> {
+  console.log('🔧 generateChart called with request:', JSON.stringify(request, null, 2));
+  
+  const systemPrompt = `You are an expert at creating stunning, Apple-quality ECharts visualizations that rival the best data visualizations from Apple's investor presentations and cutting-edge JavaScript libraries.
+
+  CREATE PREMIUM, FUTURISTIC VISUALIZATIONS:
+  
+  🎨 APPLE-STYLE DESIGN SYSTEM:
+  - Use premium color palettes: gradients, subtle shadows, glass-morphism effects
+  - Implement smooth animations and micro-interactions
+  - Clean, minimal typography with San Francisco Pro-style fonts
+  - Sophisticated spacing and alignment following Apple's design principles
+  - High contrast ratios for accessibility while maintaining elegance
+  
+  🔮 FUTURISTIC VISUAL ELEMENTS:
+  - Gradient fills and subtle shadows for depth
+  - Smooth line curves with proper easing
+  - Glass-morphism backgrounds with transparency
+  - Sophisticated color schemes (prefer blues, teals, purples for tech feel)
+  - Premium animation easing curves
+  
+  📊 TECHNICAL EXCELLENCE:
+  - Ultra-high resolution support (devicePixelRatio: 2+)
+  - Perfect responsive behavior across all screen sizes
+  - Grid system: { top: 80, right: 80, bottom: 80, left: 100, containLabel: true }
+  - Typography scale: title: 24px, subtitle: 16px, labels: 14px, legends: 13px
+  - Smooth animations: animationDuration: 1000, animationEasing: 'cubicOut'
+  
+  🎯 APPLE-QUALITY SPECIFICATIONS:
+  - Use sophisticated gradients: linear and radial gradients for series
+  - Implement subtle drop shadows and glows
+  - Premium color palettes: ['#007AFF', '#34C759', '#FF9500', '#FF3B30', '#AF52DE', '#00C7BE', '#FF2D92']
+  - Glass-morphism effects with backgroundColor: 'rgba(255,255,255,0.1)'
+  - Smooth line styles with shadowBlur for depth
+  - Professional tooltip styling with rounded corners and shadows
+  
+  💎 CUTTING-EDGE JS FEATURES:
+  - Rich animations with staggered transitions
+  - Sophisticated hover states and interactions
+  - Progressive data loading animations
+  - Multi-dimensional visual hierarchy
+  - Advanced legend positioning with intelligent overflow handling
+  
+  📱 EXPORT-READY QUALITY:
+  - High DPI rendering for crisp exports
+  - Print-optimized color schemes
+  - Professional presentation-ready styling
+  - Scalable vector-quality output
+  
+  CHART TYPE SELECTION (when auto):
+  - Line charts: for trends, time series, continuous data
+  - Bar charts: for comparisons, categorical data
+  - Pie charts: for parts of a whole (limit to 6 categories max)
+  - Scatter plots: for correlations, relationships
+  - Area charts: for cumulative data, stacked values
+  
+  Return ONLY the complete JSON configuration with no code blocks or additional text.`;
+
+  const userPrompt = `Create an ECharts configuration for a ${request.chartType} chart from this data:\n\n${request.text}`;
+
+  try {
+    if (llmProvider === 'ollama') {
+      console.log('📡 Making Ollama call for chart generation...');
+      const content = stripThinking(await callOllama(llmModel || 'qwen3:4b', `${systemPrompt}\n\n${userPrompt}`));
+      const result = `\`\`\`chart
+${content}
+\`\`\``;
+      return result;
+    }
+
+    if (llmProvider === 'gemini') {
+      console.log('📡 Making Gemini call for chart generation...');
+      const content = stripThinking(await generateWithGemini(
+        userPrompt,
+        {},
+        systemPrompt,
+        llmModel || DEFAULT_GEMINI_MODEL
+      ));
+      const result = `\`\`\`chart
+${content || ''}
+\`\`\``;
+      return result;
+    }
+
+    const client = getOpenAI();
+
+    console.log('📡 Making OpenAI API call for chart generation...');
+    const requestParams = prepareO3Parameters({
+      model: llmModel || DEFAULT_MODEL,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.2,
+      max_tokens: 3000,
+    });
+
+    const completion = await client.chat.completions.create(requestParams);
+
+    const content = completion.choices[0]?.message?.content || '';
+    console.log('✅ OpenAI response received, content length:', content.length);
+    
+    // Wrap the chart configuration in a special marker for the frontend
+    const result = `\`\`\`chart
+${content}
+\`\`\``;
+    console.log('📊 Chart result prepared:', result.substring(0, 200) + '...');
+    return result;
+  } catch (error: any) {
+    console.error('❌ Error generating chart:', error);
+    throw new Error(describeProviderError('chart generation', llmProvider, llmModel, error));
+  }
+}
+
+// ---- Local-first image generation: FLUX.2 Klein via mflux bridge (1-step default), Gemini fallback ----
+export interface ImageGenerationOptions {
+  imageModel?: string;
+  // 'local' = mflux bridge, 'gemini' = cloud, 'custom' = any OpenAI-compatible
+  // images endpoint configured via IMAGE_API_URL (+ IMAGE_API_KEY/IMAGE_API_MODEL).
+  provider?: 'local' | 'gemini' | 'custom';
+  // Local mflux bridge controls (defaults from env / constants)
+  imageSize?: string;
+  steps?: number;
+}
+
+export async function generateImage(request: ImageGenerationRequest, options?: ImageGenerationOptions): Promise<string> {
+  const stylePrompts = {
+    realistic: 'ultra-high quality photorealistic style, 8K resolution, professional DSLR photography, perfect lighting, sharp details, cinematic composition, award-winning photography',
+    artistic: 'stunning artistic masterpiece, premium digital art, gallery-quality illustration, rich colors, sophisticated composition, professional artwork, high-end design',
+    diagram: 'pristine technical diagram, ultra-clean vector illustration, Apple-style minimalism, perfect geometric precision, professional technical documentation quality, crisp lines',
+    icon: 'premium icon design, ultra-modern flat design, Apple-quality vector graphics, pixel-perfect clarity, sophisticated minimalism, high-end brand quality'
+  };
+
+  const enhancedPrompt = `Create a high-quality image that represents: "${request.prompt}".
+
+Style: ${stylePrompts[request.style]}
+
+Requirements:
+- High resolution and crisp details
+- Professional composition
+- Excellent color balance and contrast
+- Modern aesthetic with perfect lighting
+- Export-ready quality
+
+Create a visually appealing and professional image.`;
+
+  const sizeMap: Record<string, { width: number; height: number }> = {
+    '256x256': { width: 256, height: 256 },
+    '512x512': { width: 512, height: 512 },
+    '1024x1024': { width: 1024, height: 1024 },
+  };
+  const { width, height } = sizeMap[request.size || '512x512'] || sizeMap['512x512'];
+
+  const mfluxUrl = process.env.MFLUX_BRIDGE_URL || 'http://127.0.0.1:4030';
+  // Per-request steps from Settings win; otherwise env MFLUX_STEPS (default 1).
+  const steps = options?.steps ?? parseInt(process.env.MFLUX_STEPS || '1', 10);
+  // Per-request size from Settings wins; otherwise the request size (default 512x512).
+  const genSize = options?.imageSize || request.size || '512x512';
+  const genDimensions = sizeMap[genSize] || sizeMap['512x512'];
+  const genWidth = genDimensions.width;
+  const genHeight = genDimensions.height;
+
+  // Custom OpenAI-compatible endpoint (/v1/images/generations shape) — covers
+  // ComfyUI bridges, A1111 --api, SD WebUI, swarmui, hosted gateways, etc.
+  if (options?.provider === 'custom') {
+    return generateImageWithCustomEndpoint(request, enhancedPrompt, options);
+  }
+
+  // When the user selected Gemini for images, skip the local bridge entirely.
+  if (options?.provider === 'gemini') {
+    console.log('🎨 Image provider set to Gemini — skipping local mflux bridge.');
+    return generateImageWithGeminiFallback(request, enhancedPrompt, options);
+  }
+
+  console.log('🎨 Starting local FLUX.2 Klein image generation (mflux bridge)...');
+  console.log(`📝 Prompt: "${request.prompt}" | Size: ${genWidth}x${genHeight} | Steps: ${steps}`);
+
+  try {
+    const genResponse = await fetch(`${mfluxUrl}/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: enhancedPrompt, width: genWidth, height: genHeight, steps }),
+    });
+
+    if (!genResponse.ok) {
+      throw new Error(`mflux bridge HTTP ${genResponse.status}`);
+    }
+
+    const data = await genResponse.json();
+    if (!data.image_base64) {
+      throw new Error('No image data in mflux bridge response');
+    }
+
+    const imageBuffer = Buffer.from(data.image_base64, 'base64');
+    console.log(`💾 Local image buffer size: ${Math.round(imageBuffer.length / 1024)}KB (${data.time_seconds ?? '?'}s, ${steps} step${steps === 1 ? '' : 's'})`);
+
+    if (imageBuffer.length > 10 * 1024 * 1024) {
+      throw new Error('Generated image is too large');
+    }
+
+    const fileName = `mflux-image-${crypto.randomUUID()}.png`;
+    const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, imageBuffer);
+
+    console.log(`✅ Local image saved: ${fileName}`);
+    const imageUrl = `/uploads/${fileName}`;
+    // Short, descriptive alt text (≤ ~8 words) instead of a 100-char prompt excerpt
+    const altText = request.prompt.split(/\s+/).slice(0, 8).join(' ') || "Generated image";
+    return `![${altText}](${imageUrl})`;
+  } catch (localError: any) {
+    console.warn(`⚠️ Local FLUX bridge failed (${localError.message}); falling back to Gemini (cloud)`, localError);
+    try {
+      return await generateImageWithGeminiFallback(request, enhancedPrompt, options);
+    } catch (geminiError: any) {
+      const mfluxUrl = process.env.MFLUX_BRIDGE_URL || 'http://127.0.0.1:4030';
+      // Name both causes so the fix is obvious (start the bridge, or add a key).
+      throw new Error(
+        `Image generation failed on both providers. Local mflux bridge at ${mfluxUrl}: ${localError.message}. Gemini fallback: ${geminiError.message}`
+      );
+    }
+  }
+}
+
+async function generateImageWithCustomEndpoint(
+  request: ImageGenerationRequest,
+  enhancedPrompt: string,
+  options?: ImageGenerationOptions
+): Promise<string> {
+  const base = (process.env.IMAGE_API_URL || '').replace(/\/$/, '');
+  if (!base) {
+    throw new Error('Custom image endpoint is not configured on the server (set IMAGE_API_URL in .env)');
+  }
+
+  console.log(`🎨 Generating image via custom endpoint ${base}/images/generations...`);
+  const res = await fetch(`${base}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(process.env.IMAGE_API_KEY ? { Authorization: `Bearer ${process.env.IMAGE_API_KEY}` } : {}),
+    },
+    body: JSON.stringify({
+      model: options?.imageModel || process.env.IMAGE_API_MODEL || undefined,
+      prompt: enhancedPrompt,
+      size: options?.imageSize || request.size || '1024x1024',
+      n: 1,
+    }),
+    signal: AbortSignal.timeout(300_000),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Custom image endpoint HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
+  }
+
+  const data = await res.json();
+  const item = data?.data?.[0];
+  if (!item) {
+    throw new Error('Custom image endpoint returned no data');
+  }
+
+  let imageBuffer: Buffer;
+  if (item.b64_json) {
+    imageBuffer = Buffer.from(item.b64_json, 'base64');
+  } else if (item.url) {
+    const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(120_000) });
+    if (!imgRes.ok) throw new Error(`Could not fetch generated image (HTTP ${imgRes.status})`);
+    imageBuffer = Buffer.from(await imgRes.arrayBuffer());
+  } else {
+    throw new Error('Custom image endpoint returned neither b64_json nor url');
+  }
+
+  const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  const fileName = `custom-image-${crypto.randomUUID()}.png`;
+  fs.writeFileSync(path.join(uploadsDir, fileName), imageBuffer);
+  console.log(`✅ Custom endpoint image saved: ${fileName}`);
+
+  const altText = request.prompt.split(/\s+/).slice(0, 8).join(' ') || 'Generated image';
+  return `![${altText}](/uploads/${fileName})`;
+}
+
+async function generateImageWithGeminiFallback(
+  request: ImageGenerationRequest,
+  enhancedPrompt: string,
+  options?: ImageGenerationOptions
+): Promise<string> {
+  // Server-side env key only — the browser never supplies keys.
+  const client = getGeminiImageClient();
+
+  console.log('🎨 Starting Gemini image generation (fallback)...');
+  console.log(`📝 Prompt: "${request.prompt}"`);
+  console.log(`🎭 Style: ${request.style}`);
+
+  try {
+    // Gemini 3.1 Flash-Lite Image (Nano Banana 2 Lite) is the current, stable,
+    // cost-efficient image-generation model. NOTE: the plain "gemini-3.1-flash-lite"
+    // model is text-output only and cannot generate images — the "-image" variant is
+    // required for image generation.
+    const imageModel = options?.imageModel || process.env.GEMINI_IMAGE_MODEL || 'gemini-3.1-flash-lite-image';
+    const imageModels = [imageModel];
+
+    let lastError: any = null;
+
+    for (const model of imageModels) {
+      try {
+        console.log(`📡 Sending request to ${model}...`);
+
+        const response = await client.models.generateContent({
+          model,
+          contents: enhancedPrompt,
+          config: {
+            responseModalities: [Modality.TEXT, Modality.IMAGE],
+          },
+        });
+
+        console.log(`✅ Response received from ${model}`);
+
+        // Process the response to extract image data
+        const candidate = response.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+
+        console.log(`📊 Processing ${parts.length} response parts`);
+
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+
+          if (part.inlineData?.mimeType?.startsWith('image/') && part.inlineData.data) {
+            try {
+              console.log(`🖼️  Found image data: ${part.inlineData.mimeType}`);
+              console.log(`📐 Data length: ${part.inlineData.data.length} characters`);
+
+              // Process and save the image
+              const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+              console.log(`💾 Image buffer size: ${Math.round(imageBuffer.length / 1024)}KB`);
+
+              // Check if image is reasonable size (max 10MB)
+              if (imageBuffer.length > 10 * 1024 * 1024) {
+                console.warn(`⚠️  Image too large: ${Math.round(imageBuffer.length / (1024 * 1024))}MB`);
+                throw new Error('Generated image is too large');
+              }
+
+              const fileExtension = part.inlineData.mimeType.split('/')[1] || 'png';
+              const fileName = `gemini-image-${crypto.randomUUID()}.${fileExtension}`;
+
+              // Create uploads directory if it doesn't exist
+              const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+              if (!fs.existsSync(uploadsDir)) {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+                console.log('📁 Created uploads directory');
+              }
+
+              // Save the image file
+              const filePath = path.join(uploadsDir, fileName);
+              fs.writeFileSync(filePath, imageBuffer);
+
+              console.log(`✅ Image saved successfully: ${fileName}`);
+              console.log(`📂 Full path: ${filePath}`);
+
+              // Return markdown with relative URL
+              const imageUrl = `/uploads/${fileName}`;
+              const altText = request.prompt.split(/\s+/).slice(0, 8).join(' ') || "Generated image";
+              const result = `![${altText}](${imageUrl})`;
+
+              console.log(`📤 Returning markdown result: ${result}`);
+              return result;
+
+            } catch (saveError: any) {
+              console.error('❌ Error processing image:', saveError);
+              // Throw so the caller surfaces a proper error instead of inserting
+              // error text into the document.
+              throw new Error(saveError.message || 'Could not process generated image');
+            }
+          } else if (part.text) {
+            console.log(`📝 Text part: ${part.text.substring(0, 100)}...`);
+          }
+        }
+
+        console.warn(`❌ No image data found in response from ${model}`);
+        lastError = new Error(`No image data found in Gemini response from ${model}`);
+      } catch (error: any) {
+        console.error(`❌ Error generating image with ${model}:`, error);
+        lastError = error;
+      }
+    }
+
+    // Map the last failure to a helpful message
+    const error = lastError || new Error('Unknown image generation failure');
+    const rawMessage = error.message || '';
+    const apiStatus = typeof error.status === 'number' ? error.status : null;
+
+    if (rawMessage.includes('content policy') || rawMessage.includes('safety')) {
+      throw new Error('Image request rejected due to content policy. Please try a different description.');
+    } else if (apiStatus === 429 || rawMessage.includes('quota') || rawMessage.includes('rate limit')) {
+      throw new Error('Gemini image generation quota exceeded. Check the API key quota/billing, then try again.');
+    } else if (apiStatus === 404 || rawMessage.includes('not found')) {
+      throw new Error(`The image model "${imageModel}" is not available for this Gemini API key. Set GEMINI_IMAGE_MODEL to a supported image model (e.g. gemini-3.1-flash-lite-image).`);
+    } else if (rawMessage.includes('responseModalities')) {
+      throw new Error('Gemini model configuration error. The service may be temporarily unavailable.');
+    } else {
+      throw new Error(`Failed to generate image: ${rawMessage || 'Unknown error'}`);
+    }
+  } catch (error: any) {
+    console.error('❌ AI content generation error:', error);
+    throw error;
+  }
+}
+
+// Legacy function - now just calls the main generateImage function
+export async function generateImageWithGemini(request: ImageGenerationRequest): Promise<string> {
+  return await generateImage(request);
+}
+
+export async function processAIContentCommand(
+  command: string,
+  content: string,
+  selectionInfo: any,
+  llmProvider: string = 'openai',
+  llmModel: string = DEFAULT_MODEL,
+  parameters?: any,
+  options?: ImageGenerationOptions
+): Promise<string> {
+  const provider = llmProvider === 'ollama' ? 'ollama' : llmProvider === 'gemini' ? 'gemini' : 'openai';
+
+  const selectedText = selectionInfo.selectedText || content;
+
+  switch (command) {
+    case 'table':
+      const tableMode = parameters?.mode || (selectionInfo.selectedText ? 'replace' : 'augment');
+      const tableStyle = parameters?.style || 'simple';
+      
+      return await generateTable({
+        text: selectedText,
+        mode: tableMode,
+        style: tableStyle
+      }, provider, llmModel);
+
+    case 'chart':
+      console.log('🎯 Processing chart command with parameters:', parameters);
+      console.log('📝 Selected text for chart:', selectedText.substring(0, 200) + '...');
+      const chartType = parameters?.chartType || parameters?.type || 'auto';
+      
+      const chartResult = await generateChart({
+        text: selectedText,
+        chartType: chartType
+      }, provider, llmModel);
+      console.log('📈 Chart generation completed, result length:', chartResult.length);
+      return chartResult;
+
+    case 'image':
+      // Use selected text as context for image generation
+      let imagePrompt = selectedText.trim();
+      
+      // If no text is selected or text is too short, provide better context
+      if (!imagePrompt || imagePrompt.length < 10) {
+        // Use the full content for context if no selection
+        const contextText = content.length > 300 ? content.substring(0, 300) : content;
+        imagePrompt = contextText || 'Create a beautiful, professional image';
+      }
+      
+      // If the selected text is very long, use it intelligently
+      if (imagePrompt.length > 300) {
+        // Try to extract key concepts and themes for the image
+        const sentences = imagePrompt.split(/[.!?]+/).filter((s: string) => s.trim().length > 0);
+        if (sentences.length > 1) {
+          // Use the first two sentences as they often contain main ideas
+          imagePrompt = sentences.slice(0, 2).join('. ').trim();
+        } else {
+          // Truncate but try to end at a word boundary
+          imagePrompt = imagePrompt.substring(0, 280).replace(/\s+\S*$/, '');
+        }
+      }
+      
+      const imageStyle = parameters?.style || 'artistic';
+      // Size: per-request Settings value (options.imageSize) wins; fall back to
+      // the style params, then the classic default.
+      const imageSize = options?.imageSize || parameters?.size || '1024x1024';
+      
+      return await generateImage({
+        prompt: imagePrompt,
+        style: imageStyle,
+        size: imageSize
+      }, options);
+
+    default:
+      throw new Error(`Unknown AI content command: ${command}`);
+  }
+}

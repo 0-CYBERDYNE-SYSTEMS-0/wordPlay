@@ -6,7 +6,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { 
   FileText, Search, Upload, Code, Brush, Link, File, Settings, 
   HelpCircle, BarChart2, PlusCircle, FolderPlus, ChevronDown, 
-  ChevronRight, Trash2, Edit2, Sparkles, BookOpen, Plus, Wrench, Folder, X
+  ChevronRight, Trash2, Edit2, Sparkles, BookOpen, Plus, Wrench, Folder, X,
+  Zap, Star, CheckCircle
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -22,6 +23,8 @@ interface SidebarProps {
   onSelectDocument: (documentId: number) => void;
   onChangeTab: (tab: "editor" | "research" | "settings") => void;
   onClose: () => void;
+  userExperienceMode: 'simple' | 'advanced' | 'expert';
+  onModeChange: (mode: 'simple' | 'advanced' | 'expert') => void;
 }
 
 export default function Sidebar({
@@ -32,7 +35,9 @@ export default function Sidebar({
   onSelectProject,
   onSelectDocument,
   onChangeTab,
-  onClose
+  onClose,
+  userExperienceMode,
+  onModeChange
 }: SidebarProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -387,7 +392,7 @@ export default function Sidebar({
                     onClick={() => onSelectProject(project.id)}
                     className={`p-3 rounded-lg text-sm cursor-pointer transition-colors flex items-center justify-between ${
                       project.id === activeProjectId
-                        ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                        ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)] border border-copper-300 dark:border-copper-300"
                         : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                     }`}
                   >
@@ -403,6 +408,7 @@ export default function Sidebar({
                           e.stopPropagation();
                           startEditingProject(project);
                         }}
+                        aria-label={`Rename project ${project.name}`}
                         className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                       >
                         <Edit2 className="h-3 w-3" />
@@ -412,6 +418,7 @@ export default function Sidebar({
                           e.stopPropagation();
                           confirmDeleteProject(project.id);
                         }}
+                        aria-label={`Delete project ${project.name}`}
                         className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
                       >
                         <Trash2 className="h-3 w-3" />
@@ -505,6 +512,7 @@ export default function Sidebar({
                             e.stopPropagation();
                             startEditingDocument(document);
                           }}
+                          aria-label={`Rename document ${document.title}`}
                           className="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600"
                         >
                           <Edit2 className="h-3 w-3" />
@@ -514,6 +522,7 @@ export default function Sidebar({
                             e.stopPropagation();
                             confirmDeleteDocument(document.id);
                           }}
+                          aria-label={`Delete document ${document.title}`}
                           className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
                         >
                           <Trash2 className="h-3 w-3" />
@@ -564,10 +573,11 @@ export default function Sidebar({
           </h3>
           
           <div className="space-y-2">
+            {/* Editor - Always available */}
             <div 
               className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
                 activeTab === "editor"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]"
                   : "hover:bg-gray-100 dark:hover:bg-gray-700"
               }`}
               onClick={() => onChangeTab("editor")}
@@ -575,28 +585,72 @@ export default function Sidebar({
               <Edit2 className="h-4 w-4 mr-2" />
               <span>Editor</span>
             </div>
-            <div 
-              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "research"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
-              }`}
-              onClick={() => onChangeTab("research")}
-            >
-              <Search className="h-4 w-4 mr-2" />
-              <span>Research</span>
-            </div>
-            <div 
-              className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
-                activeTab === "settings"
-                  ? "bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                  : "hover:bg-gray-100 dark:hover:bg-gray-700"
-              }`}
-              onClick={() => onChangeTab("settings")}
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              <span>Settings</span>
-            </div>
+            
+            {/* Research - Available in advanced and expert modes */}
+            {(userExperienceMode === 'advanced' || userExperienceMode === 'expert') && (
+              <div 
+                className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                  activeTab === "research"
+                    ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                onClick={() => onChangeTab("research")}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                <span>Research Assistant</span>
+              </div>
+            )}
+            
+            {/* Settings - Available in advanced and expert modes */}
+            {(userExperienceMode === 'advanced' || userExperienceMode === 'expert') && (
+              <div 
+                className={`flex items-center p-3 rounded-lg text-sm cursor-pointer transition-colors ${
+                  activeTab === "settings"
+                    ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)]"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                onClick={() => onChangeTab("settings")}
+              >
+                <Settings className="h-4 w-4 mr-2" />
+                <span>Settings</span>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        {/* User Experience Mode Switcher */}
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 mt-auto">
+          <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center">
+            <Sparkles className="h-4 w-4 mr-2" />
+            Experience Mode
+          </h3>
+          
+          <div className="space-y-1">
+            {(['simple', 'advanced', 'expert'] as const).map((mode) => (
+              <div
+                key={mode}
+                className={`flex items-center p-2 rounded-lg text-sm cursor-pointer transition-colors ${
+                  userExperienceMode === mode
+                    ? "bg-copper-100 dark:bg-copper-100 text-[var(--wp-copper)] dark:text-[var(--wp-copper)] border border-copper-300 dark:border-copper-300"
+                    : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+                onClick={() => onModeChange(mode)}
+              >
+                {mode === 'simple' && <Zap className="h-3 w-3 mr-2" />}
+                {mode === 'advanced' && <Settings className="h-3 w-3 mr-2" />}
+                {mode === 'expert' && <Star className="h-3 w-3 mr-2" />}
+                <span className="capitalize">{mode}</span>
+                {userExperienceMode === mode && (
+                  <CheckCircle className="h-3 w-3 ml-auto text-[var(--wp-copper)] dark:text-[var(--wp-copper)]" />
+                )}
+              </div>
+            ))}
+          </div>
+          
+          <div className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            {userExperienceMode === 'simple' && 'Focus on writing with minimal distractions'}
+            {userExperienceMode === 'advanced' && 'Research tools and advanced features'}
+            {userExperienceMode === 'expert' && 'Full AI agent and all capabilities'}
           </div>
         </div>
 

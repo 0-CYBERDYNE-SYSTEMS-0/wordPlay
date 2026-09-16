@@ -133,12 +133,78 @@ export async function checkDatabase() {
   }
 }
 
+// Idempotently guarantee every table in shared/schema.ts exists. The migration
+// files in ./migrations are stale (they predate custom_commands), so fresh
+// deployments — docker-compose volumes, a new laptop — would otherwise boot
+// with missing tables and fail at runtime.
+export async function ensureTables() {
+  const pool = new Pool({
+    connectionString: config.database.url,
+    ...config.database.options
+  });
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id serial PRIMARY KEY,
+        username text NOT NULL UNIQUE,
+        password text NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS projects (
+        id serial PRIMARY KEY,
+        user_id integer NOT NULL REFERENCES users(id),
+        name text NOT NULL,
+        type text NOT NULL,
+        style text NOT NULL,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS documents (
+        id serial PRIMARY KEY,
+        project_id integer NOT NULL REFERENCES projects(id),
+        title text NOT NULL,
+        content text NOT NULL,
+        style_metrics jsonb,
+        word_count integer,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS sources (
+        id serial PRIMARY KEY,
+        project_id integer NOT NULL REFERENCES projects(id),
+        type text NOT NULL,
+        name text NOT NULL,
+        content text,
+        url text,
+        created_at timestamp NOT NULL DEFAULT now()
+      );
+      CREATE TABLE IF NOT EXISTS custom_commands (
+        id serial PRIMARY KEY,
+        user_id integer NOT NULL REFERENCES users(id),
+        name text NOT NULL,
+        trigger text NOT NULL,
+        prompt_template text NOT NULL,
+        description text,
+        is_active boolean NOT NULL DEFAULT true,
+        created_at timestamp NOT NULL DEFAULT now(),
+        updated_at timestamp NOT NULL DEFAULT now()
+      );
+    `);
+    console.log('Schema ensured: users, projects, documents, sources, custom_commands');
+  } catch (error) {
+    console.error('Error ensuring schema:', error);
+  } finally {
+    await pool.end();
+  }
+}
+
 export async function initializeDatabase() {
   console.log('Checking database connection...');
   const isConnected = await checkDatabase();
-  
+
   if (isConnected) {
     await runMigrations();
+    await ensureTables();
     await seedInitialData();
     return true;
   } else {

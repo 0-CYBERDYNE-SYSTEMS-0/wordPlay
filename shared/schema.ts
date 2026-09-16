@@ -78,3 +78,27 @@ export const insertSourceSchema = createInsertSchema(sources).pick({
 
 export type InsertSource = z.infer<typeof insertSourceSchema>;
 export type Source = typeof sources.$inferSelect;
+
+export const customCommands = pgTable("custom_commands", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  trigger: text("trigger").notNull(),
+  promptTemplate: text("prompt_template").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertCustomCommandSchema = createInsertSchema(customCommands).pick({
+  userId: true,
+  name: true,
+  trigger: true,
+  promptTemplate: true,
+  description: true,
+  isActive: true,
+});
+
+export type InsertCustomCommand = z.infer<typeof insertCustomCommandSchema>;
+export type CustomCommand = typeof customCommands.$inferSelect;

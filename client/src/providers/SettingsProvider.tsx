@@ -2,6 +2,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export interface AppSettings {
+  // User Experience Settings
+  userExperienceMode: 'simple' | 'advanced' | 'expert';
+  hasCompletedOnboarding: boolean;
+  
+  // AI Content Generation Settings
+  enableVisualizations: boolean;
+  enableImageGeneration: boolean;
+  
   // Editor Settings
   theme: 'light' | 'dark' | 'system';
   fontSize: 'small' | 'medium' | 'large';
@@ -13,10 +21,16 @@ export interface AppSettings {
   showLineNumbers: boolean;
   
   // AI Settings
-  llmProvider: 'openai' | 'ollama';
+  llmProvider: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel: string;
-  openaiApiKey?: string;
   ollamaUrl: string;
+  researchModel: string;
+  imageProvider: 'local' | 'gemini' | 'custom';
+  imageModel: string;
+  // Local mflux bridge controls
+  imageSteps: number;      // mflux steps (1 = fastest/quality tradeoff, 4 = bridge default)
+  imageSize: '256x256' | '512x512' | '1024x1024';
+  localImageModel: string; // display-only: model loaded in the mflux bridge
   
   // Reasoning Model Settings
   showThinkingProcess: boolean;
@@ -36,13 +50,7 @@ export interface AppSettings {
   
   // Agent Settings
   autonomyLevel: 'conservative' | 'moderate' | 'aggressive';
-  maxExecutionTime: number; // minutes
-  enableSelfReflection: boolean;
-  enableLearning: boolean;
-  enableMemoryPersistence: boolean;
-  enableChainOfThought: boolean;
-  toolExecutionDelay: number; // ms
-  agentInstructions: string;
+  maxExecutionTime: number; // minutes — enforced server-side by the agent route
   
   // UI Settings
   sidebarDefaultOpen: boolean;
@@ -67,7 +75,6 @@ export interface AppSettings {
   enableTimeGoal: boolean;
   
   // Export Settings
-  defaultExportFormat: 'pdf' | 'docx' | 'txt' | 'markdown';
   includeMetadata: boolean;
   autoBackupEnabled: boolean;
   backupInterval: number; // hours
@@ -82,73 +89,125 @@ interface SettingsContextType {
 }
 
 const defaultSettings: AppSettings = {
-  // Editor Settings
-  theme: 'system',
-  fontSize: 'medium',
-  fontFamily: 'serif',
-  autosaveInterval: 30000,
-  wordWrapEnabled: true,
-  lineHeight: 'normal',
-  editorWidth: 'normal',
-  showLineNumbers: false,
+  // User Experience Settings - Ultra Minimalist Defaults
+  userExperienceMode: 'simple', // Start simple, upgrade based on usage
+  hasCompletedOnboarding: false,
   
-  // AI Settings
-  llmProvider: 'openai',
-  llmModel: 'gpt-4.1-mini',
+  // AI Content Generation Settings - Minimal & Focused
+  enableVisualizations: true, // Essential for research
+  enableImageGeneration: false, // Disable by default to reduce cognitive load
+  
+  // Editor Settings - Writing-Focused
+  theme: 'system', // Respect user preference
+  fontSize: 'medium', // Comfortable reading
+  fontFamily: 'serif', // Better for long-form writing
+  autosaveInterval: 2000, // Very frequent saves
+  wordWrapEnabled: true, // Always on for natural reading
+  lineHeight: 'relaxed', // Better readability
+  editorWidth: 'normal', // Standard comfortable width
+  showLineNumbers: false, // Reduce visual clutter
+  
+  // AI Settings - Smart Defaults
+  llmProvider: 'openai', // OpenAI-compatible (defaults to local MLX Gemma E2B via OPENAI_BASE_URL)
+  llmModel: 'mlx-community/gemma-4-e2b-it-4bit', // Local MLX Gemma 4 E2B
   ollamaUrl: 'http://localhost:11434',
+  researchModel: 'sonar', // Perplexity model for web research
+  imageProvider: 'local', // Local mflux bridge first; Gemini fallback
+  imageModel: 'gemini-3.1-flash-lite-image', // Gemini image-capable model
+  imageSteps: 1, // mflux: 1 step = fastest; higher = slower but more refined
+  imageSize: '1024x1024', // default generation resolution
+  localImageModel: 'FLUX.2 Klein 4B (mflux bridge)',
   
-  // Reasoning Model Settings
-  showThinkingProcess: false,
-  thinkingStreamDelay: 500,
-  reasoningModelDetection: false,
+  // Reasoning Model Settings - Ambient & Subtle
+  showThinkingProcess: false, // Don't overwhelm users
+  thinkingStreamDelay: 300, // Quick responses
+  reasoningModelDetection: false, // Automatic, invisible to user
   
-  // Custom Instructions
-  systemPrompt: '',
-  writingStyle: '',
-  tonePreference: 'professional',
-  customTone: '',
-  customCommands: [],
+  // Custom Instructions - Minimal & Sensible
+  systemPrompt: '', // Empty = let AI be helpful naturally
+  writingStyle: '', // Let AI adapt to content
+  tonePreference: 'professional', // Safe default
+  customTone: '', // Empty unless user specifies
+  customCommands: [], // Start empty, add as needed
   
-  // Agent Settings
-  autonomyLevel: 'moderate',
-  maxExecutionTime: 5,
-  enableSelfReflection: true,
-  enableLearning: true,
-  enableMemoryPersistence: false,
-  enableChainOfThought: false,
-  toolExecutionDelay: 1000,
-  agentInstructions: '',
+  // Agent Settings - Conservative for New Users
+  autonomyLevel: 'conservative', // Start conservative, allow growth
+  maxExecutionTime: 2, // Quick responses
   
-  // UI Settings
-  sidebarDefaultOpen: true,
-  contextPanelDefaultOpen: true,
-  enableSounds: true,
-  enableAnimations: true,
-  distractionFreeMode: false,
+  // UI Settings - Distraction-Free by Default
+  sidebarDefaultOpen: false, // Hide initially for focus
+  contextPanelDefaultOpen: false, // Show only when AI has suggestions
+  enableSounds: false, // Reduce audio clutter
+  enableAnimations: true, // Smooth transitions are nice
+  distractionFreeMode: true, // Enable by default for writing focus
   
-  // Writing Settings
-  showWordCount: true,
-  showReadingTime: true,
-  showStyleAnalysis: true,
-  spellCheckEnabled: true,
-  grammarCheckEnabled: true,
-  autoSuggestionsEnabled: true,
-  suggestionDelay: 500,
+  // Writing Settings - Essential Only
+  showWordCount: true, // Useful for progress
+  showReadingTime: false, // Not essential for writing flow
+  showStyleAnalysis: false, // Show only in advanced mode
+  spellCheckEnabled: true, // Always helpful
+  grammarCheckEnabled: false, // Can be intrusive
+  autoSuggestionsEnabled: false, // Let AI be proactive instead
+  suggestionDelay: 200, // Quick when needed
   
-  // Writing Goals
-  dailyWordGoal: 0,
-  enableWordGoal: false,
-  sessionTimeGoal: 0,
-  enableTimeGoal: false,
+  // Writing Goals - Progressive
+  dailyWordGoal: 0, // Set by user if wanted
+  enableWordGoal: false, // Optional motivation
+  sessionTimeGoal: 0, // Not essential
+  enableTimeGoal: false, // Optional
   
-  // Export Settings
-  defaultExportFormat: 'pdf',
-  includeMetadata: true,
-  autoBackupEnabled: false,
-  backupInterval: 24,
+  // Export Settings - Simple & Standard
+  includeMetadata: false, // Keep exports clean
+  autoBackupEnabled: false, // Can overwhelm new users
+  backupInterval: 24, // Default daily backup
 };
 
 const SETTINGS_STORAGE_KEY = 'wordplay-settings';
+
+// Keys must never live in the browser: the server reads provider keys from
+// its own .env. Strip any legacy key fields from stored/imported settings.
+function sanitizeSettings(input: Record<string, unknown>): AppSettings {
+  const { openaiApiKey: _o, geminiApiKey: _g, perplexityApiKey: _p, ...rest } = input;
+  const merged = { ...defaultSettings, ...(rest as Partial<AppSettings>) };
+  return normalizeProviderModel(merged);
+}
+
+// ---------------------------------------------------------------------------
+// Model/provider pairing. A model chosen for one provider must never ride
+// along to another after switching — each provider gets its own default
+// unless the stored model belongs to its catalog (Ollama/custom models are
+// free-form and always accepted).
+// ---------------------------------------------------------------------------
+const PROVIDER_DEFAULT_MODELS: Record<AppSettings['llmProvider'], string> = {
+  openai: 'gpt-4.1-mini',
+  custom: 'mlx-community/gemma-4-e2b-it-4bit',
+  kimi: 'kimi-for-coding',
+  gemini: 'gemini-2.5-flash',
+  ollama: 'qwen3.5:4b',
+};
+
+const PROVIDER_MODEL_CATALOGS: Partial<Record<AppSettings['llmProvider'], string[]>> = {
+  openai: ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o4-mini'],
+  kimi: ['kimi-for-coding', 'kimi-for-coding-highspeed', 'k3', 'k3-256k'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+};
+
+function modelBelongsToProvider(provider: AppSettings['llmProvider'], model: string): boolean {
+  if (!model) return false;
+  const catalog = PROVIDER_MODEL_CATALOGS[provider];
+  return !catalog || catalog.includes(model);
+}
+
+function normalizeProviderModel(settings: AppSettings): AppSettings {
+  if (!modelBelongsToProvider(settings.llmProvider, settings.llmModel)) {
+    settings.llmModel = PROVIDER_DEFAULT_MODELS[settings.llmProvider];
+  }
+  return settings;
+}
+
+export function defaultModelForProvider(provider: AppSettings['llmProvider']): string {
+  return PROVIDER_DEFAULT_MODELS[provider];
+}
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
@@ -160,7 +219,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return { ...defaultSettings, ...parsed };
+        return sanitizeSettings(parsed);
       }
     } catch (error) {
       console.error('Failed to load settings from localStorage:', error);
@@ -243,7 +302,17 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [settings.distractionFreeMode]);
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
-    setSettings(prev => ({ ...prev, ...newSettings }));
+    setSettings(prev => {
+      const next = { ...prev, ...newSettings };
+      // Switching provider resets the model to that provider's default unless
+      // a model from the new provider's catalog was set in the same update.
+      if (newSettings.llmProvider && newSettings.llmProvider !== prev.llmProvider) {
+        if (!newSettings.llmModel || !modelBelongsToProvider(newSettings.llmProvider, newSettings.llmModel)) {
+          next.llmModel = PROVIDER_DEFAULT_MODELS[newSettings.llmProvider];
+        }
+      }
+      return next;
+    });
   };
 
   const resetSettings = () => {
@@ -287,7 +356,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     reader.onload = (e) => {
       try {
         const imported = JSON.parse(e.target?.result as string);
-        const validatedSettings = { ...defaultSettings, ...imported };
+        const validatedSettings = sanitizeSettings(imported);
         setSettings(validatedSettings);
         
         toast({

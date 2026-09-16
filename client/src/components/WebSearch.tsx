@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Edit, Search, Code, Plus, ExternalLink, BookOpen, Globe, Archive, Save, Brain, Clock, BarChart2, Sparkles, PanelRightOpen, Folder, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useSettings } from "@/providers/SettingsProvider";
 import { Button } from "@/components/ui/button";
+import MatteDots from "@/components/MatteDots";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -67,6 +70,8 @@ export default function WebSearch({
   onToggleContextPanel
 }: WebSearchProps) {
   const { toast } = useToast();
+  const { settings } = useSettings();
+  const { processedApiRequest } = useApiProcessing();
   const [searchQuery, setSearchQuery] = useState("");
   const [searchSource, setSearchSource] = useState("web");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -87,7 +92,10 @@ export default function WebSearch({
     queryKey: ["sources", projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      const res = await apiRequest("GET", `/api/projects/${projectId}/sources`);
+      const res = await processedApiRequest("GET", `/api/projects/${projectId}/sources`, undefined, {
+        message: "Loading sources...",
+        type: "general"
+      });
       return res.json() as Promise<SavedSource[]>;
     },
     enabled: !!projectId
@@ -110,34 +118,26 @@ export default function WebSearch({
   // Search mutation
   const searchMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/search", {
+      const res = await processedApiRequest("POST", "/api/search", {
         query: searchQuery,
-        source: searchSource
+        source: searchSource,
+        model: settings.researchModel
+      }, {
+        message: "Searching...",
+        type: "research"
       });
-      return res.json() as Promise<SearchResponse>;
+      return res.json();
     },
     onSuccess: (data) => {
-      if (data.results && data.results.length > 0) {
-        setResults(data.results);
-        setAiSummary(data.summary || "");
-        setShowResults(true);
-        
-        toast({
-          title: "Research completed",
-          description: `Found ${data.results.length} sources${data.summary ? " with AI analysis" : ""}.`
-        });
-      } else {
+      setResults(data.results || []);
+      setAiSummary(data.summary || "");
+      setShowResults(true);
+      
+      if (data.results?.length === 0) {
         toast({
           title: "No results found",
-          description: "Try a different search query or source."
-        });
-      }
-      
-      if (data.error) {
-        toast({
-          title: "Search notice",
-          description: data.error,
-          variant: "default"
+          description: "Try refining your search query.",
+          variant: "destructive"
         });
       }
     },
@@ -150,126 +150,52 @@ export default function WebSearch({
     }
   });
   
-  // Add source mutation
-  const addSourceMutation = useMutation({
-    mutationFn: async (url: string) => {
-      if (!projectId) {
-        throw new Error("No active project");
-      }
-      
-      const res = await apiRequest("POST", "/api/sources", {
-        projectId,
-        type: "url",
-        name: url,
-        url
-      });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({
-        title: "Source added",
-        description: "Research source has been saved to help with your writing."
-      });
-      // Refresh the sources list to show the newly added source
-      sourcesQuery.refetch();
-    },
-    onError: (error) => {
-      toast({
-        title: "Failed to add source",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  });
-  
-  // Scrape webpage mutation
-  const scrapeMutation = useMutation({
-    mutationFn: async () => {
-      if (!scrapeUrl.trim()) {
-        throw new Error("Please enter a valid URL");
-      }
-      
-      const res = await apiRequest("POST", "/api/scrape", {
-        url: scrapeUrl
-      });
-      return res.json();
-    },
-    onSuccess: (data) => {
-      // Add scraped content to notes with better formatting
-      const wordCount = data.wordCount ? ` (${data.wordCount} words)` : "";
-      const domain = data.domain ? ` from ${data.domain}` : "";
-      
-      setResearchNotes(prev => 
-        prev + `\n\n## ${data.title}${domain}${wordCount}\n\n${data.content.substring(0, 1000)}${data.content.length > 1000 ? "..." : ""}\n\nSource: ${scrapeUrl}\n`
-      );
-      
-      toast({
-        title: "Content extracted",
-        description: `${data.wordCount || 0} words extracted and added to research notes.`
-      });
-      
-      // Clear the URL input
-      setScrapeUrl("");
-    },
-    onError: (error) => {
-      toast({
-        title: "Couldn't extract content",
-        description: error.message,
-        variant: "destructive"
-      });
-    }
-  });
-  
-  // Handle search
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
-    
-    searchMutation.mutate();
-  };
-  
-  // Handle adding a source
-  const handleAddSource = (url: string) => {
-    if (!projectId) {
-      toast({
-        title: "No active project",
-        description: "Please select a project first.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    addSourceMutation.mutate(url);
-  };
-  
-  // Handle scraping a webpage
-  const handleScrape = (e: React.FormEvent) => {
-    e.preventDefault();
-    scrapeMutation.mutate();
-  };
-  
-  // Save research notes
-  const saveNotesMutation = useMutation({
-    mutationFn: async () => {
-      if (!projectId) {
-        throw new Error("No active project");
-      }
-      
-      const res = await apiRequest("POST", "/api/sources", {
-        projectId,
-        type: "notes",
-        name: "Research Notes",
-        content: researchNotes
+  // Save source mutation
+  const saveSourceMutation = useMutation({
+    mutationFn: async (source: { name: string; url: string; content: string; type: string }) => {
+      if (!projectId) throw new Error("No project selected");
+      const res = await processedApiRequest("POST", `/api/projects/${projectId}/sources`, source, {
+        message: "Saving source...",
+        type: "file-operation"
       });
       return res.json();
     },
     onSuccess: () => {
       toast({
-        title: "Research notes saved",
-        description: "Your notes have been saved to the project."
+        title: "Source saved",
+        description: "The source has been added to your project."
       });
-      // Refresh the sources list to show the newly saved notes
       sourcesQuery.refetch();
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to save source",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Save research notes mutation
+  const saveNotesMutation = useMutation({
+    mutationFn: async () => {
+      if (!projectId) throw new Error("No project selected");
+      const res = await processedApiRequest("POST", `/api/projects/${projectId}/sources`, {
+        name: "Research Notes",
+        type: "notes",
+        content: researchNotes,
+        url: ""
+      }, {
+        message: "Saving notes...",
+        type: "file-operation"
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Notes saved",
+        description: "Your research notes have been saved."
+      });
     },
     onError: (error) => {
       toast({
@@ -280,7 +206,54 @@ export default function WebSearch({
     }
   });
   
-  // Handle saving notes
+  // Scrape URL mutation
+  const scrapeUrlMutation = useMutation({
+    mutationFn: async () => {
+      const res = await processedApiRequest("POST", "/api/scrape", {
+        url: scrapeUrl
+      }, {
+        message: "Scraping webpage...",
+        type: "research"
+      });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      if (data.content) {
+        saveSourceMutation.mutate({
+          name: data.title || scrapeUrl,
+          url: scrapeUrl,
+          content: data.content,
+          type: "webpage"
+        });
+        setScrapeUrl("");
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Failed to scrape URL",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // Handle search
+  const runSearch = () => {
+    if (!searchQuery.trim()) return;
+    searchMutation.mutate();
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    runSearch();
+  };
+  // Handle scraping a webpage
+  const handleScrape = (e: React.FormEvent) => {
+    e.preventDefault();
+    scrapeUrlMutation.mutate();
+  };
+  
+  // Save research notes
   const handleSaveNotes = () => {
     if (!researchNotes.trim()) {
       toast({
@@ -377,15 +350,14 @@ export default function WebSearch({
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                   <Button 
-                    type="submit"
+                    type="button"
+                    onClick={runSearch}
+                    aria-label="Run search"
                     className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
                     disabled={searchMutation.isPending}
                   >
                     {searchMutation.isPending ? (
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                      <MatteDots size={5} gap={3.5} dotCount={4} label="Searching" />
                     ) : (
                       <Search className="h-5 w-5" />
                     )}
@@ -421,22 +393,22 @@ export default function WebSearch({
                 <div className="space-y-6">
                   {/* AI Summary Section */}
                   {aiSummary && (
-                    <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="bg-copper-100 dark:bg-copper-100 border border-copper-300 dark:border-copper-300 rounded-lg p-4">
                       <div className="flex items-center mb-3">
-                        <Brain className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2" />
-                        <h3 className="font-medium text-blue-900 dark:text-blue-100">AI Research Summary</h3>
+                        <Brain className="h-5 w-5 text-[var(--wp-copper)] dark:text-[var(--wp-copper)] mr-2" />
+                        <h3 className="font-medium text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">AI Research Summary</h3>
                       </div>
                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <p className="text-blue-800 dark:text-blue-200 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-[var(--wp-copper)] dark:text-[var(--wp-copper)] leading-relaxed whitespace-pre-wrap">
                           {aiSummary}
                         </p>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
+                      <div className="mt-3 pt-3 border-t border-copper-300 dark:border-copper-300">
                         <button
                           onClick={() => setResearchNotes(prev => 
                             prev + `\n\n## Research Summary for "${searchQuery}"\n\n${aiSummary}\n\n---\n`
                           )}
-                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center"
+                          className="text-sm text-[var(--wp-copper)] dark:text-[var(--wp-copper)] hover:underline flex items-center"
                         >
                           <Save className="h-4 w-4 mr-1" />
                           Add summary to notes
@@ -458,8 +430,13 @@ export default function WebSearch({
                             <h3 className="text-lg font-medium text-primary dark:text-primary-light">{result.title}</h3>
                             <button 
                               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                              onClick={() => handleAddSource(cleanUrl(result.url))}
-                              disabled={addSourceMutation.isPending}
+                              onClick={() => saveSourceMutation.mutate({
+                                name: result.title,
+                                url: result.url,
+                                content: result.snippet,
+                                type: "webpage"
+                              })}
+                              disabled={saveSourceMutation.isPending}
                               title="Save to your sources"
                             >
                               <Save className="h-4 w-4 text-gray-500" />
@@ -475,7 +452,7 @@ export default function WebSearch({
                               href={cleanUrl(result.url)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-blue-500 hover:underline flex items-center"
+                              className="text-xs text-[var(--wp-copper)] hover:underline flex items-center"
                             >
                               <ExternalLink className="h-3 w-3 mr-1" />
                               View Source
@@ -483,8 +460,13 @@ export default function WebSearch({
                             <span className="mx-2 text-gray-300">|</span>
                             <button 
                               className="text-xs text-primary dark:text-primary-light hover:underline"
-                              onClick={() => handleAddSource(cleanUrl(result.url))}
-                              disabled={addSourceMutation.isPending}
+                              onClick={() => saveSourceMutation.mutate({
+                                name: result.title,
+                                url: result.url,
+                                content: result.snippet,
+                                type: "webpage"
+                              })}
+                              disabled={saveSourceMutation.isPending}
                             >
                               Add to Sources
                             </button>
@@ -529,13 +511,10 @@ export default function WebSearch({
                   <Button 
                     type="submit"
                     className="p-3 bg-primary hover:bg-primary-dark text-white transition-colors rounded-none"
-                    disabled={scrapeMutation.isPending || !scrapeUrl.trim()}
+                    disabled={scrapeUrlMutation.isPending || !scrapeUrl.trim()}
                   >
-                    {scrapeMutation.isPending ? (
-                      <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
+                    {scrapeUrlMutation.isPending ? (
+                      <MatteDots size={5} gap={3.5} dotCount={4} label="Searching" />
                     ) : (
                       <Archive className="h-5 w-5" />
                     )}
@@ -570,10 +549,7 @@ export default function WebSearch({
                   >
                     {saveNotesMutation.isPending ? (
                       <div className="flex items-center">
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
+                        <MatteDots size={3.5} gap={3} dotCount={3} label="Saving" />
                         Saving...
                       </div>
                     ) : (
@@ -607,7 +583,7 @@ export default function WebSearch({
                                 href={source.url} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
-                                className="text-xs text-blue-500 hover:underline flex items-center mt-1"
+                                className="text-xs text-[var(--wp-copper)] hover:underline flex items-center mt-1"
                               >
                                 <ExternalLink className="h-3 w-3 mr-1" />
                                 {source.url}
@@ -635,7 +611,10 @@ export default function WebSearch({
                             <button
                               onClick={async () => {
                                 try {
-                                  await apiRequest("DELETE", `/api/sources/${source.id}`);
+                                  await processedApiRequest("DELETE", `/api/projects/${projectId}/sources/${source.id}`, undefined, {
+                                    message: "Deleting source...",
+                                    type: "file-operation"
+                                  });
                                   sourcesQuery.refetch();
                                   toast({
                                     title: "Source deleted",

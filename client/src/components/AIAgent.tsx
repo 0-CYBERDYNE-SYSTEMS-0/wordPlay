@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
 import { Bot, Send, Wrench, Loader2, User, Copy, CheckCircle, AlertCircle, ChevronRight, ChevronDown, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import MatteDots from "@/components/MatteDots";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface AIAgentProps {
   currentProject?: any;
   currentDocument?: any;
-  llmProvider?: 'openai' | 'ollama';
+  llmProvider?: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel?: string;
+  autonomyLevel?: 'conservative' | 'moderate' | 'aggressive';
+  maxExecutionTime?: number; // minutes
   onToolResult?: (result: any) => void;
   editorState?: {
     title: string;
@@ -40,7 +45,7 @@ interface ToolCall {
 function isEditorTool(toolName: string): boolean {
   const editorTools = [
     'edit_current_document',
-    'replace_current_content', 
+    'replace_current_content',
     'edit_text_with_pattern',
     'improve_current_text',
     'update_document',
@@ -52,15 +57,76 @@ function isEditorTool(toolName: string): boolean {
   return editorTools.includes(toolName);
 }
 
+// Renders the agent's plan + per-tool outcomes inline so its reasoning is
+// visible instead of a mysterious "Thinking…" that ends in a changed document.
+function AgentExecutionTrace({ toolResult }: { toolResult?: any }) {
+  const [open, setOpen] = useState(false);
+  const plan: string[] | null = Array.isArray(toolResult?.plan)
+    ? toolResult.plan
+    : typeof toolResult?.plan === 'string' && toolResult.plan.trim()
+      ? [toolResult.plan]
+      : null;
+  const tools: any[] = Array.isArray(toolResult?.toolsExecuted) ? toolResult.toolsExecuted : [];
+  if (!plan && tools.length === 0) return null;
+
+  return (
+    <div className="mt-2 rounded-md border border-stone-200 dark:border-stone-700">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-xs text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+      >
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        Execution trace{tools.length > 0 ? ` · ${tools.length} tool${tools.length === 1 ? '' : 's'}` : ''}
+      </button>
+      {open && (
+        <div className="space-y-2 border-t border-stone-200 px-2 py-2 text-xs dark:border-stone-700">
+          {plan && (
+            <div>
+              <div className="mb-1 font-medium text-stone-500 dark:text-stone-400">Plan</div>
+              <ol className="list-decimal space-y-0.5 pl-4 text-stone-600 dark:text-stone-300">
+                {plan.map((step, i) => (
+                  <li key={i} className="whitespace-pre-wrap">{typeof step === 'string' ? step : JSON.stringify(step)}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {tools.length > 0 && (
+            <div>
+              <div className="mb-1 font-medium text-stone-500 dark:text-stone-400">Tools</div>
+              <ul className="space-y-1 text-stone-600 dark:text-stone-300">
+                {tools.map((t: any, i: number) => (
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span aria-hidden>{t?.success ? '✅' : '❌'}</span>
+                    <span className="font-mono">{t?.tool}</span>
+                    {t?.message && (
+                      <span className="min-w-0 flex-1 truncate text-stone-500 dark:text-stone-400" title={String(t.message)}>
+                        — {t.message}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AIAgent({ 
   currentProject, 
   currentDocument, 
   llmProvider,
   llmModel,
+  autonomyLevel,
+  maxExecutionTime,
   onToolResult,
   editorState
 }: AIAgentProps) {
   const { toast } = useToast();
+  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isMinimized, setIsMinimized] = useState(true);
@@ -68,6 +134,8 @@ export default function AIAgent({
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -148,14 +216,28 @@ export default function AIAgent({
   // Send request to agent
   const agentMutation = useMutation({
     mutationFn: async (request: string) => {
-      const res = await apiRequest("POST", "/api/agent/intelligent-request", {
-        request,
-        context: agentContext
+      const operationId = startProcessing({
+        message: "Agent is analyzing your request...",
+        type: "ai-command",
+        initialProgress: 0
       });
-      return res.json();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      try {
+        const res = await apiRequest("POST", "/api/agent/intelligent-request", {
+          request,
+          context: agentContext,
+          autonomyLevel: autonomyLevel ?? 'moderate',
+          maxExecutionTime: (maxExecutionTime ?? 5) * 60_000,
+          llmProvider,
+          llmModel
+        }, { signal: controller.signal });
+        return res.json();
+      } finally {
+        stopProcessing(operationId);
+      }
     },
     onSuccess: (data) => {
-      // Add agent response with intelligent synthesis
       const agentMessage: Message = {
         id: Date.now().toString(),
         type: "agent",
@@ -216,9 +298,19 @@ export default function AIAgent({
       }
     },
     onError: (error: any) => {
+      // A cancelled run is not an error — say so quietly and move on.
+      if (error?.name === 'AbortError' || error?.code === 20) {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          type: "agent",
+          content: "Request cancelled.",
+          timestamp: new Date()
+        }]);
+        return;
+      }
       // Handle intelligent error responses
       const errorResponse = error.response?.data;
-      
+
       const errorMessage: Message = {
         id: Date.now().toString(),
         type: "agent",
@@ -227,23 +319,54 @@ export default function AIAgent({
       };
       setMessages(prev => [...prev, errorMessage]);
 
+      // Map raw provider/JSON errors to friendly, human-readable text.
+      const raw = (errorResponse?.message || error.message || '').toString();
+      let friendly = raw;
+      if (/401|invalid.*key|unauthor/i.test(raw)) {
+        friendly = "The AI provider rejected the server's API key (401). Check the key configured on the server (.env).";
+      } else if (/429|rate limit/i.test(raw)) {
+        friendly = "The AI provider is rate-limiting requests. Wait a moment and try again.";
+      } else if (/503|unavailable|timeout|ECONNREFUSED/i.test(raw)) {
+        friendly = "The AI service is unavailable or timed out. Check that your provider is running (e.g. Ollama).";
+      } else if (/model.*not found|not found.*model/i.test(raw)) {
+        friendly = "The selected AI model isn't available on this provider. Pick another model in Settings → AI.";
+      }
+
       toast({
         title: "Agent Error",
-        description: errorResponse?.message || error.message,
+        description: friendly,
         variant: "destructive"
       });
     }
   });
 
+  // Elapsed-seconds counter while the agent runs — long multi-tool chains are
+  // normal, so the writer should see how long it's actually been.
+  useEffect(() => {
+    if (!agentMutation.isPending) return;
+    setElapsed(0);
+    const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(timer);
+  }, [agentMutation.isPending]);
+
   // Execute individual tool
   const toolMutation = useMutation({
     mutationFn: async ({ toolName, parameters }: { toolName: string; parameters: any }) => {
-      const res = await apiRequest("POST", "/api/agent/tool", {
-        toolName,
-        parameters,
-        context: agentContext
+      const operationId = startProcessing({
+        message: `Executing ${toolName}...`,
+        type: "ai-command",
+        initialProgress: 0
       });
-      return res.json();
+      try {
+        const res = await apiRequest("POST", "/api/agent/tool", {
+          toolName,
+          parameters,
+          context: agentContext
+        });
+        return res.json();
+      } finally {
+        stopProcessing(operationId);
+      }
     },
     onSuccess: (data, variables) => {
       const toolMessage: Message = {
@@ -315,7 +438,8 @@ export default function AIAgent({
       <div className="fixed bottom-6 right-6 z-50">
         <button
           onClick={() => setIsMinimized(!isMinimized)}
-          className="w-14 h-14 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
+          aria-label="Toggle wordPlay agent"
+          className="w-14 h-14 bg-[var(--wp-copper)] hover:bg-copper-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center"
           title="wordPlay agent"
         >
           <Bot className="w-6 h-6" />
@@ -347,7 +471,7 @@ export default function AIAgent({
               onMouseDown={handleMouseDown}
             >
               <div className="flex items-center space-x-2">
-                <Bot className="h-5 w-5 text-blue-500" />
+                <Bot className="h-5 w-5 text-[var(--wp-copper)]" />
                 <span className="font-semibold text-gray-900 dark:text-gray-100">AI Writing Assistant</span>
                 <div className="text-xs text-gray-500 dark:text-gray-400 ml-2">
                   {isDragging ? 'Dragging...' : 'Drag to move'}
@@ -355,6 +479,7 @@ export default function AIAgent({
               </div>
               <button
                 onClick={() => setIsMinimized(true)}
+                aria-label="Close agent"
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
                 onMouseDown={(e) => e.stopPropagation()} // Prevent drag when clicking close
               >
@@ -380,7 +505,7 @@ export default function AIAgent({
                   <div key={message.id} className="flex items-start space-x-3">
                     <div className="flex-shrink-0">
                       {message.type === "user" && (
-                        <div className="h-6 w-6 rounded-full bg-blue-500 flex items-center justify-center">
+                        <div className="h-6 w-6 rounded-full bg-[var(--wp-copper)] flex items-center justify-center">
                           <User className="h-3 w-3 text-white" />
                         </div>
                       )}
@@ -404,6 +529,7 @@ export default function AIAgent({
                           </div>
                         )}
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                        {message.type === "agent" && <AgentExecutionTrace toolResult={message.toolResult} />}
                       </div>
 
                       <div className="flex items-center justify-between mt-1">
@@ -430,8 +556,17 @@ export default function AIAgent({
                     </div>
                     <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                       <div className="flex items-center space-x-2">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Thinking...</span>
+                        <MatteDots size={4} gap={3} dotCount={4} label="Thinking" />
+                        <span className="text-sm">
+                          {elapsed >= 10 ? `Thinking… ${elapsed}s` : 'Thinking…'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => abortRef.current?.abort()}
+                          className="ml-2 rounded-md border border-stone-300 px-2 py-0.5 text-[11px] text-stone-600 hover:bg-stone-100 dark:border-stone-600 dark:text-stone-300 dark:hover:bg-stone-800"
+                        >
+                          Cancel
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -444,11 +579,21 @@ export default function AIAgent({
             {/* Input */}
             <div className="px-4 pb-4 border-t dark:border-gray-700 pt-4">
               <form onSubmit={handleSubmit} className="flex space-x-2">
-                <Input
+                <Textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about writing..."
-                  className="flex-1"
+                  onKeyDown={(e) => {
+                    // Enter submits, Shift+Enter inserts a newline
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      if (input.trim() && !agentMutation.isPending) {
+                        handleSubmit(e as unknown as React.FormEvent);
+                      }
+                    }
+                  }}
+                  placeholder="Ask about writing... (Enter to send, Shift+Enter for newline)"
+                  rows={1}
+                  className="flex-1 resize-none"
                   disabled={agentMutation.isPending}
                 />
                 <Button

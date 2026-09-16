@@ -5,8 +5,20 @@ import { initializeDatabase } from "./db-migrate";
 import { config } from "./config";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+// Path-scoped parsers must mount BEFORE the global ones: body-parser skips
+// already-parsed requests, so a parser placed after the global one is a no-op.
+// /api/text stays small (regex utilities); /api/ai keeps 50mb for base64 image
+// payloads; /api/agent and /api/documents carry whole-document content in
+// JSON (agent context, autosave PUTs), so they get headroom above the 2mb
+// global without re-opening the old unlimited-everything surface. Multipart
+// uploads (15MB) go through multer and bypass these parsers.
+app.use("/api/text", express.json({ limit: '1mb' }));
+app.use("/api/text", express.urlencoded({ extended: false, limit: '1mb' }));
+app.use("/api/ai", express.json({ limit: '50mb' }));
+app.use("/api/agent", express.json({ limit: '10mb' }));
+app.use("/api/documents", express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -55,12 +67,21 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
+  // A shared team server must survive one bad request. Express 4 cannot catch
+  // async route rejections, so without these handlers a single failed DB query
+  // takes the whole process down for everyone.
+  process.on("unhandledRejection", (reason) => {
+    log(`Unhandled rejection (server kept alive): ${reason}`);
+  });
+  process.on("uncaughtException", (err) => {
+    log(`Uncaught exception (server kept alive): ${err?.stack || err}`);
+  });
+
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
   });
 
   // importantly only setup vite in development and after

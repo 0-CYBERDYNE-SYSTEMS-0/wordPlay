@@ -2,6 +2,60 @@
 @tailwind components;
 @tailwind utilities;
 
+/* wordPlay editorial palette — paper, ink, copper, teal */
+:root {
+  --wp-paper: #f7f3ed;
+  --wp-paper-elevated: #fffdf9;
+  --wp-ink: #1a1612;
+  --wp-line: rgba(26, 22, 18, 0.1);
+  --wp-copper: #c4784a;
+  --wp-teal: #0d7377;
+  --wp-wash: rgba(196, 120, 74, 0.08);
+}
+
+.dark {
+  --wp-paper: #141210;
+  --wp-paper-elevated: #1c1916;
+  --wp-ink: #f3efe8;
+  --wp-line: rgba(243, 239, 232, 0.12);
+  --wp-copper: #e09a6a;
+  --wp-teal: #3d9ea2;
+  --wp-wash: rgba(224, 154, 106, 0.12);
+}
+
+/* Premium visual enhancements for charts and images */
+@layer utilities {
+  .shadow-3xl {
+    box-shadow: 0 35px 60px -12px rgba(0, 0, 0, 0.25), 0 25px 25px -5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .shadow-2xl {
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  }
+  
+  .backdrop-blur-sm {
+    backdrop-filter: blur(8px);
+  }
+  
+  .image-rendering-crisp {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+  
+  /* Premium glass-morphism effects */
+  .glass-light {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+  
+  .glass-dark {
+    background: rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+}
+
 /* CSS Reset for full viewport usage */
 * {
   box-sizing: border-box;
@@ -15,6 +69,287 @@ html, body {
   height: 100% !important;
 }
 
+/* Ultra-Minimalist Writing Environment Styles */
+@layer components {
+  
+  /* Ultra Minimal Editor Styles */
+  .ultra-minimal-editor {
+    @apply h-full w-full flex flex-col;
+    background: var(--wp-paper);
+    color: var(--wp-ink);
+  }
+  
+  .ultra-minimal-editor.full-screen {
+    @apply fixed inset-0 z-50;
+    background: var(--wp-paper);
+  }
+  
+  /* Writing Area Enhancements */
+  .ultra-minimal-writing-area {
+    @apply flex-1 min-h-0;
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    line-height: 1.75;
+    font-size: clamp(16px, 2.2vw, 18px);
+  }
+  
+  .ultra-minimal-writing-area.text-lg {
+    font-size: 20px;
+  }
+  
+  .ultra-minimal-writing-area.text-base {
+    font-size: 16px;
+  }
+  
+  /* Smart Panel Hover Zones */
+  .hover-zone {
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  .hover-zone:hover {
+    @apply shadow-lg;
+  }
+  
+  /* Ambient AI Suggestion Styles */
+  .ambient-ai-popup {
+    animation: slideInFromBottom 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  
+  @keyframes slideInFromBottom {
+    from {
+      transform: translateY(12px) scale(0.98);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+
+  /* Reduced motion: honor OS preference */
+  @media (prefers-reduced-motion: reduce) {
+    .ambient-ai-popup,
+    .progressive-disclose,
+    .writing-flow-indicator {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+  
+  /* Progressive Panel Disclosure */
+  .panel-auto-hide {
+    @apply transition-all duration-300 ease-in-out;
+  }
+  
+  .panel-auto-hide.hidden {
+    @apply opacity-0 pointer-events-none transform translate-x-2;
+  }
+  
+  .panel-auto-hide.visible {
+    @apply opacity-100 pointer-events-auto transform translate-x-0;
+  }
+  
+  .panel-auto-hide:hover {
+    @apply opacity-100;
+  }
+  
+  /* Contextual AI Insights */
+  .ai-insight-item {
+    @apply p-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors;
+  }
+  
+  .ai-insight-continuation {
+    @apply border-l-2 border-[var(--wp-copper)];
+  }
+  
+  .ai-insight-improvement {
+    @apply border-l-2 border-green-500;
+  }
+  
+  .ai-insight-structure {
+    @apply border-l-2 border-purple-500;
+  }
+  
+  .ai-insight-style {
+    @apply border-l-2 border-orange-500;
+  }
+  
+  .ai-insight-research {
+    @apply border-l-2 border-indigo-500;
+  }
+  
+  /* Writing Flow Indicators */
+  .writing-flow-indicator {
+    @apply w-2 h-2 rounded-full transition-all duration-500;
+  }
+  
+  .writing-flow-indicator.flowing {
+    @apply bg-green-500 shadow-green-500/50;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+    animation: pulse 2s infinite;
+  }
+  
+  .writing-flow-indicator.struggling {
+    @apply bg-yellow-500 shadow-yellow-500/50;
+    box-shadow: 0 0 8px rgba(234, 179, 8, 0.5);
+    animation: pulse 1s infinite;
+  }
+  
+  .writing-flow-indicator.typing {
+    @apply bg-[var(--wp-copper)];
+    box-shadow: 0 0 8px rgba(196, 120, 74, 0.5);
+    animation: pulse 0.5s infinite;
+  }
+  
+  /* Distraction-Free Mode Enhancements */
+  .distraction-free-mode .sidebar,
+  .distraction-free-mode .context-panel,
+  .distraction-free-mode .header-secondary {
+    @apply opacity-0 pointer-events-none;
+    transition: opacity 0.3s ease-in-out;
+  }
+  
+  .distraction-free-mode .sidebar:hover,
+  .distraction-free-mode .context-panel:hover {
+    @apply opacity-100 pointer-events-auto;
+  }
+  
+  .distraction-free-mode .main-editor {
+    @apply max-w-none;
+  }
+  
+  .distraction-free-mode.dark .main-editor {
+    @apply bg-gray-900;
+  }
+  
+  /* Ultra-Minimalist Typography */
+  .writing-text {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    line-height: 1.75;
+    color: var(--wp-ink);
+    font-feature-settings: "kern" 1, "liga" 1;
+  }
+  
+  .dark .writing-text {
+    color: var(--wp-ink);
+  }
+  
+  .writing-text::placeholder {
+    color: rgb(156, 163, 175);
+  }
+  
+  .dark .writing-text::placeholder {
+    color: rgb(75, 85, 99);
+  }
+  
+  /* Seamless Transitions */
+  .seamless-transition {
+    @apply transition-all duration-200 ease-in-out;
+  }
+  
+  /* Minimal Status Indicators */
+  .status-minimal {
+    @apply inline-flex items-center text-xs px-2 py-1 rounded-full;
+  }
+  
+  .status-minimal.saved {
+    @apply bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300;
+  }
+  
+  .status-minimal.saving {
+    background: color-mix(in srgb, var(--wp-copper) 12%, transparent);
+    color: var(--wp-copper);
+  }
+  
+  .status-minimal.error {
+    @apply bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300;
+  }
+  
+  .status-minimal.dirty {
+    background: color-mix(in srgb, var(--wp-copper) 12%, transparent);
+    color: var(--wp-copper);
+  }
+  
+  /* Ambient Intelligence Visual Cues */
+  .ambient-intelligence-indicator {
+    @apply absolute top-4 right-4 w-3 h-3 rounded-full;
+    background: linear-gradient(45deg, #c4784a, #0d7377);
+    animation: gentle-pulse 3s ease-in-out infinite;
+  }
+  
+  @keyframes gentle-pulse {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.6;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 1;
+    }
+  }
+  
+  /* Focus Mode Visual States */
+  .focus-mode-writing {
+    @apply ring-2 ring-[var(--wp-copper)] ring-opacity-20;
+  }
+  
+  .focus-mode-research {
+    @apply ring-2 ring-[var(--wp-teal)] ring-opacity-20;
+  }
+  
+  .focus-mode-settings {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-copper) 30%, transparent);
+  }
+  
+  /* Progressive Disclosure Animations */
+  .progressive-disclose {
+    animation: fadeInScale 0.4s ease-out;
+  }
+  
+  @keyframes fadeInScale {
+    from {
+      transform: scale(0.95) translateY(-10px);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  /* Minimal Scrollbars */
+  .minimal-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .minimal-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .minimal-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.5);
+    border-radius: 2px;
+  }
+  
+  .minimal-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(156, 163, 175, 0.8);
+  }
+  
+  /* Writing Focus Indicators */
+  .cursor-position-indicator {
+    @apply w-0.5 h-6 bg-[var(--wp-copper)] transition-all duration-100;
+    animation: cursor-blink 1.5s infinite;
+  }
+  
+  @keyframes cursor-blink {
+    0%, 50% {
+      opacity: 1;
+    }
+    51%, 100% {
+      opacity: 0;
+    }
+  }
+}
+
 #root {
   margin: 0 !important;
   padding: 0 !important;
@@ -22,50 +357,138 @@ html, body {
   height: 100% !important;
 }
 
+/* Enhanced Rich Text Styling */
+.prose {
+  --tw-prose-body: theme(colors.gray.700);
+  --tw-prose-headings: theme(colors.gray.900);
+  --tw-prose-lead: theme(colors.gray.600);
+  --tw-prose-links: #c4784a;
+  --tw-prose-bold: theme(colors.gray.900);
+  --tw-prose-counters: theme(colors.gray.500);
+  --tw-prose-bullets: theme(colors.gray.400);
+  --tw-prose-hr: theme(colors.gray.300);
+  --tw-prose-quotes: theme(colors.gray.900);
+  --tw-prose-quote-borders: theme(colors.gray.300);
+  --tw-prose-captions: theme(colors.gray.700);
+  --tw-prose-code: theme(colors.purple.600);
+  --tw-prose-pre-code: theme(colors.gray.100);
+  --tw-prose-pre-bg: theme(colors.gray.900);
+  --tw-prose-th-borders: theme(colors.gray.300);
+  --tw-prose-td-borders: theme(colors.gray.200);
+}
+
+.prose.dark {
+  --tw-prose-body: theme(colors.gray.300);
+  --tw-prose-headings: theme(colors.gray.100);
+  --tw-prose-lead: theme(colors.gray.400);
+  --tw-prose-links: #e09a6a;
+  --tw-prose-bold: theme(colors.gray.100);
+  --tw-prose-counters: theme(colors.gray.400);
+  --tw-prose-bullets: theme(colors.gray.500);
+  --tw-prose-hr: theme(colors.gray.600);
+  --tw-prose-quotes: theme(colors.gray.100);
+  --tw-prose-quote-borders: theme(colors.gray.600);
+  --tw-prose-captions: theme(colors.gray.300);
+  --tw-prose-code: theme(colors.purple.400);
+  --tw-prose-pre-code: theme(colors.gray.200);
+  --tw-prose-pre-bg: theme(colors.gray.800);
+  --tw-prose-th-borders: theme(colors.gray.600);
+  --tw-prose-td-borders: theme(colors.gray.700);
+}
+
+/* Enhanced table styling */
+.markdown-table {
+  @apply border-collapse border border-gray-300 dark:border-gray-600 w-full my-6 bg-white dark:bg-gray-800 rounded-lg overflow-hidden shadow-sm;
+}
+
+.markdown-table thead {
+  @apply bg-gray-50 dark:bg-gray-700;
+}
+
+.markdown-table th {
+  @apply border border-gray-300 dark:border-gray-600 px-4 py-3 text-left font-semibold text-gray-900 dark:text-gray-100;
+}
+
+.markdown-table td {
+  @apply border border-gray-300 dark:border-gray-600 px-4 py-3 text-gray-700 dark:text-gray-300;
+}
+
+.markdown-table tbody tr:hover {
+  @apply bg-gray-50 dark:bg-gray-700 transition-colors;
+}
+
+/* Code block enhancements */
+.prose pre {
+  @apply bg-gray-900 dark:bg-gray-800 rounded-lg overflow-x-auto;
+}
+
+.prose code {
+  @apply bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono text-purple-600 dark:text-purple-400 border border-gray-200 dark:border-gray-700;
+}
+
+/* List enhancements */
+.prose ul li::marker {
+  @apply text-[var(--wp-copper)];
+}
+
+.prose ol li::marker {
+  @apply text-[var(--wp-copper)] font-semibold;
+}
+
+/* Blockquote enhancements */
+.prose blockquote {
+  @apply border-l-4 pl-6 py-2 my-4 italic rounded-r-lg;
+    border-color: color-mix(in srgb, var(--wp-copper) 60%, transparent);
+    background: color-mix(in srgb, var(--wp-copper) 8%, transparent);
+}
+
 @layer base {
+  /* Warm editorial palette — matches --wp-* (paper/ink/copper) used by the
+     ultra-minimalist editor. Replaces the default blue shadcn theme so
+     buttons, focus rings, panels and settings share the copper accent. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --background: 40 33% 97%;           /* #f7f3ed — wp-paper */
+    --foreground: 24 18% 9%;            /* #1a1612 — wp-ink */
+    --card: 40 33% 97%;
+    --card-foreground: 24 18% 9%;
+    --popover: 44 44% 99%;              /* #fffdf9 — wp-paper-elevated */
+    --popover-foreground: 24 18% 9%;
+    --primary: 24 50% 53%;              /* #c4784a — wp-copper */
+    --primary-foreground: 40 33% 98%;
+    --secondary: 36 20% 93%;
+    --secondary-foreground: 24 18% 15%;
+    --muted: 36 20% 93%;
+    --muted-foreground: 25 10% 45%;
+    --accent: 24 60% 94%;               /* copper-tinted hover */
+    --accent-foreground: 24 45% 25%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 40 33% 98%;
+    --border: 30 15% 87%;
+    --input: 30 15% 87%;
+    --ring: 24 50% 53%;                 /* wp-copper focus ring */
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 24 10% 7%;            /* #141210 — wp-paper dark */
+    --foreground: 40 33% 94%;           /* #f3efe8 — wp-ink dark */
+    --card: 24 10% 7%;
+    --card-foreground: 40 33% 94%;
+    --popover: 24 8% 10%;               /* #1c1916 — wp-paper-elevated dark */
+    --popover-foreground: 40 33% 94%;
+    --primary: 24 68% 66%;              /* #e09a6a — wp-copper dark */
+    --primary-foreground: 24 15% 10%;
+    --secondary: 24 10% 14%;
+    --secondary-foreground: 40 33% 94%;
+    --muted: 24 10% 14%;
+    --muted-foreground: 30 8% 62%;
+    --accent: 24 22% 16%;
+    --accent-foreground: 24 68% 76%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 40 33% 98%;
+    --border: 24 8% 18%;
+    --input: 24 8% 18%;
+    --ring: 24 68% 66%;                 /* wp-copper dark focus ring */
   }
 
   * {
@@ -152,16 +575,31 @@ html, body {
   background: linear-gradient(135deg, #1a1a1a 0%, #2d3748 100%);
 }
 
-/* App Layout Grid System */
+/* Mobile-First Responsive App Layout Grid System */
 .app-layout {
-  display: grid;
+  display: flex;
   width: 100%;
-  height: calc(100vh - 61px); /* Account for header height */
+  height: calc(100vh - var(--header-height, 64px));
   overflow: hidden;
-  transition: grid-template-columns 0.3s ease-in-out;
   background: white;
   margin: 0;
   padding: 0;
+  /* Mobile-first: Flexbox layout for better resizable panel support */
+  flex-direction: row;
+  /* Improved mobile rendering */
+  will-change: auto;
+  transform: translateZ(0); /* Force hardware acceleration */
+}
+
+/* Dynamic header height management */
+:root {
+  --header-height: 64px; /* Mobile default */
+}
+
+@media (min-width: 640px) {
+  :root {
+    --header-height: 61px; /* Desktop header */
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -174,140 +612,918 @@ html, body {
   background: rgb(17 24 39); /* gray-900 */
 }
 
-/* Default layout - only main content */
-.app-layout {
-  grid-template-columns: 1fr;
-  grid-template-areas: "main";
-}
-
-/* Sidebar open */
-.app-layout.sidebar-open {
-  grid-template-columns: 320px 1fr;
-  grid-template-areas: "sidebar main";
-}
-
-/* Context panel open */
-.app-layout.context-open {
-  grid-template-columns: 1fr 384px;
-  grid-template-areas: "main context";
-}
-
-/* Both sidebars open */
-.app-layout.sidebar-open.context-open {
-  grid-template-columns: 320px 1fr 384px;
-  grid-template-areas: "sidebar main context";
-}
-
-/* Grid containers */
+/* Panel containers - Mobile-first styling */
 .sidebar-container {
-  grid-area: sidebar;
-  border-right: 1px solid rgb(229 231 235); /* border-gray-200 */
-  background: white;
-  overflow: hidden;
+  /* Mobile-first: Start as overlay */
+  position: fixed;
+  top: 64px;
+  left: 0;
+  width: 100%;
+  height: calc(100vh - 64px);
+  z-index: 40;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  transform: translateX(-100%);
+  transition: transform 0.3s ease-in-out;
 }
 
 .dark .sidebar-container {
-  border-right: 1px solid rgb(55 65 81); /* border-gray-700 */
-  background: rgb(31 41 55); /* gray-800 */
+  /* Dark mode handled by ResizablePanel component */
 }
 
 .main-content {
-  grid-area: main;
+  flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-width: 0; /* Prevents grid items from overflowing */
+  min-width: 0; /* Prevents flex items from overflowing */
+  /* Mobile-first: Full width with padding for touch targets */
+  padding: 0;
+  /* Ensure proper sizing */
+  width: 0; /* Allow flex to determine actual width */
 }
 
 .context-container {
-  grid-area: context;
-  border-left: 1px solid rgb(229 231 235); /* border-gray-200 */
-  background: white;
-  overflow: hidden;
+  /* Mobile-first: Start as overlay */
+  position: fixed;
+  top: 64px;
+  right: 0;
+  width: 100%;
+  height: calc(100vh - 64px);
+  z-index: 40;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  transform: translateX(100%);
+  transition: transform 0.3s ease-in-out;
 }
 
 .dark .context-container {
-  border-left: 1px solid rgb(55 65 81); /* border-gray-700 */
-  background: rgb(31 41 55); /* gray-800 */
+  /* Dark mode handled by ResizablePanel component */
 }
 
-/* Responsive breakpoints */
-@media (max-width: 1024px) {
-  /* On tablets, reduce sidebar widths */
-  .app-layout.sidebar-open {
-    grid-template-columns: 280px 1fr;
+/* Enhanced Mobile Panel States with Improved Animation */
+.app-layout.sidebar-open .sidebar-container {
+  transform: translateX(0);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.app-layout.context-open .context-container {
+  transform: translateX(0);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Enhanced Mobile Backdrop with Better Performance */
+.app-layout.sidebar-open::before,
+.app-layout.context-open::before {
+  content: '';
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgb(0 0 0 / 0.6);
+  z-index: 35;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+  will-change: opacity;
+  /* Improve tap target for closing */
+  cursor: pointer;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
   }
-  
-  .app-layout.context-open {
-    grid-template-columns: 1fr 320px;
-  }
-  
-  .app-layout.sidebar-open.context-open {
-    grid-template-columns: 280px 1fr 320px;
+  to {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
   }
 }
 
-@media (max-width: 768px) {
-  /* On mobile, make sidebars overlay (like modals) when space is too tight */
-  .app-layout.sidebar-open.context-open {
-    grid-template-columns: 1fr;
-    grid-template-areas: "main";
+/* Close panels when clicking backdrop */
+.app-layout.sidebar-open::before {
+  /* Note: Click handling should be in React component */
+}
+
+.app-layout.context-open::before {
+  /* Note: Click handling should be in React component */
+}
+
+/* Large phones (640px+) - Progressive enhancement */
+@media (min-width: 640px) {
+  .app-layout {
+    height: calc(100vh - 61px); /* Standard header height */
   }
   
-  .app-layout.sidebar-open.context-open .sidebar-container,
-  .app-layout.sidebar-open.context-open .context-container {
-    position: fixed;
+  .sidebar-container {
     top: 61px;
     height: calc(100vh - 61px);
-    z-index: 40;
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    width: 90%; /* Leave some space on sides */
+    max-width: 320px;
   }
   
-  .app-layout.sidebar-open.context-open .sidebar-container {
-    left: 0;
+  .context-container {
+    top: 61px;
+    height: calc(100vh - 61px);
+    width: 90%;
+    max-width: 320px;
+  }
+}
+
+/* Tablets (768px+) - Dual column option */
+@media (min-width: 768px) {
+  .sidebar-container {
     width: 280px;
   }
   
-  .app-layout.sidebar-open.context-open .context-container {
-    right: 0;
+  .context-container {
     width: 320px;
   }
-
-  /* Backdrop for mobile when both sidebars are open */
-  .app-layout.sidebar-open.context-open::before {
-    content: '';
-    position: fixed;
-    top: 61px;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgb(0 0 0 / 0.5);
-    z-index: 35;
-    backdrop-filter: blur(2px);
+  
+  /* Allow single sidebar to be inline on tablets */
+  .app-layout.sidebar-open:not(.context-open) .sidebar-container {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    width: auto; /* Let ResizablePanel control width */
+  }
+  
+  .app-layout.sidebar-open:not(.context-open)::before {
+    display: none;
+  }
+  
+  .app-layout.context-open:not(.sidebar-open) .context-container {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    width: auto; /* Let ResizablePanel control width */
+  }
+  
+  .app-layout.context-open:not(.sidebar-open)::before {
+    display: none;
   }
 }
 
-@media (max-width: 640px) {
-  /* On small mobile, make sidebars full width when open */
-  .app-layout.sidebar-open {
-    grid-template-columns: 1fr;
-    grid-template-areas: "main";
+/* Small laptops (1024px+) - Comfortable dual sidebar */
+@media (min-width: 1024px) {
+  .sidebar-container {
+    width: 300px;
   }
   
-  .app-layout.context-open {
-    grid-template-columns: 1fr;
-    grid-template-areas: "main";
-  }
-  
-  .sidebar-container,
   .context-container {
+    width: 360px;
+  }
+  
+  /* Both sidebars can be inline */
+  .app-layout.sidebar-open.context-open .sidebar-container,
+  .app-layout.sidebar-open.context-open .context-container {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    width: auto; /* Let ResizablePanel control width */
+  }
+  
+  .app-layout.sidebar-open.context-open::before {
+    display: none;
+  }
+  
+  .app-layout.sidebar-open:not(.context-open) .sidebar-container {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    width: auto; /* Let ResizablePanel control width */
+  }
+  
+  .app-layout.context-open:not(.sidebar-open) .context-container {
+    position: static;
+    transform: none;
+    box-shadow: none;
+    width: auto; /* Let ResizablePanel control width */
+  }
+}
+
+/* Desktops (1280px+) - Full width sidebars */
+@media (min-width: 1280px) {
+  .sidebar-container {
+    width: 320px;
+  }
+  
+  .context-container {
+    width: 384px;
+  }
+  
+  /* All positioning handled by ResizablePanel component */
+}
+
+/* Large screens (1536px+) - Maximum comfort */
+@media (min-width: 1536px) {
+  .sidebar-container {
+    width: 360px;
+  }
+  
+  .context-container {
+    width: 420px;
+  }
+  
+  /* All positioning handled by ResizablePanel component */
+}
+
+/* Mobile-First Hover Zones and Reveals */
+.hover-zone {
+  background: transparent;
+  transition: background-color 0.2s ease;
+  /* Mobile: Hidden by default, only show on larger screens */
+  display: none;
+}
+
+/* Hover zones only active on desktop where hover makes sense */
+@media (min-width: 1024px) {
+  .hover-zone {
+    display: block;
+    cursor: pointer;
+  }
+  
+  .hover-zone:hover {
+    background: rgba(196, 120, 74, 0.05);
+  }
+}
+
+/* Enhanced hover reveals - Desktop only */
+@media (min-width: 1024px) {
+  .sidebar-container.hover-reveal {
     position: fixed;
     top: 61px;
     left: 0;
-    width: 100%;
-    height: calc(100vh - 61px);
-    z-index: 40;
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+    bottom: 0;
+    width: 320px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    z-index: 50;
+    animation: slideInLeft 0.2s ease-out;
+    transform: translateX(0);
+  }
+  
+  .context-container.hover-reveal {
+    position: fixed;
+    top: 61px;
+    right: 0;
+    bottom: 0;
+    width: 384px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    z-index: 50;
+    animation: slideInRight 0.2s ease-out;
+    transform: translateX(0);
+  }
+}
+
+@media (min-width: 1280px) {
+  .sidebar-container.hover-reveal {
+    width: 320px;
+  }
+  
+  .context-container.hover-reveal {
+    width: 384px;
+  }
+}
+
+@media (min-width: 1536px) {
+  .sidebar-container.hover-reveal {
+    width: 360px;
+  }
+  
+  .context-container.hover-reveal {
+    width: 420px;
+  }
+}
+
+/* Hover animation keyframes */
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Mobile-First Touch-Friendly Sizing */
+@layer utilities {
+  /* Touch targets - minimum 44px for accessibility */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+    touch-action: manipulation;
+    user-select: none;
+  }
+  
+  /* Mobile-first button sizing */
+  .btn-mobile {
+    padding: var(--space-2) var(--space-3);
+    min-height: 44px;
+    font-size: 16px; /* Prevents zoom on iOS */
+    touch-action: manipulation;
+    user-select: none;
+    border-radius: 8px;
+    transition: all 0.15s ease-in-out;
+  }
+  
+  /* Mobile-first input sizing */
+  .input-mobile {
+    padding: var(--space-2) var(--space-3);
+    min-height: 44px;
+    font-size: 16px; /* Prevents zoom on iOS */
+    border-radius: 8px;
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-first list item sizing */
+  .list-item-mobile {
+    padding: var(--space-2) var(--space-3);
+    min-height: 44px;
+    touch-action: manipulation;
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    transition: all 0.15s ease-in-out;
+  }
+  
+  /* Mobile-optimized card styling */
+  .card-mobile {
+    border-radius: 12px;
+    padding: var(--space-4);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  
+  .dark .card-mobile {
+    background: rgb(31 41 55);
+    border-color: rgb(55 65 81);
+  }
+  
+  /* Mobile-first text sizing utilities */
+  .text-mobile-xs { font-size: var(--text-xs); line-height: 1.4; }
+  .text-mobile-sm { font-size: var(--text-sm); line-height: 1.4; }
+  .text-mobile-base { font-size: var(--text-base); line-height: 1.5; }
+  .text-mobile-lg { font-size: var(--text-lg); line-height: 1.5; }
+  
+  /* Mobile-first spacing utilities */
+  .space-mobile-xs { gap: var(--space-1); }
+  .space-mobile-sm { gap: var(--space-2); }
+  .space-mobile-md { gap: var(--space-3); }
+  .space-mobile-lg { gap: var(--space-4); }
+  
+  /* Mobile swipe detection helpers */
+  .swipe-container {
+    touch-action: pan-x pan-y;
+    overscroll-behavior: contain;
+  }
+  
+  /* Mobile-friendly modal sizing */
+  .modal-mobile {
+    width: calc(100vw - var(--space-4));
+    max-width: 400px;
+    margin: var(--space-2);
+    border-radius: 12px;
+    max-height: calc(100vh - var(--space-8));
+    overflow-y: auto;
+  }
+}
+
+/* Mobile-First Typography Scaling */
+/* Base mobile typography (320px+) - Default styles */
+:root {
+  /* Mobile typography sizes */
+  --text-xs: 14px;
+  --text-sm: 16px;
+  --text-base: 18px;
+  --text-lg: 20px;
+  --text-xl: 22px;
+  --text-2xl: 24px;
+  --text-3xl: 28px;
+  
+  /* Mobile spacing (enhanced for touch) */
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  
+  /* Mobile padding (touch-friendly) */
+  --padding-sm: 12px;
+  --padding-md: 16px;
+  --padding-lg: 20px;
+  --padding-xl: 24px;
+}
+
+/* Apply mobile-first typography */
+.text-xs { font-size: var(--text-xs); }
+.text-sm { font-size: var(--text-sm); }
+.text-base { font-size: var(--text-base); }
+.text-lg { font-size: var(--text-lg); }
+.text-xl { font-size: var(--text-xl); }
+.text-2xl { font-size: var(--text-2xl); }
+.text-3xl { font-size: var(--text-3xl); }
+
+/* Mobile spacing overrides for touch interaction */
+.space-y-1 > * + * { margin-top: var(--space-1); }
+.space-y-2 > * + * { margin-top: var(--space-2); }
+.space-y-3 > * + * { margin-top: var(--space-3); }
+.space-y-4 > * + * { margin-top: var(--space-4); }
+.space-y-6 > * + * { margin-top: var(--space-6); }
+.space-y-8 > * + * { margin-top: var(--space-8); }
+
+/* Mobile padding with touch-friendly sizes */
+.p-1 { padding: var(--space-1); }
+.p-2 { padding: var(--space-2); }
+.p-3 { padding: var(--space-3); }
+.p-4 { padding: var(--space-4); }
+.p-6 { padding: var(--space-6); }
+
+.px-3 { padding-left: var(--space-3); padding-right: var(--space-3); }
+.px-4 { padding-left: var(--space-4); padding-right: var(--space-4); }
+.py-2 { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+.py-3 { padding-top: var(--space-3); padding-bottom: var(--space-3); }
+
+/* Large phones (640px+) - Scale down typography for more content */
+@media (min-width: 640px) {
+  :root {
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-xl: 20px;
+    --text-2xl: 24px;
+    --text-3xl: 30px;
+    
+    /* Refined spacing for larger phones */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 20px;
+    --space-8: 24px;
+  }
+}
+
+/* Tablets (768px+) - Desktop-like typography with room to breathe */
+@media (min-width: 768px) {
+  :root {
+    --text-xs: 11px;
+    --text-sm: 13px;
+    --text-base: 15px;
+    --text-lg: 17px;
+    --text-xl: 19px;
+    --text-2xl: 22px;
+    --text-3xl: 28px;
+    
+    /* Standard desktop spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+  }
+}
+
+/* Desktop (1024px+) - Standard desktop typography */
+@media (min-width: 1024px) {
+  :root {
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-xl: 20px;
+    --text-2xl: 24px;
+    --text-3xl: 30px;
+  }
+}
+
+/* Large desktop (1280px+) - Enhanced readability */
+@media (min-width: 1280px) {
+  :root {
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-base: 16px;
+    --text-lg: 18px;
+    --text-xl: 20px;
+    --text-2xl: 24px;
+    --text-3xl: 32px;
+  }
+}
+
+/* Enhanced Mobile Panel Styling */
+@media (max-width: 767px) {
+  /* Mobile panels with improved touch interaction */
+  .sidebar-container,
+  .context-container {
+    padding: var(--padding-md);
+    /* Better scroll handling on mobile */
+    overscroll-behavior: contain;
+    /* Prevent rubber band scrolling affecting parent */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  
+  /* Enhanced spacing for mobile */
+  .sidebar-container .space-y-2 > * + *,
+  .context-container .space-y-2 > * + * {
+    margin-top: var(--space-2);
+  }
+  
+  .sidebar-container .space-y-3 > * + *,
+  .context-container .space-y-3 > * + * {
+    margin-top: var(--space-3);
+  }
+  
+  .sidebar-container .p-3,
+  .context-container .p-3 {
+    padding: var(--space-3);
+  }
+  
+  /* Enhanced mobile-friendly interactive elements */
+  .sidebar-container button,
+  .context-container button {
+    min-height: 44px;
+    min-width: 44px;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+    /* Better touch feedback */
+    touch-action: manipulation;
+    user-select: none;
+  }
+  
+  /* Mobile-optimized form inputs */
+  .sidebar-container input,
+  .context-container input,
+  .sidebar-container textarea,
+  .context-container textarea {
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    font-size: 16px; /* Prevents zoom on iOS */
+    border-radius: 8px;
+    /* Improved touch interaction */
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-friendly select elements */
+  .sidebar-container select,
+  .context-container select {
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    font-size: 16px;
+    touch-action: manipulation;
+  }
+  
+  /* Enhanced list items for mobile */
+  .sidebar-container li,
+  .context-container li {
+    min-height: 44px;
+    padding: var(--space-2) var(--space-3);
+    display: flex;
+    align-items: center;
+    /* Better touch feedback */
+    position: relative;
+  }
+  
+  /* Mobile scroll indicators */
+  .sidebar-container::-webkit-scrollbar,
+  .context-container::-webkit-scrollbar {
+    width: 2px;
+  }
+  
+  .sidebar-container::-webkit-scrollbar-thumb,
+  .context-container::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 1px;
+  }
+  
+  .dark .sidebar-container::-webkit-scrollbar-thumb,
+  .dark .context-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+/* Enhanced Mobile-First Header */
+/* Mobile header (320px+) */
+header {
+  min-height: var(--header-height);
+  /* Ensure header stays on top on mobile */
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  /* Better mobile rendering */
+  will-change: background-color, border-color;
+  transition: all 0.2s ease-in-out;
+}
+
+header .px-4 {
+  padding-left: var(--space-4);
+  padding-right: var(--space-4);
+}
+
+header .py-3 {
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-3);
+}
+
+/* Mobile header interactive elements */
+header button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: var(--space-2);
+  font-size: var(--text-sm);
+  /* Enhanced touch interaction */
+  touch-action: manipulation;
+  user-select: none;
+  /* Better visual feedback */
+  transition: all 0.15s ease-in-out;
+  border-radius: 6px;
+}
+
+/* Mobile header text elements */
+header h1 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+/* Mobile header icons */
+header .h-6 {
+  height: 24px;
+  width: 24px;
+}
+
+header .h-4 {
+  height: 20px;
+  width: 20px;
+}
+
+header .h-3 {
+  height: 16px;
+  width: 16px;
+}
+
+/* Large phones (640px+) - Compact header */
+@media (min-width: 640px) {
+  header button {
+    min-height: 36px;
+    min-width: 36px;
+    padding: 8px 12px;
+  }
+  
+  header h1 {
+    font-size: var(--text-lg);
+  }
+  
+  header .h-6 {
+    height: 20px;
+    width: 20px;
+  }
+  
+  header .h-4 {
+    height: 16px;
+    width: 16px;
+  }
+}
+
+/* Tablets (768px+) - Standard desktop header */
+@media (min-width: 768px) {
+  header button {
+    min-height: auto;
+    min-width: auto;
+    padding: 6px 10px;
+  }
+}
+
+/* Desktop (1024px+) - Refined header */
+@media (min-width: 1024px) {
+  header button {
+    padding: 8px 12px;
+  }
+}
+
+/* Improved mobile scrolling and touch interaction */
+.sidebar-container,
+.context-container,
+.main-content {
+  /* Momentum scrolling on iOS */
+  -webkit-overflow-scrolling: touch;
+  /* Smooth scrolling on all platforms */
+  scroll-behavior: smooth;
+}
+
+/* Enhanced Mobile Touch States */
+@media (max-width: 767px) {
+  /* Disable hover states on mobile - use active/focus instead */
+  .hover\:bg-gray-100:hover,
+  .hover\:bg-gray-50:hover,
+  .hover\:text-blue-600:hover {
+    background-color: transparent;
+    color: inherit;
+  }
+  
+  /* Enhanced active/focus states for better touch feedback */
+  .hover\:bg-gray-100:focus,
+  .hover\:bg-gray-100:active {
+    background-color: rgb(243 244 246);
+    transform: scale(0.98);
+    transition: all 0.1s ease-in-out;
+  }
+  
+  .hover\:bg-gray-50:focus,
+  .hover\:bg-gray-50:active {
+    background-color: rgb(249 250 251);
+    transform: scale(0.98);
+  }
+  
+  .hover\:bg-blue-50:focus,
+  .hover\:bg-blue-50:active {
+    background-color: rgba(196, 120, 74, 0.1);
+    transform: scale(0.98);
+  }
+  
+  /* Dark mode touch states */
+  .dark .hover\:bg-gray-700:hover,
+  .dark .hover\:bg-gray-800:hover {
+    background-color: transparent;
+  }
+  
+  .dark .hover\:bg-gray-700:focus,
+  .dark .hover\:bg-gray-700:active {
+    background-color: rgb(55 65 81);
+    transform: scale(0.98);
+  }
+  
+  .dark .hover\:bg-gray-800:focus,
+  .dark .hover\:bg-gray-800:active {
+    background-color: rgb(31 41 55);
+    transform: scale(0.98);
+  }
+  
+  /* Enhanced button touch feedback */
+  button:active,
+  .btn-mobile:active {
+    transform: scale(0.96);
+    transition: transform 0.1s ease-in-out;
+  }
+  
+  /* Enhanced link touch feedback */
+  a:active {
+    transform: scale(0.98);
+    transition: transform 0.1s ease-in-out;
+  }
+  
+  /* List item touch feedback */
+  li:active,
+  .list-item-mobile:active {
+    background-color: rgba(196, 120, 74, 0.1);
+    transform: scale(0.99);
+    transition: all 0.1s ease-in-out;
+  }
+}
+
+/* Mobile-First Performance Optimizations */
+@media (max-width: 767px) {
+  /* Reduce motion for better performance on mobile */
+  @media (prefers-reduced-motion: reduce) {
+    .app-layout,
+    .sidebar-container,
+    .context-container,
+    header,
+    button,
+    a {
+      transition: none !important;
+      animation: none !important;
+      transform: none !important;
+    }
+  }
+  
+  /* Optimize scroll performance */
+  .sidebar-container,
+  .context-container,
+  .main-content {
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+    /* Better scroll on iOS */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  
+  /* Reduce complexity for better performance */
+  .shadow-3xl,
+  .shadow-2xl {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+}
+
+/* Enhanced Mobile Accessibility */
+@media (max-width: 767px) {
+  /* Larger focus indicators for mobile */
+  button:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  a:focus-visible {
+    outline: 3px solid rgb(196, 120, 74);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  
+  /* High contrast mode improvements */
+  @media (prefers-contrast: high) {
+    .border,
+    .border-gray-200,
+    .border-gray-300 {
+      border-color: currentColor;
+      border-width: 2px;
+    }
+    
+    .text-muted-foreground {
+      color: currentColor;
+      opacity: 0.8;
+    }
+  }
+}
+
+/* Mobile-First Safe Area Support (for notched phones) */
+@supports (padding: max(0px)) {
+  @media (max-width: 767px) {
+    header {
+      padding-left: max(env(safe-area-inset-left), var(--space-4));
+      padding-right: max(env(safe-area-inset-right), var(--space-4));
+      padding-top: max(env(safe-area-inset-top), var(--space-3));
+    }
+    
+    .sidebar-container {
+      padding-left: max(env(safe-area-inset-left), var(--padding-md));
+      padding-bottom: max(env(safe-area-inset-bottom), var(--padding-md));
+    }
+    
+    .context-container {
+      padding-right: max(env(safe-area-inset-right), var(--padding-md));
+      padding-bottom: max(env(safe-area-inset-bottom), var(--padding-md));
+    }
+    
+    .main-content {
+      padding-bottom: max(env(safe-area-inset-bottom), 0px);
+    }
+  }
+}
+
+/* Mobile-First Dark Mode Improvements */
+@media (max-width: 767px) {
+  .dark .app-layout.sidebar-open::before,
+  .dark .app-layout.context-open::before {
+    background: rgb(0 0 0 / 0.8);
+  }
+  
+  .dark .sidebar-container,
+  .dark .context-container {
+    border-color: rgb(75 85 99);
+  }
+  
+  /* Better contrast for mobile dark mode */
+  .dark .text-muted-foreground {
+    color: rgb(156 163 175);
+  }
+}
+
+/* Mobile-First Print Styles */
+@media print {
+  .app-layout {
+    height: auto;
+    display: block;
+  }
+  
+  .sidebar-container,
+  .context-container,
+  header,
+  .hover-zone {
+    display: none !important;
+  }
+  
+  .main-content {
+    padding: 0;
+    margin: 0;
+    background: white;
+    color: black;
   }
 }
 
@@ -322,4 +1538,54 @@ html, body {
 
 .debug-layout .context-container {
   outline: 2px solid green;
+}
+
+/* Debug mobile breakpoints */
+.debug-layout::after {
+  content: 'Mobile (320px+)';
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  background: red;
+  color: white;
+  padding: 4px 8px;
+  font-size: 12px;
+  z-index: 9999;
+  border-radius: 4px;
+}
+
+@media (min-width: 640px) {
+  .debug-layout::after {
+    content: 'Large Phone (640px+)';
+    background: orange;
+  }
+}
+
+@media (min-width: 768px) {
+  .debug-layout::after {
+    content: 'Tablet (768px+)';
+    background: yellow;
+    color: black;
+  }
+}
+
+@media (min-width: 1024px) {
+  .debug-layout::after {
+    content: 'Laptop (1024px+)';
+    background: green;
+  }
+}
+
+@media (min-width: 1280px) {
+  .debug-layout::after {
+    content: 'Desktop (1280px+)';
+    background: blue;
+  }
+}
+
+@media (min-width: 1536px) {
+  .debug-layout::after {
+    content: 'Large Desktop (1536px+)';
+    background: purple;
+  }
 }

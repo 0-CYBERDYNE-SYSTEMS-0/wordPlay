@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import dns from "dns";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
@@ -35,8 +36,22 @@ interface PerplexityResponse {
   }>;
 }
 
+// Typed error so routes can map failures to honest HTTP status codes.
+export class SearchError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode = 502) {
+    super(message);
+    this.name = 'SearchError';
+    this.statusCode = statusCode;
+  }
+}
+
 // Enhanced web search using Perplexity API
-export async function searchWeb(query: string, source: string = "web"): Promise<{
+export async function searchWeb(
+  query: string,
+  source: string = "web",
+  options?: { apiKey?: string; model?: string }
+): Promise<{
   results: Array<{
     title: string;
     snippet: string;
@@ -45,22 +60,28 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
   summary?: string;
   error?: string;
 }> {
-  try {
-    // If no API key, fall back to simulated results
-    if (!PERPLEXITY_CONFIG.apiKey) {
-      console.warn("No PERPLEXITY_API_KEY found, using simulated results");
-      return getSimulatedResults(query);
-    }
+  const apiKey = options?.apiKey || PERPLEXITY_CONFIG.apiKey;
+  const model = options?.model || PERPLEXITY_CONFIG.model;
 
+  // No API key → fail loudly instead of fabricating sources.
+  if (!apiKey) {
+    throw new SearchError(
+      'Web search is not configured. Set PERPLEXITY_API_KEY or enter one in Settings → Research.',
+      503
+    );
+  }
+
+  let response;
+  try {
     // Call Perplexity API
-    const response = await fetch(`${PERPLEXITY_CONFIG.baseUrl}/chat/completions`, {
+    response = await fetch(`${PERPLEXITY_CONFIG.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${PERPLEXITY_CONFIG.apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: PERPLEXITY_CONFIG.model,
+        model,
         messages: [
           {
             role: "system",
@@ -77,37 +98,29 @@ export async function searchWeb(query: string, source: string = "web"): Promise<
         return_images: false
       })
     });
-
-    if (!response.ok) {
-      throw new Error(`Perplexity API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json() as PerplexityResponse;
-    const content = data.choices[0]?.message?.content || "";
-    
-    // Extract sources from the response content
-    const sources = extractSourcesFromContent(content);
-    
-    // If no sources found in content, create some based on the query
-    if (sources.length === 0) {
-      sources.push(...getDefaultSources(query));
-    }
-
-    return {
-      results: sources,
-      summary: content,
-    };
   } catch (error: any) {
-    console.error("Error in Perplexity search:", error.message);
-    
-    // Fallback to simulated results if Perplexity fails
-    const fallbackResults = getSimulatedResults(query);
-    
-    return {
-      ...fallbackResults,
-      error: `Search service temporarily unavailable: ${error.message}. Showing cached results.`
-    };
+    throw new SearchError(`Could not reach the search service: ${error.message}`, 502);
   }
+
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new SearchError('Perplexity rejected the API key (401/403). Check PERPLEXITY_API_KEY.', 401);
+    }    if (response.status === 429) {
+      throw new SearchError('Perplexity rate limit exceeded (429). Try again later.', 429);
+    }
+    throw new SearchError(`Perplexity API error: ${response.status} ${response.statusText}`, 502);
+  }
+
+  const data = await response.json() as PerplexityResponse;
+  const content = data.choices[0]?.message?.content || "";
+
+  // Extract sources from the response content (real URLs only).
+  const sources = extractSourcesFromContent(content);
+
+  return {
+    results: sources,
+    summary: content,
+  };
 }
 
 // Extract sources/URLs from Perplexity response content
@@ -165,57 +178,64 @@ function extractSourcesFromContent(content: string): Array<{
   return sources;
 }
 
-// Get default sources when none are found
-function getDefaultSources(query: string): Array<{
-  title: string;
-  snippet: string;
-  url: string;
-}> {
-  return [
-    {
-      title: `${query} - Wikipedia`,
-      snippet: `Wikipedia article about ${query} with comprehensive background information and references.`,
-      url: `https://en.wikipedia.org/wiki/${encodeURIComponent(query.replace(/\s+/g, '_'))}`
-    },
-    {
-      title: `${query} - Academic Research`,
-      snippet: `Academic research and scholarly articles related to ${query}.`,
-      url: `https://scholar.google.com/scholar?q=${encodeURIComponent(query)}`
-    }
-  ];
+const SCRAPE_TIMEOUT_MS = 10_000;
+const MAX_REDIRECTS = 5;
+// Scraping feeds text extraction, not binaries — anything past 2MB is truncated.
+const MAX_SCRAPE_BYTES = 2 * 1024 * 1024;
+
+// SSRF guard: scraping must never reach loopback/private/link-local space
+// (cloud metadata at 169.254.169.254 included).
+function isPrivateAddress(address: string): boolean {
+  // IPv4-mapped IPv6 (::ffff:10.0.0.1) is judged as plain IPv4.
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(address);
+  const ip = mapped ? mapped[1] : address.toLowerCase();
+
+  if (ip.includes(":")) {
+    // IPv6: unspecified (::), loopback (::1), unique-local fc00::/7, link-local fe80::/10
+    return ip === "::" || ip === "::1" || /^f[cd]/.test(ip) || /^fe[89ab]/.test(ip);
+  }
+
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) return true; // malformed → refuse
+  const [a, b] = parts;
+  return (
+    a === 0 || // 0.0.0.0/8 ("this" network)
+    a === 10 || // 10.0.0.0/8 private
+    a === 127 || // 127.0.0.0/8 loopback
+    (a === 100 && b >= 64 && b <= 127) || // 100.64.0.0/10 CGNAT
+    (a === 169 && b === 254) || // 169.254.0.0/16 link-local
+    (a === 172 && b >= 16 && b <= 31) || // 172.16.0.0/12 private
+    (a === 192 && b === 168) // 192.168.0.0/16 private
+  );
 }
 
-// Fallback simulated results
-function getSimulatedResults(query: string): {
-  results: Array<{
-    title: string;
-    snippet: string;
-    url: string;
-  }>;
-  summary?: string;
-} {
-  const results = [
-    {
-      title: `${query} - Overview`,
-      snippet: `Comprehensive information about ${query} including key concepts, applications, and recent developments in the field.`,
-      url: "https://example.com/overview"
-    },
-    {
-      title: `${query} - Latest Research`,
-      snippet: `Recent research findings and academic papers related to ${query}, including methodology and conclusions.`,
-      url: "https://example.com/research"
-    },
-    {
-      title: `${query} - Practical Applications`,
-      snippet: `Real-world applications and case studies demonstrating the use of ${query} in various industries.`,
-      url: "https://example.com/applications"
+// Reject if ANY resolved address is private — a record that mixes public and
+// private addresses must not be reachable via the public one.
+async function assertPublicHost(hostname: string): Promise<void> {
+  const addresses = await dns.promises.lookup(hostname, { all: true });
+  for (const { address } of addresses) {
+    if (isPrivateAddress(address)) {
+      throw new Error(`Refusing to scrape private or local address ${address}`);
     }
-  ];
+  }
+}
 
-  return {
-    results,
-    summary: `This is simulated research data for "${query}". To get real-time web search results, please configure the PERPLEXITY_API_KEY environment variable.`
-  };
+// Stream the body and stop at the cap. Breaking out of the iterator destroys
+// the stream, releasing the socket without buffering the rest.
+async function readBodyCapped(stream: NodeJS.ReadableStream): Promise<string> {
+  const decoder = new TextDecoder("utf-8");
+  let html = "";
+  let received = 0;
+  for await (const chunk of stream) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    received += buf.length;
+    html += decoder.decode(buf, { stream: true });
+    if (received >= MAX_SCRAPE_BYTES) {
+      break;
+    }
+  }
+  html += decoder.decode(); // flush any incomplete trailing sequence
+  return html.slice(0, MAX_SCRAPE_BYTES);
 }
 
 // Enhanced webpage scraping with Mozilla Readability
@@ -230,24 +250,51 @@ export async function scrapeWebpage(url: string): Promise<{
     // Validate URL
     const urlObj = new URL(url);
     const domain = urlObj.hostname;
-    
-    // Fetch with proper headers
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
+
+    // Fetch with proper headers, following redirects manually so every hop
+    // re-passes the protocol allowlist and SSRF host check.
+    let currentUrl = urlObj;
+    let response;
+    for (let hop = 0; ; hop++) {
+      if (currentUrl.protocol !== "http:" && currentUrl.protocol !== "https:") {
+        throw new Error("Only http and https URLs are supported");
       }
-    });
+      await assertPublicHost(currentUrl.hostname);
+
+      response = await fetch(currentUrl.href, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(SCRAPE_TIMEOUT_MS),
+      });
+
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers.get("location");
+        if (location && hop >= MAX_REDIRECTS) {
+          throw new Error("Too many redirects");
+        }
+        if (!location) break; // 3xx without a target — reported by the !ok check below
+        response.body?.resume(); // drain the hop's body to release the socket
+        currentUrl = new URL(location, currentUrl);
+        continue;
+      }
+      break;
+    }
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
-    const html = await response.text();
+    if (!response.body) {
+      throw new Error("Empty response body");
+    }
+    const html = await readBodyCapped(response.body);
     
     // Use Readability for better content extraction
     let title = url;

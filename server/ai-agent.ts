@@ -1,3 +1,4 @@
+import { resolveModel, resolveProviderCredentials } from "./provider-registry";
 import { storage } from "./storage";
 import { 
   generateTextCompletion, 
@@ -18,6 +19,10 @@ import {
   analyzeDocument 
 } from "./file-operations";
 
+// Configurable timeout for agent LLM calls (ms). Default 180s so agent runs
+// fail fast instead of hanging on undici's default headers timeout.
+const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '180000', 10);
+
 // Tool interface that the agent can use
 interface AgentTool {
   name: string;
@@ -35,7 +40,7 @@ interface AgentContext {
   projectDocuments: any[];
   projectSources: any[];
   researchNotes: string;
-  llmProvider?: 'openai' | 'ollama';
+  llmProvider?: 'openai' | 'ollama' | 'gemini' | 'kimi' | 'custom';
   llmModel?: string;
   
   // NEW: Enhanced autonomous capabilities
@@ -110,32 +115,17 @@ interface AgentResponse {
   tokensUsed: number;
 }
 
-// Define valid OpenAI models to prevent 404 errors
-const VALID_OPENAI_MODELS = [
-  'gpt-4.1',
-  'gpt-4.1-mini',
-  'gpt-4.1-nano',
-  'gpt-4o'
-];
-
-// Validate model based on provider
-function getValidModel(model: string | undefined, provider: 'openai' | 'ollama' = 'openai'): string {
-  if (!model) {
-    return provider === 'openai' ? 'gpt-4.1-mini' : 'qwen3:8b';
-  }
-
-  if (provider === 'openai') {
-    return VALID_OPENAI_MODELS.includes(model) ? model : 'gpt-4.1-mini';
-  } else {
-    // For Ollama, use available tool-capable models
-    const ollamaToolModels = ['qwen3:8b', 'okamototk/deepseek-r1:8b', 'qwen2.5-coder:7b', 'granite3.3:8b', 'qwen3:4b'];
-    return ollamaToolModels.includes(model) ? model : 'qwen3:8b';
-  }
+// Model resolution goes through the provider registry: the selected
+// provider's catalog/default decides, and a model chosen for one provider
+// can never leak to another after switching.
+function getValidModel(model: string | undefined, provider: string = 'openai'): string {
+  return resolveModel(provider, model);
 }
 
-// Enhanced to support local models
-function getValidOpenAIModel(model: string | undefined): string {
-  return getValidModel(model, 'openai');
+// Synthesis/reflection paths run on the context provider; the model is
+// resolved per-provider downstream (empty selection -> provider default).
+function getValidOpenAIModel(model: string | undefined, provider?: string): string {
+  return resolveModel(provider || 'openai', model);
 }
 
 // Create all available tools for the agent
@@ -166,7 +156,7 @@ export const agentTools: AgentTool[] = [
       required: ["projectId"]
     },
     execute: async (params, context) => {
-      const project = await storage.getProject(params.projectId);
+      const project = await storage.getProject(params.projectId, context.userId);
       if (!project) {
         return { success: false, error: "Project not found" };
       }
@@ -212,7 +202,7 @@ export const agentTools: AgentTool[] = [
     },
     execute: async (params, context) => {
       const { projectId, ...updateData } = params;
-      const project = await storage.updateProject(projectId, updateData);
+      const project = await storage.updateProject(projectId, updateData, context.userId);
       if (!project) {
         return { success: false, error: "Project not found" };
       }
@@ -232,7 +222,7 @@ export const agentTools: AgentTool[] = [
       required: ["projectId"]
     },
     execute: async (params, context) => {
-      const documents = await storage.getDocuments(params.projectId);
+      const documents = await storage.getDocuments(params.projectId, context.userId);
       return { success: true, data: documents, message: `Found ${documents.length} documents` };
     }
   },
@@ -248,7 +238,7 @@ export const agentTools: AgentTool[] = [
       required: ["documentId"]
     },
     execute: async (params, context) => {
-      const document = await storage.getDocument(params.documentId);
+      const document = await storage.getDocument(params.documentId, context.userId);
       if (!document) {
         return { success: false, error: "Document not found" };
       }
@@ -275,7 +265,10 @@ export const agentTools: AgentTool[] = [
         title: params.title,
         content: params.content || "",
         wordCount
-      });
+      }, context.userId);
+      if (!document) {
+        return { success: false, error: "Project not found" };
+      }
       return { success: true, data: document, message: `Created document: ${params.title}` };
     }
   },
@@ -300,7 +293,7 @@ export const agentTools: AgentTool[] = [
         updateData.wordCount = countWords(updateData.content);
       }
       
-      const document = await storage.updateDocument(documentId, updateData);
+      const document = await storage.updateDocument(documentId, updateData, context.userId);
       if (!document) {
         return { success: false, error: "Document not found" };
       }
@@ -368,7 +361,10 @@ export const agentTools: AgentTool[] = [
       required: ["projectId", "type", "name"]
     },
     execute: async (params, context) => {
-      const source = await storage.createSource(params);
+      const source = await storage.createSource(params, context.userId);
+      if (!source) {
+        return { success: false, error: "Project not found" };
+      }
       return { success: true, data: source, message: `Saved source: ${params.name}` };
     }
   },
@@ -384,7 +380,7 @@ export const agentTools: AgentTool[] = [
       required: ["projectId"]
     },
     execute: async (params, context) => {
-      const sources = await storage.getSources(params.projectId);
+      const sources = await storage.getSources(params.projectId, context.userId);
       return { success: true, data: sources, message: `Found ${sources.length} sources` };
     }
   },
@@ -534,7 +530,7 @@ export const agentTools: AgentTool[] = [
         await storage.updateDocument(context.currentDocument.id, {
           content: params.content,
           wordCount
-        });
+        }, context.userId);
       }
       
       return { 
@@ -597,7 +593,7 @@ export const agentTools: AgentTool[] = [
             await storage.updateDocument(context.currentDocument.id, {
               content: finalText,
               wordCount
-            });
+            }, context.userId);
           }
           
           return { 
@@ -624,7 +620,7 @@ export const agentTools: AgentTool[] = [
         await storage.updateDocument(context.currentDocument.id, {
           content: result.result,
           wordCount
-        });
+        }, context.userId);
       }
       
       return { 
@@ -663,7 +659,7 @@ export const agentTools: AgentTool[] = [
         await storage.updateDocument(context.currentDocument.id, {
           content: improvedResult.result,
           wordCount
-        });
+        }, context.userId);
       }
       
       return { 
@@ -810,34 +806,6 @@ export const agentTools: AgentTool[] = [
   },
 
   {
-    name: "execute_autonomous_workflow",
-    description: "Execute a complex workflow autonomously with self-monitoring",
-    parameters: { workflow: "object", maxSteps: "number?", checkpoints: "array?" },
-    execute: async (params, context) => {
-      // Note: This would need to be implemented differently since we can't access agent methods here
-      return { 
-        success: true, 
-        data: { stepsCompleted: 0, totalSteps: 0 }, 
-        message: "Autonomous workflow execution not yet implemented in tool context" 
-      };
-    }
-  },
-
-  {
-    name: "continuous_improvement",
-    description: "Analyze past executions and improve future performance",
-    parameters: { analysisDepth: "string?" },
-    execute: async (params, context) => {
-      // Note: This would need to be implemented differently since we can't access agent methods here
-      return { 
-        success: true, 
-        data: [], 
-        message: "Continuous improvement analysis not yet implemented in tool context" 
-      };
-    }
-  },
-
-  {
     name: "edit_specific_paragraph",
     description: "Edit a specific paragraph by number or content match while preserving all other paragraphs",
     parameters: { 
@@ -884,7 +852,7 @@ export const agentTools: AgentTool[] = [
         await storage.updateDocument(context.currentDocument.id, {
           content: result,
           wordCount
-        });
+        }, context.userId);
       }
       
       return { 
@@ -905,12 +873,16 @@ export const agentTools: AgentTool[] = [
 export class WordPlayAgent {
   private tools: Map<string, AgentTool>;
   private context: AgentContext;
+  // Owning user captured at createAgent() — all storage access is scoped to
+  // this id; the client can never change it via updateContext.
+  private ownerUserId: number;
 
   constructor(userId: number = 1) {
     this.tools = new Map();
     agentTools.forEach(tool => {
       this.tools.set(tool.name, tool);
     });
+    this.ownerUserId = userId;
     
     this.context = {
       userId,
@@ -975,228 +947,6 @@ export class WordPlayAgent {
     }
   }
 
-  // NEW: Self-reflection capability
-  private async performSelfReflection(currentGoal: string, executedSteps: any[], context: AgentContext): Promise<any> {
-    const recentHistory = context.executionHistory.slice(-10);
-    const successRate = recentHistory.filter(step => step.success).length / recentHistory.length;
-    
-    const reflectionPrompt = `Analyze my recent performance and suggest improvements:
-
-CURRENT GOAL: ${currentGoal}
-
-RECENT EXECUTION HISTORY:
-${recentHistory.map(step => `- ${step.action}: ${step.success ? 'SUCCESS' : 'FAILED'} (${step.reasoning})`).join('\n')}
-
-SUCCESS RATE: ${(successRate * 100).toFixed(1)}%
-
-ANALYSIS NEEDED:
-1. What patterns do you see in my successes and failures?
-2. What should I do differently to improve performance?
-3. Are there tools I'm underutilizing or overusing?
-4. What adjustments should I make to my approach?
-
-Respond with JSON:
-{
-  "analysis": "detailed analysis of performance",
-  "improvements": ["specific improvement suggestions"],
-  "toolRecommendations": ["tool usage recommendations"],
-  "strategyAdjustments": ["strategic changes to make"]
-}`;
-
-    try {
-      const { generateTextCompletion } = await import("./openai");
-      const result = await generateTextCompletion("", {}, reflectionPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel));
-      return JSON.parse(result);
-    } catch (error) {
-      return {
-        analysis: "Unable to perform detailed reflection",
-        improvements: ["Continue with current approach"],
-        toolRecommendations: ["Monitor tool success rates"],
-        strategyAdjustments: ["Maintain current strategy"]
-      };
-    }
-  }
-
-  // NEW: Create detailed multi-step plans
-  private async createDetailedPlan(task: string, constraints: any = {}, context: AgentContext): Promise<any> {
-    const planningPrompt = `Create a detailed execution plan for this task:
-
-TASK: ${task}
-
-CONSTRAINTS: ${JSON.stringify(constraints)}
-
-AVAILABLE TOOLS: ${this.getAvailableTools().join(', ')}
-
-CURRENT CONTEXT:
-- Project: ${context.currentProject?.name || 'None'}
-- Document: ${context.currentDocument?.title || 'None'}
-- Goals: ${context.currentGoals.length} active
-- Memory entries: ${context.persistentMemory.size}
-
-PLANNING REQUIREMENTS:
-1. Break down the task into specific, actionable steps
-2. Identify which tools to use for each step
-3. Consider dependencies between steps
-4. Include checkpoints for progress monitoring
-5. Plan for error handling and alternative approaches
-
-Respond with JSON:
-{
-  "steps": [
-    {
-      "id": "step_1",
-      "description": "specific action to take",
-      "tool": "tool_name",
-      "parameters": {},
-      "dependencies": ["step_ids"],
-      "estimatedTime": "time estimate",
-      "successCriteria": "how to know this step succeeded"
-    }
-  ],
-  "totalEstimatedTime": "overall time estimate",
-  "riskFactors": ["potential issues"],
-  "alternativeApproaches": ["backup plans"]
-}`;
-
-    try {
-      const { generateTextCompletion } = await import("./openai");
-      const result = await generateTextCompletion("", {}, planningPrompt, context.llmProvider, getValidOpenAIModel(context.llmModel));
-      return JSON.parse(result);
-    } catch (error) {
-      return {
-        steps: [
-          {
-            id: "step_1",
-            description: task,
-            tool: "web_search",
-            parameters: { query: task },
-            dependencies: [],
-            estimatedTime: "5 minutes",
-            successCriteria: "Task completed successfully"
-          }
-        ],
-        totalEstimatedTime: "5 minutes",
-        riskFactors: ["Planning failed, using fallback"],
-        alternativeApproaches: ["Manual execution"]
-      };
-    }
-  }
-
-  // NEW: Execute autonomous workflows with self-monitoring
-  private async executeAutonomousWorkflow(workflow: any, maxSteps: number = 20, context: AgentContext): Promise<any> {
-    const startTime = Date.now();
-    let stepsCompleted = 0;
-    const results: any[] = [];
-    const errors: any[] = [];
-    
-    try {
-      for (const step of workflow.steps) {
-        if (stepsCompleted >= maxSteps) {
-          break;
-        }
-        
-        this.recordExecutionStep(`Executing step: ${step.description}`, step.tool, step.parameters, null, `Autonomous workflow step ${stepsCompleted + 1}`);
-        
-        try {
-          const result = await this.executeTool(step.tool, step.parameters);
-          results.push({ step: step.id, result });
-          
-          if (!result.success) {
-            errors.push({ step: step.id, error: result.error });
-            
-            // Try alternative approach if available
-            if (workflow.alternativeApproaches && workflow.alternativeApproaches.length > 0) {
-              console.log(`Step ${step.id} failed, trying alternative approach`);
-              // Could implement alternative execution here
-            }
-          }
-          
-          stepsCompleted++;
-          
-          // Self-reflection checkpoint every 5 steps
-          if (context.reflectionEnabled && stepsCompleted % 5 === 0) {
-            await this.performSelfReflection(`Workflow: ${workflow.description || 'Autonomous task'}`, results, context);
-          }
-          
-        } catch (stepError) {
-          errors.push({ step: step.id, error: stepError });
-          console.error(`Error in workflow step ${step.id}:`, stepError);
-        }
-      }
-      
-      const duration = Date.now() - startTime;
-      const successRate = (stepsCompleted - errors.length) / stepsCompleted;
-      
-      return {
-        success: errors.length < stepsCompleted / 2, // Success if less than 50% failed
-        stepsCompleted,
-        totalSteps: workflow.steps.length,
-        duration,
-        successRate,
-        results,
-        errors,
-        summary: `Completed ${stepsCompleted}/${workflow.steps.length} steps in ${duration}ms with ${(successRate * 100).toFixed(1)}% success rate`
-      };
-      
-    } catch (error) {
-      return {
-        success: false,
-        stepsCompleted,
-        totalSteps: workflow.steps.length,
-        duration: Date.now() - startTime,
-        successRate: 0,
-        results,
-        errors: [...errors, { step: 'workflow', error }],
-        summary: `Workflow failed after ${stepsCompleted} steps: ${error}`
-      };
-    }
-  }
-
-  // NEW: Analyze past performance for continuous improvement
-  private async analyzePastPerformance(context: AgentContext): Promise<any[]> {
-    const recentHistory = context.executionHistory.slice(-50);
-    const toolUsage = new Map<string, { successes: number; failures: number }>();
-    
-    // Analyze tool performance
-    recentHistory.forEach(step => {
-      if (step.toolUsed) {
-        const stats = toolUsage.get(step.toolUsed) || { successes: 0, failures: 0 };
-        if (step.success) {
-          stats.successes++;
-        } else {
-          stats.failures++;
-        }
-        toolUsage.set(step.toolUsed, stats);
-      }
-    });
-    
-    const improvements: any[] = [];
-    
-    // Identify underperforming tools
-    toolUsage.forEach((stats, tool) => {
-      const successRate = stats.successes / (stats.successes + stats.failures);
-      if (successRate < 0.7 && stats.failures > 2) {
-        improvements.push({
-          type: 'tool_performance',
-          tool,
-          issue: `Low success rate: ${(successRate * 100).toFixed(1)}%`,
-          suggestion: `Review parameters and usage patterns for ${tool}`
-        });
-      }
-    });
-    
-    // Identify patterns in failures
-    const failedSteps = recentHistory.filter(step => !step.success);
-    if (failedSteps.length > recentHistory.length * 0.3) {
-      improvements.push({
-        type: 'general_performance',
-        issue: `High failure rate: ${(failedSteps.length / recentHistory.length * 100).toFixed(1)}%`,
-        suggestion: 'Consider reducing autonomy level or increasing reflection frequency'
-      });
-    }
-    
-    return improvements;
-  }
 
   // Get list of available tool names
   getAvailableTools(): string[] {
@@ -1326,8 +1076,11 @@ Remember: Your responses should be detailed, insightful, and specifically tailor
 
   // Update agent context with current app state
   async updateContext(newContext: Partial<AgentContext>): Promise<void> {
-    // Update basic context
-    Object.assign(this.context, newContext);
+    // Identity is server-side only: strip client-supplied ownership fields
+    // pre-merge, then re-force the owner captured at createAgent(userId).
+    const { userId: _clientUserId, ownerUserId: _clientOwnerUserId, ...clientContext } = newContext as any;
+    Object.assign(this.context, clientContext);
+    this.context.userId = this.ownerUserId;
     
     // Update current document reference if editorState is provided
     if (newContext.editorState && this.context.currentDocument) {
@@ -1339,8 +1092,8 @@ Remember: Your responses should be detailed, insightful, and specifically tailor
     if (newContext.currentProject) {
       try {
         this.context.allProjects = await storage.getProjects(this.context.userId);
-        this.context.projectDocuments = await storage.getDocuments(newContext.currentProject.id);
-        this.context.projectSources = await storage.getSources(newContext.currentProject.id);
+        this.context.projectDocuments = await storage.getDocuments(newContext.currentProject.id, this.context.userId);
+        this.context.projectSources = await storage.getSources(newContext.currentProject.id, this.context.userId);
       } catch (error) {
         console.warn('Failed to refresh project data:', error);
       }
@@ -1657,11 +1410,11 @@ Provide your comprehensive analysis now, showing ALL tool results and their acti
       const { generateTextCompletion } = await import("./openai");
       
       const result = await generateTextCompletion(
-        "", 
-        {}, 
+        "",
+        {},
         analysisPrompt,
         this.context.llmProvider,
-        getValidOpenAIModel(this.context.llmModel)
+        getValidOpenAIModel(this.context.llmModel, this.context.llmProvider)
       );
       
       try {
@@ -2135,6 +1888,9 @@ Remember:
       if (this.context.llmProvider === 'ollama') {
         // Use Ollama for local models with tool calling
         response = await this.processOllamaRequest(systemPrompt, userPrompt, model);
+      } else if (this.context.llmProvider === 'gemini') {
+        // Use Gemini (text models are tool-capable via the SDK)
+        response = await this.processGeminiRequest(systemPrompt, userPrompt, model);
       } else {
         // Use OpenAI API
         response = await this.processOpenAIRequest(systemPrompt, userPrompt, model);
@@ -2156,10 +1912,14 @@ Remember:
     const startTime = Date.now();
     
     try {
-      // Initialize OpenAI client
+      // Initialize OpenAI client — credentials resolve from the provider
+      // registry (openai / custom / kimi), server-side env only.
       const { OpenAI } = await import("openai");
-      const openai = new OpenAI({ 
-        apiKey: process.env.OPENAI_API_KEY || "default_key" 
+      const { apiKey, baseURL } = resolveProviderCredentials(this.context.llmProvider);
+      const openai = new OpenAI({
+        apiKey,
+        baseURL,
+        timeout: AI_REQUEST_TIMEOUT_MS
       });
       
       // Convert tools to OpenAI function calling format
@@ -2167,7 +1927,7 @@ Remember:
       
       // Focus on essential tools for the initial request to avoid payload issues
       const essentialTools = allTools.filter(tool => 
-        ['create_project', 'create_document', 'update_document', 'list_projects', 'get_project'].includes(tool.name)
+        ['create_project', 'create_document', 'update_document', 'list_projects', 'get_project', 'web_search', 'scrape_webpage', 'save_source'].includes(tool.name)
       );
       
       const tools = essentialTools.map(tool => ({
@@ -2462,7 +2222,7 @@ Remember:
       
       // Fallback to OpenAI if Ollama fails
       console.log('🔄 Falling back to OpenAI...');
-      return this.processOpenAIRequest(systemPrompt, userPrompt, getValidOpenAIModel(this.context.llmModel));
+      return this.processOpenAIRequest(systemPrompt, userPrompt, getValidOpenAIModel(this.context.llmModel, this.context.llmProvider));
     }
   }
 
@@ -2550,6 +2310,45 @@ Remember:
     const sourceCount = this.context.projectSources.length;
     
     return `Current context: ${project ? `Project "${project.name}"` : 'No project selected'}, ${docCount} documents, ${sourceCount} sources`;
+  }
+
+  // Gemini text processing (no tool-calling loop; returns a single response).
+  private async processGeminiRequest(systemPrompt: string, userPrompt: string, model: string): Promise<AgentResponse> {
+    const startTime = Date.now();
+
+    try {
+      const { GoogleGenerativeAI } = await import("@google/generative-ai");
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API key is not configured on the server (set GEMINI_API_KEY in .env).");
+      }
+
+      const client = new GoogleGenerativeAI(apiKey);
+      const geminiModel = client.getGenerativeModel({ model });
+
+      console.log(`♊ Making Gemini request with model: ${model}`);
+
+      const result = await geminiModel.generateContent(`${systemPrompt}\n\n${userPrompt}`);
+      const content = result.response.text();
+
+      return {
+        content: content || "I couldn't generate a response.",
+        toolResults: [],
+        executionTime: Date.now() - startTime,
+        tokensUsed: 0
+      };
+    } catch (error: any) {
+      console.error('❌ Gemini agent error:', error?.message || error);
+      const msg = (error?.message || String(error)).toLowerCase();
+      if (error?.status === 401 || error?.status === 403 || msg.includes('api key')) {
+        throw new Error("Invalid Gemini API key. Please check your Gemini API key.");
+      } else if (msg.includes('rate limit') || error?.status === 429) {
+        throw new Error("Gemini API rate limit exceeded. Please try again later.");
+      } else if (error?.status === 404 || msg.includes('not found') || msg.includes('model')) {
+        throw new Error(`Gemini model error: ${error?.message || 'model not found'}. Try a different model.`);
+      }
+      throw new Error(`Gemini error: ${error?.message || "Unknown error"}`);
+    }
   }
 }
 

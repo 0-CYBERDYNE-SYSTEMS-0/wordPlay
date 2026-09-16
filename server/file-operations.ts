@@ -1,11 +1,15 @@
 import { Document, InsertDocument } from "@shared/schema";
+import RE2 from "re2";
 
-// Text manipulation functions similar to grep and sed
-export function grepText(content: string, pattern: string): { matches: string[]; count: number } {
+// Text manipulation functions similar to grep and sed.
+// Patterns compile through re2, which rejects JS-only syntax (lookaheads,
+// backreferences) at compile time; that compile error is surfaced in the
+// result so a valid-but-unsupported pattern doesn't read as "no matches".
+export function grepText(content: string, pattern: string): { matches: string[]; count: number; error?: string } {
   try {
-    const regex = new RegExp(pattern, "gi");
+    const regex = new RE2(pattern, "gi");
     const matches = content.match(regex) || [];
-    
+
     return {
       matches: matches,
       count: matches.length
@@ -14,7 +18,8 @@ export function grepText(content: string, pattern: string): { matches: string[];
     console.error("Error in grep operation:", error.message);
     return {
       matches: [],
-      count: 0
+      count: 0,
+      error: error.message
     };
   }
 }
@@ -22,18 +27,19 @@ export function grepText(content: string, pattern: string): { matches: string[];
 export function replaceText(content: string, oldPattern: string, newPattern: string): {
   result: string;
   count: number;
+  error?: string;
 } {
   try {
-    const regex = new RegExp(oldPattern, "gi");
+    const regex = new RE2(oldPattern, "gi");
     const originalContent = content;
     const newContent = content.replace(regex, newPattern);
-    
+
     // Count replacements by comparing the lengths
     const lengthDiff = Math.abs(originalContent.length - newContent.length);
-    const replacementCount = lengthDiff > 0 
+    const replacementCount = lengthDiff > 0
       ? Math.ceil(lengthDiff / Math.abs(oldPattern.length - newPattern.length))
       : (originalContent !== newContent ? 1 : 0);
-    
+
     return {
       result: newContent,
       count: replacementCount
@@ -42,7 +48,8 @@ export function replaceText(content: string, oldPattern: string, newPattern: str
     console.error("Error in replace operation:", error.message);
     return {
       result: content,
-      count: 0
+      count: 0,
+      error: error.message
     };
   }
 }

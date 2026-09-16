@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useApiProcessing } from "@/hooks/use-api-processing";
+import { useSettings } from "@/providers/SettingsProvider";
 import { Document } from "@shared/schema";
 import { X, FileText, Pilcrow, MessageSquare, Link, FileText as FileIcon, Upload, Zap, Sparkles, BookOpen, BarChart2, Search, Clock, Code, Lightbulb, ExternalLink, Folder } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
@@ -33,6 +35,8 @@ export default function ContextPanel({
   onClose,
   aiSuggestions
 }: ContextPanelProps) {
+  const { startProcessing, stopProcessing, updateProgress } = useApiProcessing();
+  const { settings } = useSettings();
   const [wordCount, setWordCount] = useState(0);
   const [readingTime, setReadingTime] = useState(0);
   const [paragraphCount, setParagraphCount] = useState(0);
@@ -53,13 +57,20 @@ export default function ContextPanel({
   // Get contextual help from AI
   const contextualHelpMutation = useMutation({
     mutationFn: async (data?: { prompt?: string; content?: string }) => {
+      const operationId = startProcessing({
+        message: "Getting contextual help...",
+        type: "ai-command",
+        initialProgress: 0
+      });
       try {
         const payload = {
           content: data?.content || content,
           title,
-          prompt: data?.prompt
+          prompt: data?.prompt,
+          llmProvider: settings.llmProvider,
+          llmModel: settings.llmModel
         };
-        
+
         const res = await apiRequest("POST", "/api/ai/contextual-help", payload);
         return res.json();
       } catch (error) {
@@ -69,6 +80,8 @@ export default function ContextPanel({
           message: "AI assistant temporarily unavailable",
           suggestions: []
         };
+      } finally {
+        stopProcessing(operationId);
       }
     },
     onSuccess: (data) => {
@@ -99,9 +112,16 @@ export default function ContextPanel({
   // Get style metrics when content changes
   const styleAnalysisMutation = useMutation({
     mutationFn: async () => {
+      const operationId = startProcessing({
+        message: "Analyzing writing style...",
+        type: "ai-command",
+        initialProgress: 0
+      });
       try {
         const res = await apiRequest("POST", "/api/ai/analyze-style", {
-          content
+          content,
+          llmProvider: settings.llmProvider,
+          llmModel: settings.llmModel
         });
         return res.json();
       } catch (error) {
@@ -115,6 +135,8 @@ export default function ContextPanel({
             toneAnalysis: "Neutral"
           }
         };
+      } finally {
+        stopProcessing(operationId);
       }
     },
     onSuccess: (data) => {
@@ -207,12 +229,12 @@ export default function ContextPanel({
       <div className="flex-1 overflow-auto p-3 space-y-3 min-h-0">
         {/* AI Suggestions Section - Show when available */}
         {aiSuggestions && (
-          <div className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 rounded-lg p-3 border border-purple-200 dark:border-purple-700">
-            <h3 className="font-medium text-sm mb-2 flex items-center text-purple-800 dark:text-purple-200">
+          <div className="bg-gradient-to-r from-[var(--wp-wash)] to-copper-100 dark:from-copper-100 dark:to-copper-100 rounded-lg p-3 border border-copper-200 dark:border-copper-200">
+            <h3 className="font-medium text-sm mb-2 flex items-center text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">
               <Lightbulb className="h-4 w-4 mr-1" />
               AI Ideas & Suggestions
             </h3>
-            <div className="text-sm text-purple-700 dark:text-purple-300 whitespace-pre-wrap">
+            <div className="text-sm text-[var(--wp-ink)]/80 dark:text-[var(--wp-ink)]/80 whitespace-pre-wrap">
               {aiSuggestions}
             </div>
           </div>
@@ -244,16 +266,16 @@ export default function ContextPanel({
 
         {/* Project Sources - Always Available */}
         {sourcesQuery.data && sourcesQuery.data.length > 0 && (
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
-            <h3 className="font-medium text-xs mb-2 flex items-center text-blue-800 dark:text-blue-200">
+          <div className="bg-copper-50 dark:bg-copper-100 rounded-lg p-2">
+            <h3 className="font-medium text-xs mb-2 flex items-center text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">
               <Folder className="h-3 w-3 mr-1" />
               Project Sources ({sourcesQuery.data.length})
             </h3>
             <div className="space-y-1 max-h-24 overflow-y-auto">
               {sourcesQuery.data.slice(0, 3).map((source) => (
-                <div key={source.id} className="text-xs text-blue-700 dark:text-blue-300">
+                <div key={source.id} className="text-xs text-[var(--wp-ink)]/70 dark:text-[var(--wp-ink)]/80">
                   <div className="font-medium truncate">{source.name}</div>
-                  <div className="text-blue-600 dark:text-blue-400 flex items-center">
+                  <div className="text-copper-500 dark:text-copper-500 flex items-center">
                     {source.type}
                     {source.url && (
                       <a 
@@ -270,7 +292,7 @@ export default function ContextPanel({
                 </div>
               ))}
               {sourcesQuery.data.length > 3 && (
-                <div className="text-xs text-blue-600 dark:text-blue-400">
+                <div className="text-xs text-copper-500 dark:text-copper-500">
                   +{sourcesQuery.data.length - 3} more sources
                 </div>
               )}
@@ -278,36 +300,28 @@ export default function ContextPanel({
           </div>
         )}
         
-        {/* Quick Actions for AI Features - Always Available */}
+        {/* AI hints — pressing one opens the slash menu pre-filtered */}
         <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
           <h3 className="font-medium text-xs mb-2 flex items-center">
             <Zap className="h-3 w-3 mr-1" />
-            AI Quick Actions
+            Try a slash command
           </h3>
           <div className="space-y-1">
-            <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <Sparkles className="h-3 w-3 mr-1" />
-              Use /improve to enhance writing
-            </button>
-            <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <BookOpen className="h-3 w-3 mr-1" />
-              Use /outline to structure ideas
-            </button>
-            <button className="w-full text-left text-xs p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center">
-              <BarChart2 className="h-3 w-3 mr-1" />
-              Use /analyze for style feedback
-            </button>
+            <p className="text-xs text-gray-500 dark:text-gray-300 leading-relaxed">
+              Type <kbd className="rounded bg-gray-200 dark:bg-gray-600 px-1 font-mono">/</kbd> in the editor and press
+              Enter to run. Next step: run a rewrite from here.
+            </p>
           </div>
         </div>
         
-        {/* Global Document Info */}
+                {/* Global Document Info */}
         <div className="border-t pt-2 mt-2">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
-            <h3 className="font-medium text-xs mb-1 flex items-center text-blue-800 dark:text-blue-200">
+          <div className="bg-copper-50 dark:bg-copper-100 rounded-lg p-2">
+            <h3 className="font-medium text-xs mb-1 flex items-center text-[var(--wp-copper)] dark:text-[var(--wp-copper)]">
               <FileText className="h-3 w-3 mr-1" />
               {title || "Untitled Document"}
             </h3>
-            <div className="text-xs text-blue-600 dark:text-blue-400">
+            <div className="text-xs text-copper-500 dark:text-copper-500">
               <p>Modified: {new Date().toLocaleDateString()}</p>
               {content && <p>~{Math.ceil(content.trim().split(/\s+/).length / 200)} min read</p>}
             </div>
