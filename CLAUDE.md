@@ -44,7 +44,7 @@ This is a full-stack TypeScript application with AI-powered writing assistance:
 **AI Integration**:
 - Slash commands trigger AI operations (`/continue`, `/improve`, `/fix`, `/bullets`, `/format`, `/chart`, `/image`, `/table`)
 - Multiple LLM providers: OpenAI, Google Gemini, and Ollama for local models
-- AI agent with 19 specialized tools across project management, research, writing, and text analysis
+- AI agent with 30 specialized tools across project management, research, writing, and text analysis
 - Context panel displays AI reasoning separately from final document content
 
 **Development Workflow**:

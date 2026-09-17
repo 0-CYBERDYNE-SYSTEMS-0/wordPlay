@@ -173,12 +173,11 @@ WordPlay consists of:
 ### Backend (`server/`)
 - **Express.js** API server
 - **PostgreSQL** with Drizzle ORM
-- **AI Integration** (OpenAI, Ollama, Gemini)
-- **WebSocket** support for real-time features
+- **AI Integration** (OpenAI, Gemini, Kimi, Ollama, OpenAI-compatible endpoints)
 
 ### Key Features
 - **Slash Commands** - `/continue`, `/improve`, etc.
-- **AI Agent** - 19 specialized tools
+- **AI Agent** - 30 specialized tools
 - **Research Panel** - Web search integration
 - **Rich Text Editor** - Markdown with live preview
 

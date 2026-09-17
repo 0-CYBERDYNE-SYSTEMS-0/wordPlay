@@ -4,12 +4,12 @@ Guidance for AI coding agents working in this repository. Assumes no prior knowl
 
 ## Project Overview
 
-**wordPlay** is a full-stack, AI-powered writing companion web app. It combines a rich markdown editor with an autonomous AI agent (19 tools across project management, research, writing, and text analysis), slash commands (`/continue`, `/improve`, `/fix`, `/bullets`, `/format`, `/chart`, `/image`, `/table`, plus client-side `/undo`), web research (Perplexity), and multi-LLM support (OpenAI, Google Gemini, Ollama for local models, and OpenAI-compatible local endpoints such as an MLX server).
+**wordPlay** is a full-stack, AI-powered writing companion web app. It combines a rich markdown editor with an autonomous AI agent (30 tools across project management, research, writing, and text analysis), slash commands (`/continue`, `/improve`, `/fix`, `/bullets`, `/format`, `/chart`, `/image`, `/table`, plus client-side `/undo`), web research (Perplexity), and multi-LLM support (OpenAI, Google Gemini, Kimi, Ollama for local models, and OpenAI-compatible local endpoints such as an MLX server).
 
 - License: MIT. Package: `wordplay@1.0.0`, ESM (`"type": "module"`).
 - Repo origin: Replit project (`.replit` config present); deployed via Replit autoscale (`npm run build` then `npm run start`).
 - UI component system: shadcn/ui ("new-york" style, neutral base color) — see `components.json`.
-- Additional docs: `README.md` (feature overview + API reference), `CLAUDE.md` (similar agent guidance), `LLM_PIPELINE_FLOW.md` (AI pipeline details), `CONTRIBUTING.md`, `AGENT_FIXES_SUMMARY.md`, `HANDOFF.md` (prioritized UX fix queue from the 2026-08 QA pass — read before touching the editor or AI routing; the current branch `feature/ultra-minimalist-writing` is mid-overhaul of these areas), `SHIP_READINESS.md` (2026-09 pre-ship QA/PM go-no-go report — verdict GO with conditions; live e2e evidence and HANDOFF queue status: 11 DONE / 1 PARTIAL, only FIX-08 restore-last-open-doc remains).
+- Additional docs: `README.md` (feature overview), `CLAUDE.md` (similar agent guidance), `LLM_PIPELINE_FLOW.md` (AI pipeline details), `CONTRIBUTING.md`, `AGENT_FIXES_SUMMARY.md`, `HANDOFF.md` (prioritized UX fix queue from the 2026-08 QA pass — read before touching the editor or AI routing; the overhaul branch has been merged into `main`), `SHIP_READINESS.md` (2026-09 pre-ship QA/PM go-no-go report — verdict GO with conditions; live e2e evidence and HANDOFF queue status: 11 DONE / 1 PARTIAL, only FIX-08 restore-last-open-doc remains).
 
 ## Technology Stack
 
