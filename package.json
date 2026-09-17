@@ -1,8 +1,13 @@
 {
   "name": "wordplay",
   "version": "1.0.0",
+  "description": "An editor with a 30-tool AI agent beside it — multi-provider AI (OpenAI, Gemini, Kimi, Ollama), research, image generation, team-ready Docker deployment",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/0-CYBERDYNE-SYSTEMS-0/wordPlay.git"
+  },
   "scripts": {
     "dev:server": "NODE_ENV=development tsx server/index.ts",
     "dev:client": "vite",
